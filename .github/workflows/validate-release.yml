@@ -1,0 +1,155 @@
+name: Validate Release PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: 'PR number to validate and merge'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    outputs:
+      pr-number: ${{ steps.resolve-pr.outputs.pr_number }}
+      pr-author: ${{ steps.resolve-pr.outputs.pr_author }}
+      pr-title: ${{ steps.resolve-pr.outputs.pr_title }}
+      head-sha: ${{ steps.resolve-pr.outputs.head_sha }}
+    steps:
+      - name: Resolve PR details
+        id: resolve-pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ github.event.inputs.pr-number }}', 10);
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('pr_author', pr.user.login);
+            core.setOutput('pr_title', pr.title);
+            core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('head_sha', pr.head.sha);
+
+            console.log(`PR #${prNumber} by ${pr.user.login}: ${pr.title}`);
+            console.log(`Head: ${pr.head.ref} @ ${pr.head.sha}`);
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve-pr.outputs.head_sha }}
+
+      - name: Verify PR author
+        env:
+          PR_AUTHOR: ${{ steps.resolve-pr.outputs.pr_author }}
+          RELEASE_BOT_LOGIN: ${{ vars.RELEASE_BOT_LOGIN }}
+        run: |
+          echo "PR author: $PR_AUTHOR"
+          echo "Expected bot: $RELEASE_BOT_LOGIN"
+          if [ "$PR_AUTHOR" != "$RELEASE_BOT_LOGIN" ]; then
+            echo "::warning::PR was not opened by the release bot ($RELEASE_BOT_LOGIN). Skipping auto-merge."
+            echo "SKIP_AUTO_MERGE=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Validate file structure
+        run: |
+          ERRORS=0
+
+          if [ ! -d "skills" ]; then
+            echo "::error::Missing skills/ directory"
+            ERRORS=1
+          fi
+
+          if [ ! -f "ARCHITECTURE.md" ]; then
+            echo "::error::Missing ARCHITECTURE.md"
+            ERRORS=1
+          fi
+
+          if [ ! -f "README.md" ]; then
+            echo "::error::Missing README.md"
+            ERRORS=1
+          fi
+
+          if [ ! -f "LICENSE" ]; then
+            echo "::error::Missing LICENSE"
+            ERRORS=1
+          fi
+
+          SKILL_COUNT=$(find skills -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$SKILL_COUNT" -eq 0 ]; then
+            echo "::error::No SKILL.md files found in skills/"
+            ERRORS=1
+          else
+            echo "Found $SKILL_COUNT skill(s)"
+          fi
+
+          if [ "$ERRORS" -eq 1 ]; then
+            exit 1
+          fi
+          echo "File structure validation passed"
+
+  auto-merge:
+    name: Auto-Merge Release PR
+    needs: validate
+    if: success()
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    steps:
+      - name: Approve and merge
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ needs.validate.outputs.pr-number }}', 10);
+            const prAuthor = '${{ needs.validate.outputs.pr-author }}';
+            const prTitle = '${{ needs.validate.outputs.pr-title }}';
+            const expectedBot = '${{ vars.RELEASE_BOT_LOGIN }}';
+
+            if (prAuthor !== expectedBot) {
+              console.log(`PR author (${prAuthor}) is not the release bot (${expectedBot}). Skipping auto-merge.`);
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            console.log(`Approving PR #${prNumber}...`);
+            await github.rest.pulls.createReview({
+              owner, repo,
+              pull_number: prNumber,
+              event: 'APPROVE',
+              body: 'Automated approval — release PR from internal pipeline.'
+            });
+
+            console.log(`Merging PR #${prNumber}...`);
+            await github.rest.pulls.merge({
+              owner, repo,
+              pull_number: prNumber,
+              merge_method: 'squash'
+            });
+
+            const versionMatch = prTitle.match(/Release v(.+)$/);
+            if (versionMatch) {
+              const version = versionMatch[1];
+              const tag = `v${version}`;
+              console.log(`Creating tag ${tag}...`);
+
+              const mergedPr = await github.rest.pulls.get({
+                owner, repo,
+                pull_number: prNumber
+              });
+
+              await github.rest.git.createRef({
+                owner, repo,
+                ref: `refs/tags/${tag}`,
+                sha: mergedPr.data.merge_commit_sha
+              });
+
+              console.log(`Tag ${tag} created at ${mergedPr.data.merge_commit_sha}`);
+            }
