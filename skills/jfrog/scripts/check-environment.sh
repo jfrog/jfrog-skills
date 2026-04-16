@@ -110,12 +110,17 @@ EOF
 
 # Emit skill-level env vars to stdout (for eval by the caller)
 emit_skill_env() {
-  local skill_version cli_version
+  local skill_version cli_version ua
   # Parse version from SKILL.md YAML frontmatter (metadata.version)
   skill_version="$(awk '/^---$/{n++; next} n==1 && /^[[:space:]]*version:/{gsub(/["'"'"']/, "", $2); print $2; exit}' "$SKILL_ROOT/SKILL.md" 2>/dev/null | tr -d '[:space:]')"
   skill_version="${skill_version:-unknown}"
   cli_version=$(jq -r '.cli_version // "unknown"' "$CACHE_FILE" 2>/dev/null || echo "unknown")
-  echo "export JFROG_CLI_USER_AGENT='jfrog-skills/${skill_version} jfrog-cli-go/${cli_version}'"
+  ua=""
+  if [[ -n "${JFROG_SKILL_MODEL:-}" ]]; then
+    ua="model/${JFROG_SKILL_MODEL} "
+  fi
+  ua="${ua}jfrog-skills/${skill_version} jfrog-cli-go/${cli_version}"
+  echo "export JFROG_CLI_USER_AGENT='${ua}'"
 }
 
 # Main

@@ -25,6 +25,7 @@ All skills live directly under `skills/<name>/` -- flat structure, never nested 
 - **`jfrog`** is the base skill. It provides foundational JFrog knowledge, CLI setup instructions, and routes to workflow skills via internal references.
 - **All other skills** are workflow skills. They declare `jfrog` as a prerequisite in their SKILL.md header.
 - The base skill references workflow skills for routing; workflow skills reference the base for foundational context.
+- **The base skill must never use `load skill` to reference workflow skills.** It must be fully self-contained — users may install only the base skill. Use `references/` files within the base skill for any content that needs to be accessible without workflow skills installed. This is enforced by CI validation.
 
 ## Skill Structure
 

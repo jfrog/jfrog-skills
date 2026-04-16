@@ -4,10 +4,10 @@
 
 This repository ships AI agent skills for the JFrog Platform: 
 
-    - `jfrog`: The base skill covering CLI setup, artifact operations, security queries, AQL, and GraphQL
-    - `jfrog-package-safety-and-download`: A workflow skill for package safety checks and curation-aware downloads 
-    
-Install them in your AI coding agent and interact with JFrog through natural language.
+- **`jfrog`** (required): The base skill covering CLI setup, artifact operations, security queries, AQL, and GraphQL. All other skills depend on it.
+- **`jfrog-package-safety-and-download`**: A workflow skill for package safety checks and curation-aware downloads. Requires `jfrog`.
+
+Install them in your AI coding agent and interact with JFrog through natural language. The `jfrog` skill must always be installed — workflow skills build on top of it.
 
 ## Requirements
 
