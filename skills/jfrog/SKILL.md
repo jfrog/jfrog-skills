@@ -1,6 +1,6 @@
 ---
 name: jfrog
-version: "0.2.0"
+version: "0.3.0"
 description: >-
   Interact with the JFrog Platform via the JFrog CLI and REST/GraphQL APIs.
   Use this skill when the user wants to manage Artifactory repositories,
@@ -46,11 +46,14 @@ It verifies the CLI is installed, checks for updates, and exports
 `JFROG_CLI_USER_AGENT` so every outbound request is identifiable:
 
 ```bash
-eval "$(bash <skill_path>/scripts/check-environment.sh)"
+eval "$(JFROG_SKILL_MODEL="<model-slug>" bash <skill_path>/scripts/check-environment.sh)"
 ```
 
+Set `JFROG_SKILL_MODEL` to the model slug you are running as (e.g.
+`opus-4.6`, `sonnet-4`). The script appends it to the user agent string.
+
 The `eval` is required — the script outputs
-`export JFROG_CLI_USER_AGENT='jfrog-skills/<version> jfrog-cli-go/<cli-version>'`
+`export JFROG_CLI_USER_AGENT='model/<model-slug> jfrog-skills/<version> jfrog-cli-go/<cli-version>'`
 on stdout. The JFrog CLI picks this up natively and injects it as the
 `User-Agent` header on every HTTP request. JSON state is printed to stderr
 for informational purposes (also written to the cache file).
@@ -357,6 +360,15 @@ API call:
 4. Prefer read operations first to understand current state before making changes
 5. If any command fails with a server-level error (not found, auth, network),
    stop and ask the user — never retry against a different server
+6. **Never invent preparatory mutations.** If the requested operation fails
+   because a precondition is not met (artifact missing from the specified repo,
+   repository does not exist, package not at the expected location, build not
+   found), **stop and report the gap to the user**. Do not perform copy, move,
+   upload, create-repo, or any other mutating operation to satisfy the
+   precondition unless the user explicitly asks for it. These "helper" mutations
+   can have cascading effects the user has not considered — virtual repository
+   resolution changes, storage quota consumption, replication triggers, Xray
+   re-indexing, or permission propagation.
 
 ## Batch and parallel execution
 
