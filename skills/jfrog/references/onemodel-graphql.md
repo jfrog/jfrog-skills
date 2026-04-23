@@ -32,7 +32,8 @@ example `RESPONSE_FILE` paths must stay outside `local-cache/`.
 - **JFrog CLI** (`jf`) configured with at least one server — follow the main
   SKILL.md environment check and **Server selection rules** before querying.
 - **Artifactory 7.104.1+** — OneModel GraphQL requires this minimum version.
-- **`curl` and `jq`** on `PATH` (same as the base skill).
+- **`jq`** on `PATH` (same as the base skill). HTTP calls go through
+  `jf api`; no standalone `curl` is needed.
 
 All network calls require `required_permissions: ["full_network"]` in agent
 Shell invocations.
@@ -43,7 +44,7 @@ Follow these steps in order. Skipping the schema fetch (step 2) is the most
 common source of errors — queries built from assumptions or cached knowledge
 will fail on servers whose schema differs from what you expect.
 
-1. **Resolve credentials** — `get-platform-credentials.sh` (same server as CLI)
+1. **Resolve the target server** — derive `JFROG_SERVER_ID` from `jf config`
 2. **Fetch the schema** — always fetch the supergraph schema from the server
 3. **Understand the query intent** — map the user's request to domains and types
 4. **Construct the GraphQL query** — build from the resolved schema only
@@ -51,17 +52,24 @@ will fail on servers whose schema differs from what you expect.
 6. **Execute the query** — POST to the OneModel endpoint; save response to a file
 7. **Handle the response** — paginate if needed; present results clearly
 
-### 1. Resolve credentials
+### 1. Resolve the target server
 
-Use the same helper as Tier 3 REST calls. Pass the **same** `server-id` you
-resolved per SKILL.md server selection rules (omit for default server):
+Authentication is handled automatically by `jf api` against the active (or
+`--server-id`-specified) server. You only need the server-id locally — for
+caching the schema file per server. Derive it from `jf config`:
 
 ```bash
-eval "$(bash <skill_path>/scripts/get-platform-credentials.sh [server-id])"
+# User-specified server:
+JFROG_SERVER_ID="<server-id>"
+
+# Or the current default:
+JFROG_SERVER_ID=$(jf config show --server-id 2>/dev/null \
+  || jf config export | base64 -d | jq -r '.servers[] | select(.isDefault==true).serverId')
 ```
 
-This exports `JFROG_URL`, `JFROG_ACCESS_TOKEN`, `JFROG_SERVER_ID`, and related
-variables. The script normalizes `JFROG_URL` (no trailing slash).
+If the user named a specific server, pass `--server-id "$JFROG_SERVER_ID"` to
+every `jf api` invocation in steps 2 and 6 so the query hits that server
+(see SKILL.md § *Server selection rules*).
 
 ### 2. Fetch the schema
 
@@ -99,13 +107,14 @@ if [ -s "$SCHEMA_FILE" ]; then
   echo "Schema cache hit: $SCHEMA_FILE ($(wc -l < "$SCHEMA_FILE") lines)"
 else
   mkdir -p "<skill_path>/local-cache"
-  curl -s -X GET \
-    -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-    "$JFROG_URL/onemodel/api/v1/supergraph/schema" \
-    -o "$SCHEMA_FILE"
+  jf api /onemodel/api/v1/supergraph/schema \
+    --server-id "$JFROG_SERVER_ID" \
+    > "$SCHEMA_FILE"
   echo "Schema fetched: $SCHEMA_FILE ($(wc -l < "$SCHEMA_FILE") lines)"
 fi
 ```
+
+(Omit `--server-id "$JFROG_SERVER_ID"` to target the active default server.)
 
 After the block runs, **read `$SCHEMA_FILE` from disk** for all subsequent
 schema lookups — never re-fetch to a different path.
@@ -235,17 +244,24 @@ Before executing, verify:
 
 ### 6. Execute the query
 
-POST to:
+POST to `/onemodel/api/v1/graphql`:
 
-`$JFROG_URL/onemodel/api/v1/graphql`
+```bash
+jf api /onemodel/api/v1/graphql \
+  -X POST -H "Content-Type: application/json" \
+  --input "$PAYLOAD_FILE" \
+  --server-id "$JFROG_SERVER_ID" \
+  > "$RESPONSE_FILE"
+```
 
 #### Always save the response to a file
 
-Use `curl ... -o "$RESPONSE_FILE"` so you can re-`jq` without re-querying.
-**Do not pipe `curl` directly to `jq`** — a wrong filter loses the response.
-**Do not** set `RESPONSE_FILE` under `<skill_path>/local-cache/` — that
-directory is only for the schema cache and `jfrog-skill-state.json` (see
-[`local-cache/` policy](#local-cache-policy) above).
+Redirect `jf api`'s stdout to `$RESPONSE_FILE` so you can re-`jq` without
+re-querying. **Do not pipe `jf api` directly to `jq`** — a wrong filter
+loses the response. **Do not** set `RESPONSE_FILE` under
+`<skill_path>/local-cache/` — that directory is only for the schema cache and
+`jfrog-skill-state.json` (see [`local-cache/` policy](#local-cache-policy)
+above).
 
 For multiple queries in one shell session, use a temp directory under `/tmp` and
 sequential names:
@@ -265,7 +281,9 @@ RESPONSE_FILE="$ONEMODEL_TMPDIR/response-$ONEMODEL_QUERY_NUM.json"
 #### Always use `jq` to build the JSON payload
 
 Do **not** hand-embed the GraphQL string inside a JSON literal — escaping breaks
-easily.
+easily. Build the payload JSON with `jq`, write it to a **file**, and pass the
+file to `jf api` with `--input`. `jf api` does not accept stdin for `--data`;
+`--input` expects a file path.
 
 ##### Avoid `PARSING_ERROR` (broken GraphQL documents)
 
@@ -280,21 +298,21 @@ typo near the end surfaces as an error at a **high column number**.
 
 | Query size | How to build the payload |
 |------------|-------------------------|
-| Tiny (few fields, one level) | `QUERY='...'` plus `jq -n --arg q "$QUERY"` is OK. |
+| Tiny (few fields, one level) | `QUERY='...'` plus `jq -n --arg q "$QUERY"` into a file is OK. |
 | Anything nested (connections, `where: { ... }`, multiple roots) | Put the document in a **`.graphql` file** (or a **quoted heredoc**) and use **`jq --rawfile`**. Never maintain a 400+ character one-liner in bash. |
 
-Example — **small** query with `jq --arg` (closing braces match: `searchEvidence { ... }`, `evidence { ... }`, outer `{ ... }`):
+Example — **small** query with `jq --arg`:
 
 ```bash
-QUERY='{ evidence { searchEvidence(first: 5, where: { hasSubjectWith: { repositoryKey: "my-repo-local" } } }) { totalCount } } }'
-PAYLOAD=$(jq -n --arg q "$QUERY" '{"query": $q}')
+QUERY='{ evidence { searchEvidence(first: 5, where: { hasSubjectWith: { repositoryKey: "my-repo-local" } }) { totalCount } } }'
+PAYLOAD_FILE="$ONEMODEL_TMPDIR/payload-$ONEMODEL_QUERY_NUM.json"
+jq -n --arg q "$QUERY" '{"query": $q}' > "$PAYLOAD_FILE"
 
-curl -s -X POST \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/onemodel/api/v1/graphql" \
-  -d "$PAYLOAD" \
-  -o "$RESPONSE_FILE"
+jf api /onemodel/api/v1/graphql \
+  -X POST -H "Content-Type: application/json" \
+  --input "$PAYLOAD_FILE" \
+  --server-id "$JFROG_SERVER_ID" \
+  > "$RESPONSE_FILE"
 
 jq . "$RESPONSE_FILE"
 ```
@@ -303,14 +321,16 @@ Example — **nested** query from a file (preferred for real OneModel calls):
 
 ```bash
 # my-query.graphql contains a normal multi-line GraphQL document
-PAYLOAD=$(jq -n --rawfile q my-query.graphql '{"query": ($q | gsub("#.*"; "") | gsub("\\s+"; " ") | sub("^ +"; "") | sub(" +$"; ""))}')
+PAYLOAD_FILE="$ONEMODEL_TMPDIR/payload-$ONEMODEL_QUERY_NUM.json"
+jq -n --rawfile q my-query.graphql \
+  '{"query": ($q | gsub("#.*"; "") | gsub("\\s+"; " ") | sub("^ +"; "") | sub(" +$"; ""))}' \
+  > "$PAYLOAD_FILE"
 
-curl -s -X POST \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/onemodel/api/v1/graphql" \
-  -d "$PAYLOAD" \
-  -o "$RESPONSE_FILE"
+jf api /onemodel/api/v1/graphql \
+  -X POST -H "Content-Type: application/json" \
+  --input "$PAYLOAD_FILE" \
+  --server-id "$JFROG_SERVER_ID" \
+  > "$RESPONSE_FILE"
 ```
 
 Strip `#` comments and collapse whitespace only if you need a single-line
@@ -341,7 +361,7 @@ Errors appear in an `errors` array. Partial data may coexist with errors.
 
 | Symptom | Likely cause | Action |
 |--------|---------------|--------|
-| 401 | Invalid or expired token | Re-run `get-platform-credentials.sh` for the same server |
+| 401 | Invalid or expired token | Re-run the login flow (`references/jfrog-login-flow.md`) for the same server |
 | 403 | Insufficient permissions | User/token lacks access to the resource |
 | `GRAPHQL_VALIDATION_FAILED` | Bad field or argument | Re-check schema |
 | `PARSING_ERROR` / syntax at **line 1, column N** | Invalid document (often extra/missing `}`); common with long `QUERY='...'` one-liners | Reformat in a `.graphql` file or heredoc; verify brace balance; use `jq --rawfile` |
@@ -401,12 +421,15 @@ Include the resolved base URL so they can open it immediately.
   provided." Using an enum value where a string is expected (or vice versa) causes
   `GRAPHQL_VALIDATION_FAILED` errors, so always verify which field you are
   targeting before choosing the literal form.
-- **OneModel endpoint only:** `POST $JFROG_URL/onemodel/api/v1/graphql`. Do not
-  use legacy `/metadata/api/v1/query` or its `packages` root for OneModel.
+- **OneModel endpoint only:** `POST /onemodel/api/v1/graphql` (full path
+  passed to `jf api`). Do not use legacy
+  `/metadata/api/v1/query` or its `packages` root for OneModel.
 - **Token audience** — wildcard `*@*` is required for typical OneModel use;
   narrow tokens may fail with auth errors.
-- **`jf rt curl` is not for OneModel** — OneModel lives on the platform base URL;
-  use plain `curl` with `JFROG_URL` and bearer token.
+- **`jf api` handles auth and URL** — it authenticates against the active
+  (or `--server-id`-named) server and prepends the configured platform base
+  URL. Do not construct OneModel URLs manually or attach bearer tokens
+  yourself.
 - **Content-Type** — `application/json` on POST.
 - **Pagination** — do not mix `first/after` with `last/before` in the same field.
 - **Dates** — fields ending in `...At` default to ISO-8601 UTC; `@dateFormat`

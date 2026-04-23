@@ -7,3 +7,14 @@
 node_modules/
 output/
 tests/data/
+
+# WEP credentials and run artifacts
+evaluation/.credentials.local.json
+evaluation/.azure-sp.env
+evaluation/runs/
+evaluation/resolved_definitions/
+evaluation/artifact_index.json
+evaluation/version_manifest.json
+evaluation/scripts/.generated-system-prompt.txt
+scripts/.generated-system-prompt.txt
+.wep/

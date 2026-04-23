@@ -1,9 +1,11 @@
 # Platform Administration API Gaps
 
-Operations available through REST API but not (or only partially) through CLI.
-For Artifactory-scoped endpoints, use `jf rt curl`.
-For platform-wide endpoints, use plain `curl` with credentials from
-`scripts/get-platform-credentials.sh`.
+Operations available through REST API but not (or only partially) through the
+CLI. Invoke all of them via `jf api` (see the base skill's *Invoking platform
+APIs with `jf api`* section). Authentication is handled automatically from
+the configured `jf` server — no token extraction needed. Every path includes
+the product prefix (`/access/...`, `/artifactory/...`, `/xray/...`,
+`/worker/...`).
 
 ## Users (full CRUD)
 
@@ -11,29 +13,25 @@ The CLI has `users-create` and `users-delete` but lacks GET and UPDATE.
 
 ### Get user details
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v2/users/<username>"
+jf api /access/api/v2/users/<username>
 ```
 
 ### List users
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v2/users/"
+jf api /access/api/v2/users/
 ```
 
 ### Update user (partial)
 ```bash
-curl -s -XPATCH -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  "$JFROG_URL/access/api/v2/users/<username>" \
+jf api /access/api/v2/users/<username> \
+  -X PATCH -H "Content-Type: application/json" \
   -d '{"email": "newemail@example.com"}'
 ```
 
 ### Create user
 ```bash
-curl -s -XPOST -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  "$JFROG_URL/access/api/v2/users/" \
+jf api /access/api/v2/users/ \
+  -X POST -H "Content-Type: application/json" \
   -d '{"username": "newuser", "email": "user@example.com", "password": "...", "admin": false}'
 ```
 
@@ -41,28 +39,24 @@ curl -s -XPOST -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
 
 ### Get group details
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v2/groups/<groupname>"
+jf api /access/api/v2/groups/<groupname>
 ```
 
 ### List groups
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v2/groups/"
+jf api /access/api/v2/groups/
 ```
 
 ## Permissions (full CRUD)
 
 ### List permissions
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v2/permissions/"
+jf api /access/api/v2/permissions/
 ```
 
 ### Get permission details
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v2/permissions/<permission-name>"
+jf api /access/api/v2/permissions/<permission-name>
 ```
 
 ## Access tokens (beyond CLI)
@@ -71,29 +65,25 @@ The CLI has `access-token-create` but not list or revoke.
 
 ### List tokens
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/tokens"
+jf api /access/api/v1/tokens
 ```
 
 ### Revoke token by ID
 ```bash
-curl -s -XDELETE -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/tokens/<token-id>"
+jf api /access/api/v1/tokens/<token-id> -X DELETE
 ```
 
 ## Environments
 
 ### List global environments
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/environments"
+jf api /access/api/v1/environments
 ```
 
 ### Create global environment
 ```bash
-curl -s -XPOST -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  "$JFROG_URL/access/api/v1/environments" \
+jf api /access/api/v1/environments \
+  -X POST -H "Content-Type: application/json" \
   -d '{"name": "STAGING"}'
 ```
 
@@ -106,15 +96,13 @@ environments.
 
 ### List webhooks
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/webhooks"
+jf api /access/api/v1/webhooks
 ```
 
 ### Create webhook
 ```bash
-curl -s -XPOST -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  "$JFROG_URL/access/api/v1/webhooks" \
+jf api /access/api/v1/webhooks \
+  -X POST -H "Content-Type: application/json" \
   -d '{"key": "my-webhook", "url": "https://example.com/hook", "event_types": ["uploaded"]}'
 ```
 
@@ -122,37 +110,35 @@ curl -s -XPOST -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
 
 ### Platform ping
 ```bash
-jf rt curl -XGET /api/system/ping
+jf api /artifactory/api/system/ping
 ```
 
 ### Artifactory version
 ```bash
-jf rt curl -XGET /api/system/version
+jf api /artifactory/api/system/version
 ```
 
 ### Xray ping
 ```bash
-jf xr curl -XGET /api/v1/system/ping
+jf api /xray/api/v1/system/ping
 ```
 
 ### Xray version
 ```bash
-jf xr curl -XGET /api/v1/system/version
+jf api /xray/api/v1/system/version
 ```
 
 ## OIDC configuration
 
 ### List OIDC providers
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/oidc"
+jf api /access/api/v1/oidc
 ```
 
 ### Create OIDC configuration
 ```bash
-curl -s -XPOST -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  "$JFROG_URL/access/api/v1/oidc" \
+jf api /access/api/v1/oidc \
+  -X POST -H "Content-Type: application/json" \
   -d '{"name": "my-oidc", "issuer_url": "https://...", "provider_type": "generic"}'
 ```
 
@@ -160,8 +146,7 @@ curl -s -XPOST -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
 
 ### Get SCIM users
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/scim/v2/Users"
+jf api /access/api/v1/scim/v2/Users
 ```
 
 ## Workers (beyond CLI)
@@ -170,12 +155,10 @@ The CLI covers most worker operations. These are API-only:
 
 ### Get available actions
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/worker/api/v1/actions"
+jf api /worker/api/v1/actions
 ```
 
 ### Get actions metadata
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/worker/api/v1/actions/metadata"
+jf api /worker/api/v1/actions/metadata
 ```

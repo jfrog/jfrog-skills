@@ -3,30 +3,27 @@
 **See also:** `references/platform-access-entities.md` for how Projects relate to
 repositories, members, roles, and environments.
 
-Projects are managed through the Access API. There is no CLI support — use
-Tier 3 credentials (plain curl with extracted token via
-`get-platform-credentials.sh`).
+Projects are managed through the Access API. There is no CLI subcommand —
+invoke the endpoints via `jf api` (see the base skill's *Invoking platform
+APIs with `jf api`* section). Authentication against the resolved JFrog
+server is automatic.
 
-All endpoints below are relative to the JFrog Platform URL.
+All endpoints below use full product-prefixed paths (`/access/api/...`,
+`/artifactory/api/...`).
 
 ## Authentication
 
 All calls in this file require `required_permissions: ["full_network"]` in the
-Shell tool (see the Network permissions section in SKILL.md).
-
-```bash
-eval "$(bash <skill_path>/scripts/get-platform-credentials.sh [server-id])"
-```
-
-Then use `$JFROG_URL` and `$JFROG_ACCESS_TOKEN` in all requests.
+Shell tool (see the Network permissions section in SKILL.md). Credentials are
+resolved automatically by `jf api` from the active `jf config` server — no
+token extraction or `curl` wiring is needed.
 
 ## Projects
 
 ### List all projects
 
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/projects"
+jf api /access/api/v1/projects
 ```
 
 Returns an array of project objects with `project_key`, `display_name`,
@@ -35,16 +32,14 @@ Returns an array of project objects with `project_key`, `display_name`,
 ### Get a single project
 
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/projects/<project-key>"
+jf api /access/api/v1/projects/<project-key>
 ```
 
 ### Create a project
 
 ```bash
-curl -s -XPOST -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  "$JFROG_URL/access/api/v1/projects" \
+jf api /access/api/v1/projects \
+  -X POST -H "Content-Type: application/json" \
   -d '{
     "display_name": "My Project",
     "description": "Project description",
@@ -63,17 +58,15 @@ allowed, no leading/trailing hyphen).
 ### Update a project
 
 ```bash
-curl -s -XPUT -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  "$JFROG_URL/access/api/v1/projects/<project-key>" \
+jf api /access/api/v1/projects/<project-key> \
+  -X PUT -H "Content-Type: application/json" \
   -d '{"display_name": "Updated Name", "description": "Updated description"}'
 ```
 
 ### Delete a project
 
 ```bash
-curl -s -XDELETE -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/projects/<project-key>"
+jf api /access/api/v1/projects/<project-key> -X DELETE
 ```
 
 ## Members
@@ -81,8 +74,7 @@ curl -s -XDELETE -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
 ### List project members (users)
 
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/projects/<project-key>/users"
+jf api /access/api/v1/projects/<project-key>/users
 ```
 
 Returns `{"members": [{"name": "<username>", "roles": ["<role-name>"]}]}`.
@@ -90,24 +82,21 @@ Returns `{"members": [{"name": "<username>", "roles": ["<role-name>"]}]}`.
 ### Add a member
 
 ```bash
-curl -s -XPUT -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  "$JFROG_URL/access/api/v1/projects/<project-key>/users/<username>" \
+jf api /access/api/v1/projects/<project-key>/users/<username> \
+  -X PUT -H "Content-Type: application/json" \
   -d '{"name": "<username>", "roles": ["Developer"]}'
 ```
 
 ### Remove a member
 
 ```bash
-curl -s -XDELETE -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/projects/<project-key>/users/<username>"
+jf api /access/api/v1/projects/<project-key>/users/<username> -X DELETE
 ```
 
 ### List project groups
 
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/projects/<project-key>/groups"
+jf api /access/api/v1/projects/<project-key>/groups
 ```
 
 The response may list group entries under **`members`**, **`groups`**, or both,
@@ -117,9 +106,8 @@ depending on platform version (same general shape as users: `name` and
 ### Add a group
 
 ```bash
-curl -s -XPUT -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  "$JFROG_URL/access/api/v1/projects/<project-key>/groups/<group-name>" \
+jf api /access/api/v1/projects/<project-key>/groups/<group-name> \
+  -X PUT -H "Content-Type: application/json" \
   -d '{"name": "<group-name>", "roles": ["Contributor"]}'
 ```
 
@@ -128,8 +116,7 @@ curl -s -XPUT -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
 ### List project roles
 
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/projects/<project-key>/roles"
+jf api /access/api/v1/projects/<project-key>/roles
 ```
 
 Returns an array of role objects. Each has `name`, `description`, `type`
@@ -146,9 +133,8 @@ list matches another. See `references/platform-access-entities.md`.
 ### Create a custom role
 
 ```bash
-curl -s -XPOST -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  "$JFROG_URL/access/api/v1/projects/<project-key>/roles" \
+jf api /access/api/v1/projects/<project-key>/roles \
+  -X POST -H "Content-Type: application/json" \
   -d '{
     "name": "QA Engineer",
     "description": "Read and annotate repos in DEV",
@@ -168,8 +154,7 @@ and `references/platform-access-entities.md`.
 ### List environments (platform API)
 
 ```bash
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/access/api/v1/environments"
+jf api /access/api/v1/environments
 ```
 
 Returns `[{"name": "DEV"}, {"name": "PROD"}, ...]` -- the platform environment
@@ -178,9 +163,8 @@ list available through this Access API path.
 ### Create an environment
 
 ```bash
-curl -s -XPOST -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  "$JFROG_URL/access/api/v1/environments" \
+jf api /access/api/v1/environments \
+  -X POST -H "Content-Type: application/json" \
   -d '{"name": "STAGING"}'
 ```
 
@@ -193,14 +177,15 @@ Environment names are uppercase by convention.
 Assign a repository to a project by updating its configuration:
 
 ```bash
-jf rt curl -XPOST "/api/repositories/<repo-key>" \
-  -H "Content-Type: application/json" \
+jf api /artifactory/api/repositories/<repo-key> \
+  -X POST -H "Content-Type: application/json" \
   -d '{"projectKey": "<project-key>"}'
 ```
 
 ### List repositories for a project
 
-`GET /api/repositories` supports optional query parameters that can be combined:
+`GET /artifactory/api/repositories` supports optional query parameters that can
+be combined:
 
 | Parameter | Values | Example |
 |-----------|--------|---------|
@@ -210,13 +195,13 @@ jf rt curl -XPOST "/api/repositories/<repo-key>" \
 
 ```bash
 # All repos in a project
-jf rt curl -XGET "/api/repositories?project=<project-key>"
+jf api "/artifactory/api/repositories?project=<project-key>"
 
 # Only local Docker repos in a project
-jf rt curl -XGET "/api/repositories?project=<project-key>&type=local&packageType=docker"
+jf api "/artifactory/api/repositories?project=<project-key>&type=local&packageType=docker"
 
 # All remote repos (no project filter)
-jf rt curl -XGET "/api/repositories?type=remote"
+jf api "/artifactory/api/repositories?type=remote"
 ```
 
 Returns a lite list with `key`, `type`, `packageType`, and `url` per repo.
@@ -229,7 +214,7 @@ like `projectKey`, `description`, storage settings, etc. that are absent from
 the lite list), use the detail endpoint:
 
 ```bash
-jf rt curl -XGET "/api/repositories/<repo-key>"
+jf api "/artifactory/api/repositories/<repo-key>"
 ```
 
 Use this when you have a specific repo or a short list of repos to inspect --
@@ -253,5 +238,6 @@ versions).
 - **Invalid project key on create**: returns 400 if `project_key` is outside
   2-32 chars, contains uppercase letters, or has leading/trailing hyphens.
 - **Project not found**: returns 404 with `{"errors": [{"message": "..."}]}`.
-- **Insufficient permissions**: returns 403 if the token lacks project admin
-  or platform admin privileges.
+- **Insufficient permissions**: `jf api` exits with code 1 on non-2xx and
+  prints `[Warn] jf api: ... returned 403` on stderr when the token lacks
+  project admin or platform admin privileges.

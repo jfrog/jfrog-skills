@@ -11,7 +11,7 @@ Install them in your AI coding agent and interact with JFrog through natural lan
 
 ## Requirements
 
-- [`jf` CLI](https://jfrog.com/getcli/), `curl`, and `jq` on PATH
+- [`jf` CLI](https://jfrog.com/getcli/) **≥ 2.100.0** (required for `jf api`), `curl`, and `jq` on PATH
 - A configured JFrog instance (`jf config add`)
 
 ## Installation

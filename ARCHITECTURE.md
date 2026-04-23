@@ -40,16 +40,16 @@ The base skill is the largest and most complex component. Its structure is desig
 
 | Section | Purpose |
 |---------|---------|
-| **Prerequisites** | Required tools (`curl`, `jq`) |
+| **Prerequisites** | Required tools (`jq`) — `jf api` handles all HTTP traffic |
 | **Environment check** | Cached CLI detection via `scripts/check-environment.sh` |
 | **Network permissions** | `full_network` requirement for all JFrog traffic |
 | **Server management** | `jf config` for server CRUD, multi-instance targeting |
 | **Command discovery** | CLI namespace table, `--help` patterns, sunset notices |
 | **Artifactory operations** | Routing to `references/artifactory-operations.md` (mandatory first read) |
 | **Platform administration** | Routing to `references/platform-admin-operations.md` |
-| **REST API fallback tiers** | Tier 1 (`jf rt curl`), Tier 2 (`jf xr curl`), Tier 3 (plain `curl`), GraphQL |
+| **Invoking platform APIs with `jf api`** | Single unified API entry point covering Artifactory, Xray, Access, Evidence, AppTrust, Distribution, Lifecycle, Curation, and OneModel GraphQL |
 | **Structured inputs** | Template workaround via REST GET instead of interactive wizards |
-| **Gotchas** | Non-interactive CLI, `-s` flag, build scope, auth errors, NDJSON |
+| **Gotchas** | Non-interactive CLI, `jf api` product prefixes and exit-code semantics, build scope, auth errors, NDJSON |
 | **Cautious execution** | Confirm-before-mutate, read-first patterns |
 | **Batch/parallel execution** | Three-tier parallelism model |
 | **Preserving command output** | Temp-file patterns to avoid duplicate network calls |
@@ -95,10 +95,10 @@ These files tell the agent *how* to perform specific operations.
 
 | File | Scope |
 |------|-------|
-| `artifactory-operations.md` | `jf rt` commands, build scope discovery, AQL workflows |
+| `artifactory-operations.md` | `jf rt` commands, build scope discovery, AQL workflows (AQL executed via `jf api`) |
 | `platform-admin-operations.md` | Tokens, stats, projects, system health |
 | `artifactory-aql-syntax.md` | AQL domains, criteria, query construction |
-| `projects-api.md` | Access API for JFrog Projects |
+| `projects-api.md` | Access API for JFrog Projects (via `jf api`) |
 
 #### API gaps (REST-only operations)
 
@@ -116,7 +116,6 @@ Cross-cutting concerns — authentication, credential management, parallelism, b
 | File | Purpose |
 |------|---------|
 | `jfrog-login-flow.md` | Web login security rules, session scripts |
-| `jfrog-credential-patterns.md` | Tier 3 credential extraction, fetch-once pattern |
 | `jfrog-cli-install-upgrade.md` | Install/upgrade procedures for `jf` |
 | `jfrog-url-references.md` | docs.jfrog.com link catalog |
 | `jfrog-brand-html-report.md` | HTML report styling |
@@ -131,9 +130,8 @@ Helper scripts in `scripts/` handle environment bootstrapping and credential man
 | Script | Purpose | When called |
 |--------|---------|-------------|
 | `check-environment.sh` | Verifies `jf` CLI is installed and current; caches result for 24h | First JFrog operation in a session |
-| `get-platform-credentials.sh` | Extracts `JFROG_URL`, `JFROG_ACCESS_TOKEN`, and product URLs from `jf config export` | Tier 3 REST calls (products beyond Artifactory/Xray) |
 | `jfrog-login-register-session.sh` | Registers a browser login session; outputs `SESSION_UUID` and `VERIFY_CODE` | Adding a new server via web login |
-| `jfrog-login-save-credentials.sh` | Retrieves token from completed login session and runs `jf config add` | Completing a web login flow |
+| `jfrog-login-save-credentials.sh` | Retrieves token from completed login session and runs `jf config add`; verifies with `jf api /artifactory/api/system/version` | Completing a web login flow |
 
 ### Local cache
 
@@ -146,28 +144,38 @@ Agents must **not** store HTTP responses, GraphQL results, or other scratch file
 
 ---
 
-## REST API tiering
+## REST API invocation — unified through `jf api`
 
-The base skill defines a tiered approach to API access, preferring CLI wrappers over raw HTTP:
+The base skill routes **all** JFrog HTTP API traffic through the single
+`jf api` command. This replaces the previous three-tier model (`jf rt curl`
+/ `jf xr curl` / plain `curl` + credential extraction) and gives the agent
+one authentication mechanism, one invocation pattern, and one exit-code
+contract across every JFrog product.
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  Tier 1: jf rt curl                                 │
-│  Artifactory REST — auto-authenticated via jf       │
-├─────────────────────────────────────────────────────┤
-│  Tier 2: jf xr curl                                 │
-│  Xray REST — auto-authenticated via jf              │
-├─────────────────────────────────────────────────────┤
-│  Tier 3: plain curl + get-platform-credentials.sh   │
-│  Access, Distribution, Evidence, other products     │
-├─────────────────────────────────────────────────────┤
-│  GraphQL (OneModel)                                 │
-│  Catalog, Evidence, AppTrust, Stored Packages       │
-│  Uses Tier 3 credentials                            │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  jf api /<product>/api/...                                  │
+│                                                             │
+│  Product prefix decides the target service:                 │
+│    /artifactory/api/...   — Artifactory                     │
+│    /xray/api/...          — Xray + Curation                 │
+│    /access/api/...        — Access, users, projects, tokens │
+│    /evidence/api/...      — Evidence                        │
+│    /apptrust/api/...      — AppTrust                        │
+│    /distribution/api/...  — Distribution                    │
+│    /lifecycle/api/...     — Release Lifecycle               │
+│    /onemodel/api/v1/graphql — OneModel GraphQL              │
+│                                                             │
+│  Authentication: the active `jf config` server (or          │
+│  --server-id=<id>). No token extraction, no Authorization   │
+│  headers, no JFROG_ACCESS_TOKEN env var.                    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-Tiers 1 and 2 handle authentication automatically through the CLI's server config. Tier 3 and GraphQL require explicit credential extraction via `get-platform-credentials.sh`.
+Binary artifact content (downloads, uploads) still goes through the native
+CLI commands — `jf rt dl`, `jf rt u`, `jf rt cp`, etc. — which are
+**kept** because they are not thin HTTP wrappers; they implement
+multipart, checksum, and redirect-follow behaviour `jf api` does not.
 
 ---
 
