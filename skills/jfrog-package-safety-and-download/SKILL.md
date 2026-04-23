@@ -65,18 +65,18 @@ reduce total latency:
   curation result is needed immediately if the Jfrog Platform check returns
   empty.
 
-When issuing parallel Shell calls, remember that credentials don't persist
-across calls — use the jfrog skill to obtain the platform URL and credentials
-in each parallel call.
+When issuing parallel Shell calls, each `jf api` call authenticates
+independently against the active `jf config` server; no shell state needs
+to be passed between calls.
 
 ## Step 1: Find the package
 
 Search the **Public Catalog** first via OneModel GraphQL, then fall back to
 **Stored Packages** if not found.
 
-Use the jfrog skill for credentials (Tier 3) and the GraphQL execution
-pattern. Refer to `../jfrog/references/onemodel-query-examples.md` for query
-shapes.
+Execute the query through `jf api` as described in
+`../jfrog/references/onemodel-graphql.md`; refer to
+`../jfrog/references/onemodel-query-examples.md` for concrete query shapes.
 
 **When package type is known** (e.g. `npm`, `maven`, `pypi`), use
 `publicPackages.getPackage(type:, name:)` (see *Get a public package*).
@@ -114,7 +114,8 @@ with a `hasPackageWith` filter (see `../jfrog/references/onemodel-query-examples
 version from Step 2, and request `locationsConnection` to get repository
 details (`repositoryKey`, `repositoryType`, `leadArtifactPath`).
 
-Use the jfrog skill for credentials and GraphQL execution.
+Execute the query through `jf api` (see
+`../jfrog/references/onemodel-graphql.md` for the invocation pattern).
 
 - **Found with locations** → package is in the Jfrog Platform. Report as **safe to
   download**. Proceed to Step 4.
@@ -122,43 +123,42 @@ Use the jfrog skill for credentials and GraphQL execution.
 
 ## Step 4: Download from Jfrog Platform
 
-Use the location info from Step 3. Download command depends on repository
-type. **`<target>` must be a full file path** (e.g.
+Use the location info from Step 3. Binary artifact downloads go through
+`jf rt dl` — **not** `jf api`. `jf api` is the unified entry point for the
+JFrog REST APIs (metadata, admin, curation, etc.) and does not expose the
+`-L` / `-o` flags needed to stream binary content through a redirect chain.
+
+**`<target>` must be a full file path** (e.g.
 `./downloads/lodash-4.18.1.tgz`), not a bare directory. `jf rt dl --flat`
 treats the target as a file name; passing a directory causes a misleading
 "open path: is a directory" error.
 
 | `repositoryType` | Strategy |
 |-------------------|----------|
-| `local` or `federated` | Use `jf rt dl` — the artifact is stored locally and will always be found |
-| `remote` | Use the proxy endpoint directly — `jf rt dl` only finds already-cached artifacts and returns 0 for uncached packages, wasting an API call |
+| `local` or `federated` | `jf rt dl "<repositoryKey>/<leadArtifactPath>" <target-file> --flat` |
+| `remote` | `jf rt dl` against the **base** remote repo (strip any trailing `-cache`) — it transparently triggers the remote fetch when the artifact is not yet cached |
 
-**local / federated download:**
-
-```bash
-jf rt dl "<repositoryKey>/<leadArtifactPath>" <target-file> --flat
-```
-
-**remote download — go straight to the proxy endpoint:**
+**local / federated / remote download:**
 
 ```bash
-jf rt curl -s -L -XGET "/api/<protocol>/<remoteRepoKey>/<artifact-path>" \
-  -o <output-file>
+jf rt dl "<baseRepoKey>/<leadArtifactPath>" <target-file> --flat
 ```
 
-**Resolving the remote repo key for the proxy endpoint:** The `repositoryKey`
-returned by OneModel for remote locations often already ends in `-cache` (e.g.
-`devNPM-remote-cache`). The proxy endpoint needs the **base remote repo name**
+**Resolving the remote repo key:** The `repositoryKey` returned by OneModel
+for remote locations often already ends in `-cache` (e.g.
+`devNPM-remote-cache`). `jf rt dl` needs the **base remote repo name**
 (without `-cache`). Strip the `-cache` suffix when present (e.g.
-`devNPM-remote-cache` → `devNPM-remote`). If the key does not end in `-cache`,
-use it as-is.
+`devNPM-remote-cache` → `devNPM-remote`). If the key does not end in
+`-cache`, use it as-is.
 
-See the **Protocol endpoints** table below for `<protocol>` and path format.
+See the **Protocol endpoints** table below for the package-type-specific
+path format inside the repo.
 
 ## Step 5: Check curation entitlement
 
 ```bash
-jf rt curl -s -XGET /api/system/version | jq '.addons | index("curation") != null'
+jf api /artifactory/api/system/version \
+  | jq '.addons | index("curation") != null'
 ```
 
 - `true` → curation is entitled. Proceed to Step 6a.
@@ -171,37 +171,56 @@ package version is allowed across all repositories before downloading.
 
 ```bash
 RESPONSE_FILE="/tmp/curation-status-$$.json"
-jf xr curl -s -XPOST "/api/v1/curation/package_status/all_repos" \
-  -H "Content-Type: application/json" \
-  -d "{\"packageType\":\"<TYPE>\",\"packageName\":\"<NAME>\",\"packageVersion\":\"<VERSION>\"}" \
-  -o "$RESPONSE_FILE" -w "\n%{http_code}"
-echo "$RESPONSE_FILE"
+PAYLOAD_FILE="/tmp/curation-payload-$$.json"
+STDERR_FILE="/tmp/curation-err-$$.log"
+
+jq -n \
+  --arg type    "<TYPE>"    \
+  --arg name    "<NAME>"    \
+  --arg version "<VERSION>" \
+  '{packageType:$type, packageName:$name, packageVersion:$version}' \
+  > "$PAYLOAD_FILE"
+
+set +e
+jf api /xray/api/v1/curation/package_status/all_repos \
+  -X POST -H "Content-Type: application/json" \
+  --input "$PAYLOAD_FILE" \
+  > "$RESPONSE_FILE" 2> "$STDERR_FILE"
+RC=$?
+set -e
+echo "RC=$RC"; echo "$RESPONSE_FILE"
 ```
 
 Supported `packageType` values: `npm`, `pypi`, `maven`, `go`, `nuget`,
 `docker`, `gradle`.
 
-To capture both the response body and the HTTP status code in one call, use
-`-w "\n%{http_code}"` and parse the last line as the status code:
+**Interpreting the result with `jf api`**: unlike plain `curl`, `jf api`
+surfaces the HTTP result through its **exit code** and a
+`"<hh:mm:ss> [Warn] ... returned 4xx/5xx"` line on **stderr** (not a
+`%{http_code}` suffix in stdout). The response body is always written to
+stdout. Parse both:
 
 ```bash
-HTTP_CODE=$(tail -1 "$RESPONSE_FILE")
-BODY=$(sed '$d' "$RESPONSE_FILE")
-if [ "$HTTP_CODE" = "403" ]; then
-  echo "Blocked by curation policy:"
-  echo "$BODY"
-elif [ "$HTTP_CODE" = "200" ]; then
+if [ "$RC" -eq 0 ]; then
   echo "Package is allowed by curation."
+elif grep -q 'returned 403' "$STDERR_FILE"; then
+  echo "Blocked by curation policy:"
+  cat "$RESPONSE_FILE"
+else
+  echo "Curation check failed (rc=$RC):"
+  cat "$STDERR_FILE"
 fi
 ```
 
-**Evaluate the HTTP status code:**
+**Evaluate the outcome:**
 
-- **200** → package is **allowed** by curation policy. Proceed to download
-  via a remote repo (same as Step 6b).
-- **403** → package is **blocked** by a curation policy. The response body
-  explains which policy rule blocked it. Report the block reason to the user
-  and stop — do not attempt to download.
+- **exit 0** → package is **allowed** by curation policy. Proceed to
+  download via a remote repo (same as Step 6b).
+- **`returned 403` on stderr** → package is **blocked** by a curation
+  policy. The response body explains which policy rule blocked it. Report
+  the block reason to the user and stop — do not attempt to download.
+- **Any other non-zero exit** → treat as an operational failure (auth, DNS,
+  endpoint disabled) and report.
 
 ## Step 6b: Download without curation
 
@@ -211,41 +230,40 @@ download directly through a remote repo.
 1. **Find a remote repo** of the right package type:
 
    ```bash
-   jf rt curl -s -XGET "/api/repositories?type=remote&packageType=<TYPE>" \
+   jf api \
+     "/artifactory/api/repositories?type=remote&packageType=<TYPE>" \
      | jq '.[].key'
    ```
 
-2. **Download:**
+2. **Download** — use `jf rt dl` against the base remote repo (without
+   `-cache`); it handles both cached and uncached artifacts:
 
    ```bash
-   jf rt dl "<repo>-cache/<artifact-path>" <target-file> --flat
+   jf rt dl "<repo>/<artifact-path>" <target-file> --flat
    ```
 
-   If 0 results (not cached), fetch through the remote proxy:
+## Artifact paths by package type
 
-   ```bash
-   jf rt curl -s -L -XGET "/api/<protocol>/<repo>/<artifact-path>" \
-     -o <output-file>
-   ```
+Use these path patterns when `leadArtifactPath` is not available from
+OneModel. The leading `<repo>/` is the base repo key you pass to `jf rt dl`.
 
-## Protocol endpoints by package type
-
-| Type | Protocol prefix | Artifact path pattern |
-|------|----------------|----------------------|
-| `npm` | `/api/npm/<repo>` | `<pkg>/-/<pkg>-<version>.tgz` |
-| `pypi` | `/api/pypi/<repo>/packages` | `<pkg>/<version>/<pkg>-<version>.tar.gz` |
-| `maven` | `/<repo>` | `<group-path>/<artifact>/<version>/<artifact>-<version>.jar` |
-| `go` | `/api/go/<repo>` | `<module>/@v/<version>.zip` |
+| Type   | `jf rt dl` target pattern                                               |
+|--------|-------------------------------------------------------------------------|
+| `npm`  | `<repo>/<pkg>/-/<pkg>-<version>.tgz`                                    |
+| `pypi` | `<repo>/<pkg>/<version>/<pkg>-<version>.tar.gz`                         |
+| `maven`| `<repo>/<group-path>/<artifact>/<version>/<artifact>-<version>.jar`     |
+| `go`   | `<repo>/<module>/@v/<version>.zip`                                      |
 
 ## Gotchas
 
-- **`jf rt dl` and remote repos**: `jf rt dl` only finds artifacts already
-  present in the `-cache` repo. For `remote` repository types, Step 4
-  instructs to skip `jf rt dl` entirely and use the proxy endpoint directly,
-  avoiding a wasted round-trip for uncached packages.
-- **Redirects**: `jf rt curl` does not follow HTTP redirects by default.
-  Always pass `-L` when downloading binary artifacts through remote repo
-  proxy endpoints.
+- **Binary downloads vs. `jf api`**: `jf api` is for REST APIs, not binary
+  content. It does not follow redirects transparently into a binary payload
+  and does not expose `-L` / `-o`. Always use `jf rt dl` (against the base
+  remote repo, not the `-cache` one) for the actual artifact download.
+- **`jf rt dl` and uncached remotes**: `jf rt dl "<remote>/<path>"` —
+  targeting the **base** remote repo rather than `<remote>-cache/<path>` —
+  transparently triggers the remote fetch and caches the artifact. Do not
+  try to pre-query the proxy via `jf api`.
 - **`jf rt dl --flat` target must be a file path**: When downloading a
   single artifact, pass a full output **file** path (e.g.
   `./downloads/lodash-4.18.1.tgz`), not a directory. The CLI opens the target
@@ -255,8 +273,14 @@ download directly through a remote repo.
 - **Package type detection**: If the user doesn't specify the package type,
   the Public Catalog search by name alone may return multiple types. Ask the
   user to disambiguate before proceeding.
-- **Curation API uses `jf xr curl`**: The curation package status endpoint
-  is under Xray, not Artifactory. Use `jf xr curl`, not `jf rt curl`.
+- **Curation endpoint lives under Xray**: use
+  `/xray/api/v1/curation/package_status/all_repos` (via `jf api`). Do not
+  prefix it with `/artifactory`.
+- **Curation result discrimination with `jf api`**: the 200/403 signal comes
+  from `jf api`'s **exit code** plus a `returned NNN` line on **stderr**,
+  not from a `%{http_code}` appended to stdout. Capture stderr to a file
+  (`2> "$STDERR_FILE"`) and branch on `RC` + `grep 'returned 403'` as shown
+  in Step 6a.
 - **Curation API package type values**: Must be lowercase and match one of
   `npm`, `pypi`, `maven`, `go`, `nuget`, `docker`, `gradle`. Other values
   will return an error.

@@ -1,6 +1,6 @@
 ---
 name: jfrog
-version: "0.3.0"
+version: "0.4.0"
 description: >-
   Interact with the JFrog Platform via the JFrog CLI and REST/GraphQL APIs.
   Use this skill when the user wants to manage Artifactory repositories,
@@ -15,7 +15,7 @@ description: >-
   evidence, apptrust, onemodel, graphql, workers, mission control, curation,
   advanced security, exposures, or any JFrog product name.
 compatibility: >-
-  Requires curl and jq on PATH.
+  Requires jq on PATH.
 metadata:
   role: base
 ---
@@ -36,8 +36,11 @@ The following tools must be available on `PATH`:
 
 | Tool | Purpose |
 |------|---------|
-| `curl` | HTTP requests to JFrog REST and GraphQL APIs |
 | `jq` | JSON parsing of CLI and API output |
+
+All HTTP traffic to JFrog Platform APIs goes through the `jf` CLI itself
+(`jf api`, see [Invoking platform APIs with `jf api`](#invoking-platform-apis-with-jf-api) below) —
+no standalone `curl` is required for any JFrog interaction.
 
 ## Environment check
 
@@ -62,30 +65,31 @@ The script uses a 24-hour cache at `<skill_path>/local-cache/jfrog-skill-state.j
 cache is fresh, it returns immediately. If stale or missing, it checks whether
 `jf` is installed, its version, and whether a newer version is available.
 
-- Exit 0: cache is fresh, CLI is ready
-- Exit 1: cache was stale and has been refreshed, CLI is ready
-- Exit 2: `jf` is not installed
+- Exit 0: cache is fresh, CLI is ready — proceed
+- Exit 1: cache was stale and has been refreshed, CLI is ready — proceed
+- Exit 2: `jf` is not installed — **STOP** (see below)
+- Exit 3: `jf` is installed but below the minimum version required by this skill (the script prints the minimum and the detected version to stderr) — **STOP** (see below)
 
 Bypass the cache only when the user explicitly asks to install, upgrade, or
 reconfigure the CLI.
 
-If the CLI is missing (exit 2) or an upgrade is needed, read
-`references/jfrog-cli-install-upgrade.md` for install and upgrade instructions.
+**On exit 2 or 3, stop and ask the user to install or upgrade.** Do not work
+around it with `jf rt curl`, raw `curl`, or other fallbacks — see
+`references/jfrog-cli-install-upgrade.md`.
 
 ### JSON parsing (`jq`)
 
 Use **`jq`** for all JSON parsing of CLI and API output (pipes, `-r`, filters).
-Examples: `base64 -d | jq -r '.url'`, `jf rt curl ... | jq '.[] | .key'`.
 
 ## Network permissions
 
 JFrog servers are not on the default sandbox network allowlist. Every Shell
-call that contacts a JFrog server — whether via `jf` CLI, `jf rt curl`,
-`jf xr curl`, or plain `curl` — requires `required_permissions: ["full_network"]`.
+call that contacts a JFrog server requires
+`required_permissions: ["full_network"]`.
 
 Without this permission, commands fail silently: `jf` exits with code 1 and
-empty output, `curl` returns an empty response, and downstream JSON parsing
-crashes. All JFrog operations that touch the network need this permission.
+empty output, and downstream JSON parsing crashes. All JFrog operations that
+touch the network need this permission.
 
 ### Agent execution environments
 
@@ -135,9 +139,8 @@ operation. The rules are strict and apply to every CLI command, API call, and
 subagent prompt:
 
 1. **User named specific server(s)** — use those and only those. Pass
-   `--server-id <id>` (CLI) or the matching server-id to
-   `get-platform-credentials.sh` (REST). Do not touch any other configured
-   server.
+   `--server-id <id>` to every `jf` command. Do not touch any other
+   configured server.
 2. **User did not name a server** — use the current default server and only
    it. Determine the default via `jf config show` (the entry marked as
    default). If no default is set, stop and ask the user which server to use.
@@ -206,68 +209,69 @@ Access tokens, login, stats, projects, and system health. Read
 `references/platform-admin-operations.md` when performing any of these
 operations.
 
-## Falling back to REST APIs
+## Invoking platform APIs with `jf api`
 
-When the CLI does not support an operation, use REST APIs. All commands in this
-section require `required_permissions: ["full_network"]` (see Network
-permissions above). Read `references/jfrog-credential-patterns.md` for detailed
-patterns.
+When the CLI lacks a dedicated subcommand, use `jf api` — the unified entry
+point for every JFrog Platform REST and GraphQL endpoint, auto-authenticated
+against the resolved server. **Do not use `jf rt curl` or `jf xr curl`** —
+they are superseded by `jf api`. All `jf api` calls require
+`required_permissions: ["full_network"]` (see [Network permissions](#network-permissions)).
 
-### Tier 1: Artifactory (`jf rt curl`)
+### Product-prefix table
 
-Handles authentication automatically:
+`jf api` requires the **full** path including the product prefix; omitting it
+returns 404.
+
+| Product | Path prefix |
+|---------|-------------|
+| Artifactory | `/artifactory/api/...` |
+| Xray | `/xray/api/...` |
+| Access (users, groups, tokens, permissions, projects) | `/access/api/...` |
+| Evidence | `/evidence/api/...` |
+| Release Lifecycle | `/lifecycle/api/...` |
+| AppTrust | `/apptrust/api/...` |
+| Distribution | `/distribution/api/...` |
+| OneModel (GraphQL) | `/onemodel/api/v1/graphql`, `/onemodel/api/v1/supergraph/schema` |
+| Mission Control | `/mc/api/...` |
+| Curation | `/xray/api/v1/curation/...` (lives under Xray) |
+
+### Examples
+
 ```bash
-jf rt curl -XGET /api/repositories
-jf rt curl -XGET "/api/storage/<repo>/<path>?properties"
-jf rt curl -XPOST /api/search/aql -H "Content-Type: text/plain" -d '<aql-query>'
+jf api /artifactory/api/repositories
+jf api /artifactory/api/system/version --server-id <id>
+
+# AQL (POST with text/plain body)
+jf api /artifactory/api/search/aql \
+  -X POST -H "Content-Type: text/plain" -d '<aql-query>'
 ```
 
-### Tier 2: Xray (`jf xr curl`)
-
-Handles authentication automatically:
-```bash
-jf xr curl -XGET /api/v2/watches
-jf xr curl -XGET /api/v2/policies
-```
-
-### Tier 3: Other products (plain curl)
-
-Extract credentials using the helper script:
-```bash
-eval "$(bash <skill_path>/scripts/get-platform-credentials.sh [server-id])"
-curl -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" "$JFROG_URL/access/api/v2/users/"
-```
+Common flags: `-X/--method`, `-H/--header`, `-d/--data`, `--input <file>`,
+`--server-id`, `--timeout`. Body on stdout, status on stderr — see
+[Gotchas](#gotchas).
 
 ### GraphQL (OneModel)
 
-OneModel is the unified GraphQL API on the platform base URL. **Do not** embed
-the query string inside a JSON literal (`-d '{"query":"..."}'`) — GraphQL uses
-many double quotes and manual escaping breaks requests. Use **`jq -n --arg`**
-to build the payload, and **save the HTTP response to a file** with `curl -o`
-before running `jq` (same principle as *Preserving command output* below).
+OneModel is the unified GraphQL API. **Do not** embed the query inside a JSON
+literal (`-d '{"query":"..."}'`) — escaping breaks requests. Build the payload
+with `jq -n --arg`, pass it via `--input`, and save the response to a file
+before running `jq` on it.
 
 ```bash
-eval "$(bash <skill_path>/scripts/get-platform-credentials.sh [server-id])"
-QUERY='{ evidence { searchEvidence(first: 5, where: { hasSubjectWith: { repositoryKey: "my-repo-local" } } }) { totalCount } } }'
-PAYLOAD=$(jq -n --arg q "$QUERY" '{"query": $q}')
-RESPONSE_FILE="/tmp/onemodel-$$.json"
-curl -s -X POST "$JFROG_URL/onemodel/api/v1/graphql" \
-  -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "$PAYLOAD" \
-  -o "$RESPONSE_FILE"
-jq . "$RESPONSE_FILE"
-echo "$RESPONSE_FILE"
+QUERY='{ evidence { searchEvidence(first: 5, where: { hasSubjectWith: { repositoryKey: "my-repo-local" } }) { totalCount } } }'
+PAYLOAD=/tmp/onemodel-payload-$$.json RESPONSE=/tmp/onemodel-$$.json
+jq -n --arg q "$QUERY" '{query:$q}' > "$PAYLOAD"
+jf api /onemodel/api/v1/graphql -X POST \
+  -H "Content-Type: application/json" --input "$PAYLOAD" > "$RESPONSE"
+jq . "$RESPONSE"
 ```
 
-Schema discovery: `GET $JFROG_URL/onemodel/api/v1/supergraph/schema` (schema file
-only under `<skill_path>/local-cache/` per `references/onemodel-graphql.md` and
-**`local-cache/` — allowed files only** above — not for query responses).
-
-Read **`references/onemodel-graphql.md`** for the full workflow (mandatory schema
-fetch, validation, pagination, errors, playground). Read
-**`references/onemodel-query-examples.md`** for domain-specific query shapes and
-**`references/onemodel-common-patterns.md`** for pagination, variables, and dates.
+Schema discovery: `jf api /onemodel/api/v1/supergraph/schema > "$SCHEMA_FILE"`
+(store only under `<skill_path>/local-cache/`, never query responses). Read
+`references/onemodel-graphql.md` for the full workflow (schema fetch,
+validation, pagination, errors), plus `references/onemodel-query-examples.md`
+and `references/onemodel-common-patterns.md` for query shapes, pagination,
+variables, and dates.
 
 ## Structured inputs
 
@@ -277,7 +281,7 @@ which agents cannot use. Instead, retrieve an existing config via REST API as a
 starting point and modify it:
 
 ```bash
-jf rt curl -XGET /api/repositories/<repo-key>
+jf api /artifactory/api/repositories/<repo-key>
 ```
 
 For other Artifactory or platform REST patterns, or when you need more than
@@ -290,19 +294,32 @@ this repo GET, see **Any API gap** under [When to read reference files](#when-to
   environment check does **not** call your JFrog server (it may contact
   `releases.jfrog.io` for version checking), but it may need **workspace
   write** access for its cache file (see [Agent execution environments](#agent-execution-environments)).
-- `jf rt curl` only works for Artifactory. `jf xr curl` only works for Xray.
-  For other products, use plain curl with extracted credentials.
+- `jf api` requires the **product prefix** in the path (`/artifactory/...`, `/xray/...`, `/access/...`, `/evidence/...`,
+  `/lifecycle/...`, `/apptrust/...`, `/distribution/...`, `/onemodel/...`,
+  `/mc/...`). Omitting the prefix returns 404. See the
+  [product-prefix table](#product-prefix-table) above.
+- `jf api` writes the body (success or error JSON) to **stdout** and
+  `[Info] Http Status: NNN` to **stderr** on every call; non-2xx also exits
+  1 and adds `[Warn] jf api: <method> <url> returned NNN`. Pipe stdout to
+  `jq` directly; **never `2>&1 | jq`** — stderr corrupts the JSON. To keep
+  diagnostics: `jf api <path> 2>/tmp/err-$$.log | jq .`.
+- `jf api` has **no `-L`** (follow redirects) and **no `-o`** (output file).
+  Save bodies with shell redirection
+  (`jf api ... > /tmp/out-$$.json`); for
+  binary downloads through the Artifactory remote proxy prefer `jf rt dl`,
+  which handles the cache and redirect semantics natively.
 - Remote repository content is stored in a `-cache` suffixed repo. Properties
   and AQL queries for remote repo artifacts must target the cache repo.
   Conversely, `/api/repositories/<key>` only accepts the parent remote key
   (without `-cache`) — strip the suffix for configuration lookups.
 - **Do not use `jf rt search`** — always use a direct AQL query via
-  `jf rt curl -XPOST /api/search/aql`. See `references/artifactory-aql-syntax.md`.
+  `jf api /artifactory/api/search/aql -X POST -H "Content-Type: text/plain" -d '<aql>'`.
+  See `references/artifactory-aql-syntax.md`.
 - Use `--quiet` flag for non-interactive execution (suppresses confirmation
   prompts). **Caution:** `--quiet` is not a global flag — commands that do not
-  support it (e.g. `jf rt s`, `jf rt curl`, `jf rt ping`) will fail with
-  misleading errors like "Wrong number of arguments" or "flag provided but not
-  defined". Check `--help` for a command before adding `--quiet`.
+  support it (e.g. `jf rt s`, `jf rt ping`) will fail with misleading errors
+  like "Wrong number of arguments" or "flag provided but not defined". Check
+  `--help` for a command before adding `--quiet`.
 - Use `--server-id` when targeting a non-default server. If a command fails
   with `--server-id`, do not retry without it — that silently targets the
   default server instead. See [Server selection rules](#server-selection-rules-mandatory).
@@ -314,18 +331,16 @@ this repo GET, see **Any API gap** under [When to read reference files](#when-to
   unexpectedly, find the non-interactive alternative via `--help` or REST API.
 - `jf config export` output is base64-encoded JSON. Decode with
   `base64 -d | jq` to extract fields.
-- Always use `jf rt curl -s` (silent flag) when piping output to `jq` or
-  redirecting to a file. Without `-s`, curl's progress meter is mixed into
-  stdout and breaks JSON parsing.
 - Build info lookups require a scope (`?buildRepo=` or `?project=`) —
   resolve it before calling the API. See `references/artifactory-operations.md`
   §Retrieving build info for the full workflow.
-- If a REST API call returns 401, the access token may have expired —
-  re-extract credentials with `get-platform-credentials.sh` for the **same**
-  server. If 403, the token lacks required permissions. If 404, verify the
-  endpoint path and target server version. On any of these errors, do not
-  try a different configured server as a workaround — that targets a
-  different environment. Report the error and ask the user.
+- If a `jf api` call returns 401, the configured token may have expired or
+  been rotated — ask the user to re-run the login flow (see
+  `references/jfrog-login-flow.md`) for the **same** server. If 403, the
+  token lacks required permissions. If 404, verify the endpoint path
+  (especially the product prefix) and target server version. On any of
+  these errors, do not try a different configured server as a workaround —
+  that targets a different environment. Report the error and ask the user.
 - **Xray contextual analysis:** the summary artifact response has two
   applicability fields — `applicability` (top-level, often null) and
   `applicability_details` (always present with a `result` string). **Use
@@ -385,7 +400,7 @@ file so you can re-read it without re-executing the call:
 
 ```bash
 OUT=/tmp/jf-repos-$$.json
-jf rt curl -XGET /api/repositories > "$OUT"
+jf api /artifactory/api/repositories > "$OUT"
 echo "$OUT"
 ```
 
@@ -413,8 +428,7 @@ Do **not** duplicate the same **network** request in a shell pipeline (e.g. with
 `||`) only to re-run `jq` or to reveal jq diagnostics—the duplicate call
 adds load on JFrog without fetching new data. Run
 `jq '<filter>' /tmp/jf-*-$$.json` (or redirect stdin from the file) instead
-of re-running the same `jf rt curl`, `jf xr curl`, Tier 3 `curl`, or other
-identical network-backed command.
+of re-running the same `jf api` or other identical network-backed command.
 
 Do **not** reuse saved output across unrelated steps or changed contexts (different
 server, user, or intent). The file is only valid for the immediate sequence of
@@ -469,7 +483,6 @@ below.
 - **Access tokens, stats, projects, or system health**: read `references/platform-admin-operations.md`
 - **Managing JFrog Projects, members, or environments**: read `references/projects-api.md` (~260 lines)
 - **Platform REST beyond the CLI, or any platform-level API gap**: read `references/platform-admin-api-gaps.md` (~180 lines)
-- **Credential extraction for products beyond Artifactory and Xray**: read `references/jfrog-credential-patterns.md` (~155 lines; includes **Response handling** for any network-backed response body: fetch once to a temp file, then `jq` the file — plain `curl` or `jf rt curl` / `jf xr curl` alike)
 
 ### CLI setup & authentication
 

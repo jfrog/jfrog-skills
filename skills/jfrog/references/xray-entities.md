@@ -9,7 +9,7 @@ When to read this file:
 - Searching for **artifacts impacted by a CVE** or containing a specific package.
 
 For CLI commands: `jf xr --help`, `jf audit --help`, `jf scan --help`.
-For REST fallback: `jf xr curl -XGET /api/v2/...`.
+For REST fallback: `jf api /xray/api/v2/...` (see the base skill's *Invoking platform APIs with `jf api`* section).
 
 ## Entity relationship overview
 
@@ -136,8 +136,8 @@ For Docker images, the path format is
 `default/<repo>/<image>/<tag>/manifest.json`:
 
 ```bash
-jf xr curl -s -XPOST /api/v2/summary/artifact \
-  -H "Content-Type: application/json" \
+jf api /xray/api/v2/summary/artifact \
+  -X POST -H "Content-Type: application/json" \
   -d '{"paths": ["default/my-docker-repo/my-image/my-tag/manifest.json"]}'
 ```
 
@@ -225,8 +225,8 @@ component type (e.g. npm-only) must be done client-side on `infected_components`
 or by querying watches that cover specific repository types.
 
 ```bash
-jf xr curl -s -XPOST /api/v1/violations \
-  -H "Content-Type: application/json" \
+jf api /xray/api/v1/violations \
+  -X POST -H "Content-Type: application/json" \
   -d '{
     "filters": {
       "violation_type": "Security",
@@ -340,8 +340,8 @@ The request body uses `component_details` (an array of objects with
 `component_id`), **not** `component_ids`.
 
 ```bash
-jf xr curl -s -XPOST /api/v1/summary/component \
-  -H "Content-Type: application/json" \
+jf api /xray/api/v1/summary/component \
+  -X POST -H "Content-Type: application/json" \
   -d '{"component_details": [{"component_id": "npm://lodash:4.17.19"}]}'
 ```
 
@@ -376,17 +376,17 @@ entire repository, query individual artifact paths (discovered via AQL or
 
 ```bash
 # v1 — by path
-jf xr curl -XPOST /api/v1/summary/artifact \
-  -H "Content-Type: application/json" \
+jf api /xray/api/v1/summary/artifact \
+  -X POST -H "Content-Type: application/json" \
   -d '{"paths": ["default/npm-local/moment-2.29.3.tar.gz"]}'
 
 # v2 — by checksum
-jf xr curl -XPOST /api/v2/summary/artifact \
-  -H "Content-Type: application/json" \
+jf api /xray/api/v2/summary/artifact \
+  -X POST -H "Content-Type: application/json" \
   -d '{"checksums": ["8240b88c..."]}'
 ```
 
-See `SKILL.md` (Tier 2: Xray) for the full response schema.
+See `SKILL.md` § *Invoking platform APIs with `jf api`* for the full response schema.
 
 ## Impacted resources search
 
@@ -467,13 +467,13 @@ Key response fields:
 
 ```bash
 # Mode 1: all artifacts affected by a CVE
-jf xr curl -s -XGET "/api/v2/search/impactedResources?vulnerability=CVE-2021-23337&limit=100"
+jf api "/xray/api/v2/search/impactedResources?vulnerability=CVE-2021-23337&limit=100"
 
 # Mode 2: artifacts containing a specific package version
-jf xr curl -s -XGET "/api/v2/search/impactedResources?name=log4j-core&type=maven&version=2.14.1&namespace=org.apache.logging.log4j"
+jf api "/xray/api/v2/search/impactedResources?name=log4j-core&type=maven&version=2.14.1&namespace=org.apache.logging.log4j"
 
 # Mode 3: artifacts containing any version of a package
-jf xr curl -s -XGET "/api/v2/search/impactedResources?name=lodash&type=npm"
+jf api "/xray/api/v2/search/impactedResources?name=lodash&type=npm"
 ```
 
 ### Pagination
@@ -482,11 +482,11 @@ Page through results using `last_key`:
 
 ```bash
 # First page
-RESP=$(jf xr curl -s -XGET "/api/v2/search/impactedResources?vulnerability=CVE-2021-23337&limit=1000")
+RESP=$(jf api "/xray/api/v2/search/impactedResources?vulnerability=CVE-2021-23337&limit=1000")
 LAST_KEY=$(echo "$RESP" | jq -r '.last_key')
 
 # Subsequent pages (loop until last_key is empty)
-jf xr curl -s -XGET "/api/v2/search/impactedResources?vulnerability=CVE-2021-23337&limit=1000&last_key=$LAST_KEY"
+jf api "/xray/api/v2/search/impactedResources?vulnerability=CVE-2021-23337&limit=1000&last_key=$LAST_KEY"
 ```
 
 ## Exposures (Advanced Security)
@@ -565,16 +565,16 @@ Response:
 
 ```bash
 # Secrets exposures for an artifact
-jf xr curl -s -XGET "/api/v1/secrets/results?repo=my-docker-local&path=my-image/latest/manifest.json&num_of_rows=50"
+jf api "/xray/api/v1/secrets/results?repo=my-docker-local&path=my-image/latest/manifest.json&num_of_rows=50"
 
 # IaC exposures, sorted by severity descending
-jf xr curl -s -XGET "/api/v1/iac/results?repo=my-repo&path=terraform/main.tf&order_by=jfrog_severity&direction=desc"
+jf api "/xray/api/v1/iac/results?repo=my-repo&path=terraform/main.tf&order_by=jfrog_severity&direction=desc"
 
 # Application exposures with search filter
-jf xr curl -s -XGET "/api/v1/applications/results?repo=npm-local&path=app-1.0.0.tgz&search=injection"
+jf api "/xray/api/v1/applications/results?repo=npm-local&path=app-1.0.0.tgz&search=injection"
 
 # Service misconfigurations
-jf xr curl -s -XGET "/api/v1/services/results?repo=docker-local&path=my-service/1.0/manifest.json"
+jf api "/xray/api/v1/services/results?repo=docker-local&path=my-service/1.0/manifest.json"
 ```
 
 ### Paginating exposure results
@@ -582,7 +582,7 @@ jf xr curl -s -XGET "/api/v1/services/results?repo=docker-local&path=my-service/
 ```bash
 PAGE=1
 while true; do
-  RESP=$(jf xr curl -s -XGET "/api/v1/secrets/results?repo=my-repo&path=my-artifact&page_num=$PAGE&num_of_rows=100")
+  RESP=$(jf api "/xray/api/v1/secrets/results?repo=my-repo&path=my-artifact&page_num=$PAGE&num_of_rows=100")
   echo "$RESP" | jq '.data[]'
   TOTAL=$(echo "$RESP" | jq '.total_count')
   COUNT=$(echo "$RESP" | jq '.data | length')
@@ -605,8 +605,8 @@ and then fan out to the exposures endpoint.
 
 ```bash
 OUT=/tmp/manifests-$$.json
-jf rt curl -s -XPOST /api/search/aql \
-  -H "Content-Type: text/plain" \
+jf api /artifactory/api/search/aql \
+  -X POST -H "Content-Type: text/plain" \
   -d 'items.find({"repo":"my-docker-local","name":"manifest.json","path":{"$nmatch":"*_uploads*"}}).include("repo","path","name")' \
   > "$OUT"
 echo "$OUT"
@@ -620,8 +620,8 @@ exposures API's `path` parameter.
 **Non-Docker repos** — find scannable artifacts:
 
 ```bash
-jf rt curl -s -XPOST /api/search/aql \
-  -H "Content-Type: text/plain" \
+jf api /artifactory/api/search/aql \
+  -X POST -H "Content-Type: text/plain" \
   -d 'items.find({"repo":"npm-local","type":"file"}).include("repo","path","name").sort({"$desc":["size"]}).limit(20)'
 ```
 
@@ -661,7 +661,7 @@ Use 6-day windows to avoid edge-case overflows from hour-level rounding.
 Example request:
 
 ```bash
-jf xr curl -XGET "/api/v1/curation/audit/packages?order_by=id&direction=desc&num_of_rows=100&created_at_start=2023-07-20T22:00:00.000Z&created_at_end=2023-07-26T22:00:00.000Z&include_total=true&offset=0"
+jf api "/xray/api/v1/curation/audit/packages?order_by=id&direction=desc&num_of_rows=100&created_at_start=2023-07-20T22:00:00.000Z&created_at_end=2023-07-26T22:00:00.000Z&include_total=true&offset=0"
 ```
 
 Response shape (key fields):

@@ -23,12 +23,12 @@ jf stats rt [--server-id <id>] [--format json|table]
 
 ## Projects
 
-Projects are managed via the Access API (no CLI support). Use Tier 3
-credentials (plain curl with extracted token):
+Projects are managed via the Access API (no CLI subcommand). Invoke the
+endpoints through `jf api` (see the base skill's *Invoking platform APIs
+with `jf api`* section). Authentication is handled automatically:
 
 ```bash
-eval "$(bash <skill_path>/scripts/get-platform-credentials.sh)" && \
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" "$JFROG_URL/access/api/v1/projects"
+jf api /access/api/v1/projects
 ```
 
 - **List projects**: `GET /access/api/v1/projects`
@@ -42,10 +42,8 @@ When querying multiple projects, batch the calls in a single Shell invocation
 to avoid per-project round-trips:
 
 ```bash
-eval "$(bash <skill_path>/scripts/get-platform-credentials.sh)" && \
 for proj in proj1 proj2 proj3; do
-  curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-    "$JFROG_URL/access/api/v1/projects/$proj/users"
+  jf api "/access/api/v1/projects/$proj/users"
 done
 ```
 
@@ -54,7 +52,7 @@ creating/updating projects, managing members, and assigning repositories.
 
 ## System health
 
-Not available in CLI. Use:
+Not available as a dedicated CLI subcommand. Use:
 ```bash
-jf rt curl -XGET /api/system/ping
+jf api /artifactory/api/system/ping
 ```

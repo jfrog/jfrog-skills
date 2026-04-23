@@ -203,32 +203,35 @@ query GetEvidence($repoKey: String!, $path: String!, $name: String!) {
 }
 ```
 
-### curl with variables
+### `jf api` with variables
 
-Build the JSON body with `jq -n` — do not hand-escape quotes inside the query:
+Build the JSON body with `jq -n` into a **file**, then pass the file to
+`jf api` with `--input` — do not hand-escape quotes inside the query:
 
 ```bash
-eval "$(bash <skill_path>/scripts/get-platform-credentials.sh [server-id])"
-
 QUERY='query GetEvidence($repoKey: String!, $path: String!, $name: String!) { evidence { getEvidence(repositoryKey: $repoKey, path: $path, name: $name) { evidenceId verified } } }'
 
-PAYLOAD=$(jq -n \
+PAYLOAD_FILE="/tmp/onemodel-payload-$$.json"
+RESPONSE_FILE="/tmp/onemodel-response-$$.json"
+
+jq -n \
   --arg q "$QUERY" \
   --arg repoKey "example-repo-local" \
   --arg path "path/to" \
   --arg name "file.ext" \
-  '{"query": $q, "variables": {"repoKey": $repoKey, "path": $path, "name": $name}}')
+  '{"query": $q, "variables": {"repoKey": $repoKey, "path": $path, "name": $name}}' \
+  > "$PAYLOAD_FILE"
 
-RESPONSE_FILE="/tmp/onemodel-response-$$.json"
-curl -s -X POST \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" \
-  "$JFROG_URL/onemodel/api/v1/graphql" \
-  -d "$PAYLOAD" \
-  -o "$RESPONSE_FILE"
+jf api /onemodel/api/v1/graphql \
+  -X POST -H "Content-Type: application/json" \
+  --input "$PAYLOAD_FILE" \
+  > "$RESPONSE_FILE"
 
 jq . "$RESPONSE_FILE"
 ```
+
+Pass `--server-id <id>` to `jf api` when targeting a non-default server
+(see `onemodel-graphql.md` step 1).
 
 Echo `$RESPONSE_FILE` if a follow-up Shell call must read it (see SKILL.md
 *Preserving command output*).

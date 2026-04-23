@@ -6,45 +6,43 @@ heaviest:
 
 | Tier | Mechanism | Best for |
 |------|-----------|----------|
-| 1 | Single Shell call with `&&` | Few commands, same tier, same credentials |
-| 2 | Parallel Shell tool calls | Commands across different tiers or credential scopes |
+| 1 | Single Shell call with `&&` | Few commands, same credentials |
+| 2 | Parallel Shell tool calls | Independent commands that can run concurrently |
 | 3 | Parallel subagents (Task tool) | Large multi-step jobs where each branch needs its own reasoning |
 
 ## Tier 1: Batch within a single Shell call
 
-Combine independent commands with `&&` when they share the same credential
-scope. This reduces approval prompts.
+Combine independent commands with `&&`. All JFrog API calls go through the
+same `jf api` command and the same `jf config` server, so batching them
+together is both safe and efficient:
 
 ```bash
-jf rt curl -XGET /api/repositories > /tmp/jf-repos-$$.json && \
-jf rt curl -XGET /api/system/ping > /tmp/jf-ping-$$.json && \
-jf rt curl -XGET /api/storageinfo > /tmp/jf-storage-$$.json
+jf api /artifactory/api/repositories > /tmp/jf-repos-$$.json && \
+jf api /artifactory/api/system/ping    > /tmp/jf-ping-$$.json && \
+jf api /artifactory/api/storageinfo    > /tmp/jf-storage-$$.json
 ```
 
-For REST calls that share extracted credentials:
+Cross-product reads batch the same way:
 
 ```bash
-eval "$(bash <skill_path>/scripts/get-platform-credentials.sh)" && \
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" "$JFROG_URL/access/api/v2/users/" > /tmp/jf-users-$$.json && \
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" "$JFROG_URL/access/api/v2/groups/" > /tmp/jf-groups-$$.json && \
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" "$JFROG_URL/access/api/v2/permissions/" > /tmp/jf-perms-$$.json
+jf api /access/api/v2/users/        > /tmp/jf-users-$$.json && \
+jf api /access/api/v2/groups/       > /tmp/jf-groups-$$.json && \
+jf api /access/api/v2/permissions/  > /tmp/jf-perms-$$.json
 ```
 
 ## Tier 2: Parallel Shell tool calls
 
-Use multiple Shell tool calls in the same message when commands target
-different tiers or do not share state (e.g. one `jf rt curl` call alongside
-one plain `curl` call):
+Use multiple Shell tool calls in the same message when the commands are
+independent and the total runtime benefits from concurrency:
 
 ```bash
 # Shell call 1 — echo the expanded path so the agent can reference it later
 OUT=/tmp/jf-repos-$$.json
-jf rt curl -XGET /api/repositories > "$OUT" && echo "$OUT"
+jf api /artifactory/api/repositories > "$OUT" && echo "$OUT"
 
 # Shell call 2 (parallel) — same pattern, different PID
 OUT=/tmp/jf-users-$$.json
-eval "$(bash <skill_path>/scripts/get-platform-credentials.sh)" && \
-curl -s -H "Authorization: Bearer $JFROG_ACCESS_TOKEN" "$JFROG_URL/access/api/v2/users/" > "$OUT" && echo "$OUT"
+jf api /access/api/v2/users/ > "$OUT" && echo "$OUT"
 ```
 
 Each parallel Shell call gets a different PID, so `$$` expands to different
@@ -66,17 +64,19 @@ a structured result. The parent agent assembles the final answer.
 
 ```
 Subagent 1 (shell): "Collect repository data"
-  → jf rt curl -XGET /api/repositories
-  → jf rt curl -XGET /api/storageinfo
+  → jf api /artifactory/api/repositories
+  → jf api /artifactory/api/storageinfo
   → Return repo count, types, total size
 
 Subagent 2 (shell): "Collect security configuration"
-  → jf xr curl -XGET /api/v2/policies
-  → jf xr curl -XGET /api/v2/watches
+  → jf api /xray/api/v2/policies
+  → jf api /xray/api/v2/watches
   → Return policy count, watch count, coverage gaps
 
 Subagent 3 (shell): "Collect user and permission data"
-  → eval credentials, then curl Access API for users, groups, permissions
+  → jf api /access/api/v2/users/
+  → jf api /access/api/v2/groups/
+  → jf api /access/api/v2/permissions/
   → Return user count, group count, admin users
 ```
 
@@ -107,8 +107,8 @@ merges their results into a unified report.
 
 | Scenario | Tier |
 |----------|------|
-| 2–5 independent reads, same credential scope | 1 (single Shell) |
-| Reads across Artifactory + Access APIs simultaneously | 2 (parallel Shell) |
+| 2–5 independent reads, same server | 1 (single Shell) |
+| Many independent reads where concurrency cuts total runtime | 2 (parallel Shell) |
 | Full platform audit, multi-section report, cross-server comparison | 3 (subagents) |
 | Task branches need different reference files or reasoning | 3 (subagents) |
 | Simple one-shot data fetch | 1 (single Shell) |

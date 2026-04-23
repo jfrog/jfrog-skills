@@ -3,7 +3,8 @@
 AQL queries are sent as POST requests with `Content-Type: text/plain`:
 
 ```bash
-jf rt curl -XPOST /api/search/aql -H "Content-Type: text/plain" -d '<query>'
+jf api /artifactory/api/search/aql \
+  -X POST -H "Content-Type: text/plain" -d '<query>'
 ```
 
 ## Query structure
@@ -518,7 +519,7 @@ items.find({"repo":"docker-local","path":{"$match":"my-image/*"},"name":"manifes
 under `<image>/<tag>/`. Use the V2 manifest API (returns `layers[].size`):
 
 ```bash
-jf rt curl -s -XGET "/api/docker/<repo>/v2/<image>/manifests/<tag>" \
+jf api "/artifactory/api/docker/<repo>/v2/<image>/manifests/<tag>" \
   -H "Accept: application/vnd.docker.distribution.manifest.v2+json"
 ```
 
@@ -537,7 +538,8 @@ Zero-download items lack a stats row — filter client-side instead
 (see [Gotchas](#gotchas)):
 
 ```bash
-jf rt curl -s -XPOST /api/search/aql -H "Content-Type: text/plain" -d '
+jf api /artifactory/api/search/aql \
+  -X POST -H "Content-Type: text/plain" -d '
 items.find({"repo":"my-repo","type":"file"})
   .include("repo","path","name","size","stat.downloads")
 ' | jq '[.results[] | select((.stats[0].downloads // 0) == 0) | {repo, path, name, size}]'

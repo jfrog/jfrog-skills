@@ -2,7 +2,8 @@
 # jfrog-login-register-session.sh — Verify a JFrog server and start a web login session
 #
 # Pings the server, generates a session UUID, and registers it with
-# the Access API for browser-based authentication.
+# the Access API for browser-based authentication (bootstrap HTTP via
+# `jf api --url`).
 #
 # Usage:
 #   bash jfrog-login-register-session.sh <platform-url>
@@ -22,6 +23,18 @@
 
 set -euo pipefail
 
+jf_api_http_status() {
+  # Parses "Http Status: NNN" from jf api stderr.
+  local err_file="$1"
+  local line
+  line=$(grep -F 'Http Status:' "$err_file" 2>/dev/null | tail -1 || true)
+  if [[ "$line" =~ Http\ Status:\ ([0-9]+) ]]; then
+    echo "${BASH_REMATCH[1]}"
+  else
+    echo "0"
+  fi
+}
+
 JFROG_PLATFORM_URL="${1:-}"
 
 if [[ -z "$JFROG_PLATFORM_URL" ]]; then
@@ -31,16 +44,22 @@ fi
 
 JFROG_PLATFORM_URL="${JFROG_PLATFORM_URL%/}"
 
-if ! command -v curl &>/dev/null; then
-  echo "ERROR: curl is not installed" >&2
+if ! command -v jf &>/dev/null; then
+  echo "ERROR: jf is not installed" >&2
   exit 1
 fi
 
-# Verify server is reachable
-PING_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-  "${JFROG_PLATFORM_URL}/artifactory/api/system/ping")
+if ! command -v uuidgen &>/dev/null; then
+  echo "ERROR: uuidgen is not installed" >&2
+  exit 1
+fi
 
-if [[ "$PING_CODE" != "200" ]]; then
+TMPERR="$(mktemp)"
+trap 'rm -f "$TMPERR"' EXIT
+
+# Verify server is reachable (unauthenticated ping)
+if ! jf api /artifactory/api/system/ping --url "$JFROG_PLATFORM_URL" >/dev/null 2>"$TMPERR"; then
+  PING_CODE=$(jf_api_http_status "$TMPERR")
   echo "ERROR: Server not reachable at ${JFROG_PLATFORM_URL} (HTTP ${PING_CODE})" >&2
   exit 2
 fi
@@ -50,12 +69,13 @@ SESSION_UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
 VERIFY_CODE=${SESSION_UUID: -4}
 
 # Register the session with the Access API
-REG_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-  "${JFROG_PLATFORM_URL}/access/api/v2/authentication/jfrog_client_login/request" \
+: >"$TMPERR"
+if ! jf api /access/api/v2/authentication/jfrog_client_login/request \
+  --url "$JFROG_PLATFORM_URL" \
+  -X POST \
   -H "Content-Type: application/json" \
-  -d "{\"session\":\"${SESSION_UUID}\"}")
-
-if [[ "$REG_CODE" != "200" && "$REG_CODE" != "201" ]]; then
+  -d "{\"session\":\"${SESSION_UUID}\"}" >/dev/null 2>"$TMPERR"; then
+  REG_CODE=$(jf_api_http_status "$TMPERR")
   echo "ERROR: Session registration failed (HTTP ${REG_CODE})" >&2
   exit 3
 fi

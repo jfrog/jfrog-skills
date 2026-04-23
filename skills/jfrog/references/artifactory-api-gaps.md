@@ -1,37 +1,50 @@
 # Artifactory API Gaps
 
 Operations available through REST API but not through CLI commands.
-Use `jf rt curl` for all of these (handles authentication automatically).
+Invoke them via `jf api <path> [flags]` (authentication is handled
+automatically against the active `jf config` server; see the base skill's
+*Invoking platform APIs with `jf api`* section).
 
 ## Repository management
 
 ### Get repository configuration
 ```bash
-jf rt curl -XGET /api/repositories/<repo-key>
+jf api /artifactory/api/repositories/<repo-key>
 ```
 Returns the full JSON configuration of a repository. Useful as a template
 for creating similar repos.
 
 ### List all repositories
 ```bash
-jf rt curl -XGET /api/repositories
-# Filter by type, package type, and/or project (all combinable)
-jf rt curl -XGET "/api/repositories?type=local"
-jf rt curl -XGET "/api/repositories?type=remote"
-jf rt curl -XGET "/api/repositories?type=virtual"
-jf rt curl -XGET "/api/repositories?packageType=docker"
-jf rt curl -XGET "/api/repositories?project=myproj"
-jf rt curl -XGET "/api/repositories?project=myproj&type=local&packageType=docker"
+jf api /artifactory/api/repositories
+```
+Optional query params (combinable): `type` (one of `local`, `remote`,
+`virtual`, `federated`), `packageType` (e.g. `docker`, `maven`, `npm`,
+`pypi`, `generic`), `project`. Examples:
+```bash
+jf api "/artifactory/api/repositories?type=local"
+jf api "/artifactory/api/repositories?packageType=docker"
+jf api "/artifactory/api/repositories?type=remote&packageType=maven&project=my-project"
 ```
 
 ### Get repositories (v2)
 ```bash
-jf rt curl -XGET "/api/repositories/configurations?repo_type=LOCAL&package_type=maven"
+jf api /artifactory/api/repositories/configurations
+```
+Optional query params (combinable, comma-separated values allowed):
+`repoType` (case-insensitive; one of `local`, `remote`, `virtual`,
+`federated`) and `packageType` (e.g. `maven`, `docker`, `npm`). Note:
+`repo_type` is silently ignored — the correct name is `repoType`.
+Examples:
+```bash
+jf api "/artifactory/api/repositories/configurations?repoType=local"
+jf api "/artifactory/api/repositories/configurations?packageType=maven"
+jf api "/artifactory/api/repositories/configurations?repoType=local,remote&packageType=docker"
 ```
 
 ### Check if repository exists
 ```bash
-jf rt curl -XHEAD /api/repositories/<repo-key>
+jf api /artifactory/api/repositories/<repo-key> -X HEAD
 # 200 = exists, 400 = does not exist
 ```
 
@@ -39,178 +52,155 @@ jf rt curl -XHEAD /api/repositories/<repo-key>
 
 ### Get storage summary
 ```bash
-jf rt curl -XGET /api/storageinfo
+jf api /artifactory/api/storageinfo
 ```
 
 ### Refresh storage summary
 ```bash
-jf rt curl -XPOST /api/storageinfo/calculate
+jf api /artifactory/api/storageinfo/calculate -X POST
 ```
 
 ### Get storage item info
 ```bash
-jf rt curl -XGET "/api/storage/<repo>/<path>"
+jf api "/artifactory/api/storage/<repo>/<path>"
 ```
 
 ### System ping
 ```bash
-jf rt curl -XGET /api/system/ping
+jf api /artifactory/api/system/ping
 ```
 
 ### System version
 ```bash
-jf rt curl -XGET /api/system/version
+jf api /artifactory/api/system/version
 ```
 
 ### System configuration
 ```bash
-jf rt curl -XGET /api/system/configuration
+jf api /artifactory/api/system/configuration
 ```
 
 ## Search (beyond CLI)
 
 ### AQL queries
 ```bash
-jf rt curl -XPOST /api/search/aql \
-  -H "Content-Type: text/plain" \
+jf api /artifactory/api/search/aql \
+  -X POST -H "Content-Type: text/plain" \
   -d 'items.find({"repo":"my-repo","name":{"$match":"*.jar"}})'
 ```
 
 For remote repository content, query the `-cache` suffixed repo:
 ```bash
-jf rt curl -XPOST /api/search/aql \
-  -H "Content-Type: text/plain" \
+jf api /artifactory/api/search/aql \
+  -X POST -H "Content-Type: text/plain" \
   -d 'items.find({"repo":"my-remote-cache"})'
 ```
 
 ### Property search
 ```bash
-jf rt curl -XGET "/api/search/prop?key=value&repos=my-repo"
+jf api "/artifactory/api/search/prop?key=value&repos=my-repo"
 ```
 
 ### Checksum search
 ```bash
-jf rt curl -XGET "/api/search/checksum?sha256=<sha256>"
+jf api "/artifactory/api/search/checksum?sha256=<sha256>"
 ```
 
 ### GAVC search (Maven)
 ```bash
-jf rt curl -XGET "/api/search/gavc?g=com.example&a=mylib&v=1.0"
+jf api "/artifactory/api/search/gavc?g=com.example&a=mylib&v=1.0"
 ```
 
-## User management (beyond CLI)
+## User and group management
 
-These Access API endpoints are routed through Artifactory's auth proxy via
-`jf rt curl`. The same endpoints can also be reached with plain `curl` and
-extracted credentials — see `platform-admin-api-gaps.md` (Users section).
-
-### Get user details
-```bash
-jf rt curl -XGET /access/api/v2/users/<username>
-```
-
-### Update user
-```bash
-jf rt curl -XPATCH /access/api/v2/users/<username> \
-  -H "Content-Type: application/json" \
-  -d '{"email": "new@example.com"}'
-```
-
-### List all users
-```bash
-jf rt curl -XGET /access/api/v2/users/
-```
-
-### Get group details
-```bash
-jf rt curl -XGET /access/api/v2/groups/<groupname>
-```
+User and group operations are handled by the Access service. See
+`platform-admin-api-gaps.md` (Users / Groups sections) for the full set.
 
 ## Metadata calculation
 
 Trigger metadata recalculation for various package types:
 ```bash
 # Maven
-jf rt curl -XPOST /api/maven/calculateMetaData/<repo-key>
+jf api /artifactory/api/maven/calculateMetaData/<repo-key> -X POST
 
 # npm
-jf rt curl -XPOST /api/npm/<repo-key>/reindex
+jf api /artifactory/api/npm/<repo-key>/reindex -X POST
 
 # Docker
 # (automatic, no manual trigger)
 
 # PyPI
-jf rt curl -XPOST /api/pypi/<repo-key>/reindex
+jf api /artifactory/api/pypi/<repo-key>/reindex -X POST
 
 # Helm
-jf rt curl -XPOST /api/helm/<repo-key>/reindex
+jf api /artifactory/api/helm/<repo-key>/reindex -X POST
 
 # Debian
-jf rt curl -XPOST /api/deb/reindex/<repo-key>
+jf api /artifactory/api/deb/reindex/<repo-key> -X POST
 ```
 
 ## Trash can and garbage collection
 
 ### Empty trash
 ```bash
-jf rt curl -XPOST /api/trash/empty
+jf api /artifactory/api/trash/empty -X POST
 ```
 
 ### Restore from trash
 ```bash
-jf rt curl -XPOST "/api/trash/restore/<repo>/<path>"
+jf api "/artifactory/api/trash/restore/<repo>/<path>" -X POST
 ```
 
 ### Run garbage collection
 ```bash
-jf rt curl -XPOST /api/system/storage/gc
+jf api /artifactory/api/system/storage/gc -X POST
 ```
 
 ## Federated repositories (beyond basic CRUD)
 
 ### Get federation status
 ```bash
-jf rt curl -XGET /api/federation/status/<repo-key>
+jf api /artifactory/api/federation/status/<repo-key>
 ```
 
 ### Trigger full sync
 ```bash
-jf rt curl -XPOST "/api/federation/fullSyncAll/<repo-key>"
+jf api "/artifactory/api/federation/fullSyncAll/<repo-key>" -X POST
 ```
 
 ## Build info (beyond CLI)
 
 ### List builds (prefer scoped queries)
 
-**Unscoped** `GET /api/build` (no query parameters) can **time out** on busy
-instances. Prefer **project-scoped** or **repo-scoped** listing, then detail
-GETs. Full flow: read `artifactory-operations.md` § *Listing builds when the
-project key is known*.
+**Unscoped** `GET /artifactory/api/build` (no query parameters) can **time
+out** on busy instances. Prefer **project-scoped** or **repo-scoped**
+listing, then detail GETs. Full flow: read `artifactory-operations.md`
+§ *Listing builds when the project key is known*.
 
 ```bash
 # Project scope — build names (latest per name)
-jf rt curl -XGET "/api/build?project=<project-key>"
+jf api "/artifactory/api/build?project=<project-key>"
 
 # Project scope — all run numbers for one build name (response: buildsNumbers)
-jf rt curl -XGET "/api/build/<build-name>?project=<project-key>"
+jf api "/artifactory/api/build/<build-name>?project=<project-key>"
 
 # Build-info repo scope — alternative when you know the repo key
-jf rt curl -XGET "/api/build?buildRepo=<build-info-repo-key>"
+jf api "/artifactory/api/build?buildRepo=<build-info-repo-key>"
 ```
 
 ### Get build info
 ```bash
 # Default build-info repo only (no project / non-default repo)
-jf rt curl -XGET "/api/build/<build-name>/<build-number>"
+jf api "/artifactory/api/build/<build-name>/<build-number>"
 
 # Project or custom build-info repo
-jf rt curl -XGET "/api/build/<build-name>/<build-number>?project=<project-key>"
-jf rt curl -XGET "/api/build/<build-name>/<build-number>?buildRepo=<build-info-repo-key>"
+jf api "/artifactory/api/build/<build-name>/<build-number>?project=<project-key>"
+jf api "/artifactory/api/build/<build-name>/<build-number>?buildRepo=<build-info-repo-key>"
 ```
 
 ### Delete builds
 ```bash
-jf rt curl -XPOST /api/build/delete \
-  -H "Content-Type: application/json" \
+jf api /artifactory/api/build/delete \
+  -X POST -H "Content-Type: application/json" \
   -d '{"buildName":"my-build","buildNumbers":["1","2"]}'
 ```

@@ -123,5 +123,4 @@ jf config add <server-id> \
 - Server ID is derived from the hostname: `https://mycompany.jfrog.io`
   becomes `mycompany`. Self-hosted URLs are slugified:
   `https://artifactory.internal.corp` becomes `artifactory-internal-corp`.
-- Both scripts require `curl` on PATH. The save-credentials script also
-  requires `jf` and `jq`.
+- **`jf`**, **`uuidgen`** (register-session), and **`jq`** (save-credentials) must be on PATH.

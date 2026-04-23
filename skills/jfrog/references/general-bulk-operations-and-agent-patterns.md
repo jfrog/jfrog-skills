@@ -79,7 +79,7 @@ When looping over items (repos, builds, users) and fetching detail for each:
 ```bash
 : >results.ndjson
 while read -r key; do
-  body=$(jf rt curl -sS -XGET "/api/repositories/$key" || true)
+  body=$(jf api "/artifactory/api/repositories/$key" || true)
   if echo "$body" | jq -e . >/dev/null 2>&1; then
     echo "$body" | jq -c . >>results.ndjson
   else
@@ -89,7 +89,7 @@ done < <(jq -r '.[].key' list.json)
 jq -s '.' results.ndjson > details.json
 ```
 
-Never pipe a loop of `jf rt curl` calls directly into `jq -s` without
+Never pipe a loop of `jf api` calls directly into `jq -s` without
 per-body validation.
 
 ## Where to find product specifics
@@ -99,4 +99,5 @@ per-body validation.
 - JFrog Projects (endpoints): `references/projects-api.md`
 - Joining Artifactory repos to Projects (`projectKey`, roles, environments):
   `references/platform-access-entities.md`
-- Credential tiers: `references/jfrog-credential-patterns.md`
+- Platform API invocation (all products through `jf api`): see
+  `SKILL.md` § *Invoking platform APIs with `jf api`*

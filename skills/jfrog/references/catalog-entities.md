@@ -215,5 +215,5 @@ These three domains provide different views of package and security data:
 | **Scope** | Global knowledge base + org overlay | Instance-scoped scanning | Instance-scoped storage |
 | **Security** | CVE advisories, EPSS, CVSS v2/v3/v4, known exploits | Watches, policies, violations | Vulnerability summary (deprecated) |
 | **Packages** | Public metadata (description, homepage, OpenSSF) | Components identified during scanning | Packages/versions stored in Artifactory |
-| **Access** | GraphQL only | REST + CLI (`jf xr curl`) | GraphQL only |
+| **Access** | GraphQL only | REST + CLI (`jf api /xray/...`) | GraphQL only |
 | **Use case** | Research, compliance reporting, package evaluation | Runtime enforcement, CI/CD gating | Inventory, location queries |
