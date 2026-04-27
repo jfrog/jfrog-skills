@@ -19,16 +19,16 @@ Install them in your AI coding agent and interact with JFrog through natural lan
 From remote repository:
 
 ```bash
-npx skills add git@github.com:jfrog/jfrog-skills.git --skill jfrog --skill jfrog-package-safety-and-download
+npx skills add git@github.com:jfrog/jfrog-skills.git -g --skill jfrog --skill jfrog-package-safety-and-download
 ```
 
 From a local clone:
 
 ```bash
-npx skills add . --skill jfrog --skill jfrog-package-safety-and-download
+npx skills add . -g --skill jfrog --skill jfrog-package-safety-and-download
 ```
 
-Run `npx skills --help` for more usage information.
+The `-g` flag installs into the global scope (recommended). Drop it to install into the current project only. Run `npx skills --help` for more usage information.
 
 ## Feedback
 

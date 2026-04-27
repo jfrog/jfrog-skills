@@ -1,6 +1,6 @@
 ---
 name: jfrog
-version: "0.4.0"
+version: "0.5.0"
 description: >-
   Interact with the JFrog Platform via the JFrog CLI and REST/GraphQL APIs.
   Use this skill when the user wants to manage Artifactory repositories,
@@ -52,8 +52,11 @@ It verifies the CLI is installed, checks for updates, and exports
 eval "$(JFROG_SKILL_MODEL="<model-slug>" bash <skill_path>/scripts/check-environment.sh)"
 ```
 
-Set `JFROG_SKILL_MODEL` to the model slug you are running as (e.g.
-`opus-4.6`, `sonnet-4`). The script appends it to the user agent string.
+Set `JFROG_SKILL_MODEL` to the precise slug of the underlying LLM, with
+version (e.g. `opus-4.7`, `sonnet-4.5`, `gpt-5-codex`, `gemini-2.5-pro`).
+**Do not** use harness/role names like `subagent`, `cursor-agent`, `agent`,
+`assistant`, or a family without a version (`claude`, `gpt`). Subagents pass
+through the parent's slug. If genuinely unknown, use `unknown`.
 
 The `eval` is required — the script outputs
 `export JFROG_CLI_USER_AGENT='model/<model-slug> jfrog-skills/<version> jfrog-cli-go/<cli-version>'`
