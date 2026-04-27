@@ -16,5 +16,4 @@ evaluation/resolved_definitions/
 evaluation/artifact_index.json
 evaluation/version_manifest.json
 evaluation/scripts/.generated-system-prompt.txt
-scripts/.generated-system-prompt.txt
 .wep/
