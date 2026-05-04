@@ -12,9 +12,11 @@ pagination, variables, and date formatting, read `onemodel-common-patterns.md`.
 In examples below, `<skill_path>` is this skill's directory (parent of
 `references/`).
 
-## `local-cache/` policy
+## `~/.jfrog/skills-cache/` policy
 
-The skill’s `local-cache/` directory holds **only**:
+The skill cache lives under `${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/`
+(co-located with `jf config`, **not** inside the installed skill tree). It holds
+**only**:
 
 1. **`onemodel-schema-${JFROG_SERVER_ID}.graphql`** — this workflow (supergraph
    SDL cache). **Always** use the path in [Fetch the schema](#2-fetch-the-schema);
@@ -23,9 +25,9 @@ The skill’s `local-cache/` directory holds **only**:
    manage it; do not delete or replace it casually.
 
 **Never** store GraphQL **query responses**, REST bodies, reports, or other
-scratch files under `local-cache/`. For responses, use `/tmp` with a unique name
+scratch files under `skills-cache/`. For responses, use `/tmp` with a unique name
 (`$$`, `mktemp -d`) as in [Execute the query](#6-execute-the-query) — the
-example `RESPONSE_FILE` paths must stay outside `local-cache/`.
+example `RESPONSE_FILE` paths must stay outside `skills-cache/`.
 
 ## Prerequisites
 
@@ -34,9 +36,6 @@ example `RESPONSE_FILE` paths must stay outside `local-cache/`.
 - **Artifactory 7.104.1+** — OneModel GraphQL requires this minimum version.
 - **`jq`** on `PATH` (same as the base skill). HTTP calls go through
   `jf api`; no standalone `curl` is needed.
-
-All network calls require `required_permissions: ["full_network"]` in agent
-Shell invocations.
 
 ## Workflow
 
@@ -89,24 +88,25 @@ unexpected empty results, fetch the schema (as described below), verify the
 query against it, and retry. Do not attempt more than one execution without
 schema verification.
 
-The schema is large. Cache it under the skill's local cache (gitignored) keyed
-by the concrete `JFROG_SERVER_ID` from step 1 (the CLI `serverId`, never a
-placeholder like `default`).
+The schema is large. Cache it under the skill cache directory (the JFrog CLI
+home — outside the installed skill tree) keyed by the concrete
+`JFROG_SERVER_ID` from step 1 (the CLI `serverId`, never a placeholder like
+`default`).
 
 **Always use this exact path** — do not save the schema to `/tmp/` or any other
 location. The cache path is:
 
-`<skill_path>/local-cache/onemodel-schema-${JFROG_SERVER_ID}.graphql`
+`${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/onemodel-schema-${JFROG_SERVER_ID}.graphql`
 
 Run the following block as-is. It checks for an existing cached file and only
 fetches when missing:
 
 ```bash
-SCHEMA_FILE="<skill_path>/local-cache/onemodel-schema-${JFROG_SERVER_ID}.graphql"
+SCHEMA_FILE="${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/onemodel-schema-${JFROG_SERVER_ID}.graphql"
 if [ -s "$SCHEMA_FILE" ]; then
   echo "Schema cache hit: $SCHEMA_FILE ($(wc -l < "$SCHEMA_FILE") lines)"
 else
-  mkdir -p "<skill_path>/local-cache"
+  mkdir -p "$(dirname "$SCHEMA_FILE")"
   jf api /onemodel/api/v1/supergraph/schema \
     --server-id "$JFROG_SERVER_ID" \
     > "$SCHEMA_FILE"
@@ -259,8 +259,8 @@ jf api /onemodel/api/v1/graphql \
 Redirect `jf api`'s stdout to `$RESPONSE_FILE` so you can re-`jq` without
 re-querying. **Do not pipe `jf api` directly to `jq`** — a wrong filter
 loses the response. **Do not** set `RESPONSE_FILE` under
-`<skill_path>/local-cache/` — that directory is only for the schema cache and
-`jfrog-skill-state.json` (see [`local-cache/` policy](#local-cache-policy)
+`~/.jfrog/skills-cache/` — that directory is only for the schema cache and
+`jfrog-skill-state.json` (see [`~/.jfrog/skills-cache/` policy](#jfrogskills-cache-policy)
 above).
 
 For multiple queries in one shell session, use a temp directory under `/tmp` and

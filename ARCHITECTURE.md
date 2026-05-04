@@ -133,9 +133,12 @@ Helper scripts in `scripts/` handle environment bootstrapping and credential man
 | `jfrog-login-register-session.sh` | Registers a browser login session; outputs `SESSION_UUID` and `VERIFY_CODE` | Adding a new server via web login |
 | `jfrog-login-save-credentials.sh` | Retrieves token from completed login session and runs `jf config add`; verifies with `jf api /artifactory/api/system/version` | Completing a web login flow |
 
-### Local cache
+### Skill cache (`~/.jfrog/skills-cache/`)
 
-`local-cache/` (gitignored) is **only** for:
+The runtime cache lives outside the installed skill tree, at
+`${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/` — co-located with
+`jf config`. This keeps the skill itself read-only-installable. The directory
+holds **only**:
 
 - **`jfrog-skill-state.json`** — output of `check-environment.sh`
 - **`onemodel-schema-<server-id>.graphql`** — cached OneModel supergraph per configured CLI server

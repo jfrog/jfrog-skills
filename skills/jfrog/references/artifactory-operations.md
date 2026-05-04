@@ -52,6 +52,17 @@ narrow the search further.
 
 ## Build info
 
+**Project scoping rule:** Append `?project=<key>` to **every** build detail
+API call. When the user provides a project key, use it. When no project key
+is provided, use `?project=default` (the built-in default project that covers
+the `artifactory-build-info` repo). For AQL queries, scope by
+`"repo":"<project-key>-build-info"` (or `"repo":"artifactory-build-info"` for
+the default project).
+
+**Server rule:** A 404 from a `?project=<key>` build call is **not** a signal
+to try a different server. Use only the resolved server; on any failure,
+report and stop. See `SKILL.md` § *Server selection rules*.
+
 ### Publishing builds
 
 - Collect env: `jf rt build-collect-env <name> <number>`
@@ -60,84 +71,79 @@ narrow the search further.
 - Promote: `jf rt build-promote <name> <number> <target-repo>`
 - Discard: `jf rt build-discard <name>`
 
-### Retrieving build info
+### Listing build names
 
-The build detail API (`GET /api/build/{name}/{number}`) returns 404 when the
-build is stored in a non-default build-info repo or belongs to a JFrog
-Project. **Always resolve the scope before calling the build API:**
+**Do not use `GET /api/build`** — it has no pagination and times out on large
+instances. Always use AQL with `limit` and `offset`.
 
-1. If the user provided a project key or build-info repo, use it directly.
-2. If you need to **list** build names or run numbers and you have a **project
-   key**, follow [Listing builds when the project key is known](#listing-builds-when-the-project-key-is-known) (REST first — do not jump to AQL).
-3. If the project key and build-info repo are still unknown, discover scope
-   via AQL (see [Discovering build scope without a project key](#discovering-build-scope-without-a-project-key) below).
-4. For **detail**, use a scoped detail GET — never call `GET /api/build/<name>/<number>` without `?project=` or `?buildRepo=` when the build requires it.
-
-```bash
-jf api "/artifactory/api/build/<name>/<number>?buildRepo=<repo>"
-jf api "/artifactory/api/build/<name>/<number>?project=<key>"
-```
-
-Scope parameters:
-
-- `?buildRepo=<build-info-repo>` — when the build info is stored in a
-  non-default build-info repository (anything other than
-  `artifactory-build-info`)
-- `?project=<project-key>` — when the build belongs to a JFrog Project
-
-### Listing builds when the project key is known
-
-When you have a **project key**, use this REST sequence before AQL. It scopes
-the server’s work and avoids **unscoped** listing pitfalls (see below).
-
-1. **Build names** (one row per logical build):  
-   `GET /api/build?project=<project-key>`  
-   Response includes `builds[]` with `uri` (path suffix per name) and
-   `lastStarted` (latest run for that name).
-
-2. **Run numbers for one name**:  
-   `GET /api/build/<name>?project=<project-key>`  
-   Response uses the field **`buildsNumbers`** (exact spelling from the API);
-   each entry has `uri` (e.g. `/33`) and `started`. The same number may appear
-   more than once with different `started` values — do not assume uniqueness
-   by number alone.
-
-3. **Full build info** (unchanged):  
-   `GET /api/build/<name>/<number>?project=<project-key>`
-
-```bash
-jf api "/artifactory/api/build?project=<project-key>"
-jf api "/artifactory/api/build/<name>?project=<project-key>"
-jf api "/artifactory/api/build/<name>/<number>?project=<project-key>"
-```
-
-### Discovering build scope without a project key
-
-When the user has not provided the project key or build-info repo, discover
-it via AQL. **Do not** use **unscoped** `GET /artifactory/api/build` (no
-`?project=` or `?buildRepo=`) to list all builds — it can time out on large
-instances with thousands of builds.
-
-Use AQL `builds.find()` instead. The builds domain **requires** `name`,
-`number`, and `repo` in `.include()` for permission reasons — omitting `repo`
-produces an error.
+**All builds** (no project scope):
 
 ```bash
 jf api /artifactory/api/search/aql \
   -X POST -H "Content-Type: text/plain" \
-  -d 'builds.find({"name":"<build-name>"}).include("name","number","repo").sort({"$desc":["number"]}).limit(10)'
+  -d 'builds.find().include("name","number","repo","created").sort({"$desc":["created"]}).offset(0).limit(100)'
 ```
 
-The `build.repo` field in the response tells you which build-info repository
-the build resides in. Use that value as the `buildRepo` parameter in the
-detail GET.
+**Project-scoped** — filter by the project's build-info repository
+(`<project-key>-build-info`, or `artifactory-build-info` for the default
+project):
+
+```bash
+jf api /artifactory/api/search/aql \
+  -X POST -H "Content-Type: text/plain" \
+  -d 'builds.find({"repo":"<project-key>-build-info"}).include("name","number","repo","created").sort({"$desc":["created"]}).offset(0).limit(100)'
+```
+
+**Pagination:** The response includes a `range` object with `total` (total
+matching records). If `total` exceeds the `limit`, tell the user: *"Showing
+first 100 of N results (paginated). Ask for the next batch if needed."*
+For subsequent pages, increment `offset` by 100.
+
+**Output rule (mandatory):** AQL returns one row per name+number pair.
+Extract **unique build names** client-side (e.g.
+`jq '[.[].builds.name] | unique'`). Present **only the deduplicated list of
+build names** to the user. **Do not** include build numbers, timestamps, run
+counts, or any per-run details in the response — not even as a "bonus" or
+"most recent" table. The user is asking "what builds exist", not "what runs
+happened". Only show run-level details if the user explicitly asks for them
+in a follow-up.
+
+### Listing runs of a specific build
+
+```bash
+jf api /artifactory/api/search/aql \
+  -X POST -H "Content-Type: text/plain" \
+  -d 'builds.find({"name":"<build-name>"}).include("name","number","repo","created").sort({"$desc":["created"]}).offset(0).limit(100)'
+```
+
+Add `"repo":"<project-key>-build-info"` to the criteria when a project key
+is known. Apply the same pagination rules as above.
+
+### Retrieving full build info
+
+Use the REST detail endpoint for a **single** build run. Always include
+`?project=<key>` (or `?project=default` when no key is provided):
+
+```bash
+jf api "/artifactory/api/build/<name>/<number>?project=<key>"
+```
+
+This is the only `/api/build` endpoint that should be used — it returns a
+single record and does not need pagination.
+
+### When a build is not found
+
+If the detail call returns 404, the build likely belongs to a different
+project. **Ask the user for the project key** rather than searching across
+repos or servers.
 
 ### Repository listing vs build-info
 
 `GET /artifactory/api/repositories?project=<key>&type=buildinfo` may return
 an empty list even when project-scoped build info exists (for example under
-a `*-build-info` repository). Prefer the **build** endpoints above or AQL to
-discover builds; do not treat an empty repository list as proof that no
+a `*-build-info` repository). Prefer AQL to
+discover builds; do not treat an empty repository
+list as proof that no
 builds exist.
 
 ## Permissions
