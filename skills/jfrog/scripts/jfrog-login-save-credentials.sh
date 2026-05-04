@@ -6,6 +6,10 @@
 # Bootstrap token exchange uses `jf api --url` (before any server exists in
 # `jf config`); verification uses `jf api` with --server-id.
 #
+# Leaves the current default `jf` server unchanged. Subsequent calls should
+# pass `--server-id=<id>` explicitly (the SKILL.md "Server selection rules"
+# require this anyway).
+#
 # IMPORTANT: The token endpoint is one-time-use. If this script fails after
 # consuming the token (e.g. jf config write blocked by sandbox), the session
 # is burned and login must restart from register-session.
@@ -109,8 +113,6 @@ if ! jf config add "$JFROG_HOST" \
   exit 4
 fi
 
-jf config use "$JFROG_HOST"
-
 echo "SERVER_ID=${JFROG_HOST}"
 
 echo "--- Verifying authentication ---"
@@ -118,3 +120,9 @@ if ! jf api "/artifactory/api/system/version" --server-id="$JFROG_HOST"; then
   echo "ERROR: Authentication verification failed. Token may not have saved correctly." >&2
   exit 4
 fi
+
+echo
+echo "NEXT (mandatory): ask the user whether to make '${JFROG_HOST}' the default jf server."
+echo "  - If yes: run 'jf config use ${JFROG_HOST}'"
+echo "  - If no:  pass '--server-id=${JFROG_HOST}' on every subsequent jf call"
+echo "Do not start any other JFrog operation against this server until this question is asked and answered."

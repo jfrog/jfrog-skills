@@ -92,8 +92,6 @@ merges their results into a unified report.
    expanded path, and return a structured summary.
 4. Specify what to return (counts, lists, specific fields) so the parent can
    assemble the final output without re-reading raw data.
-5. Remind the subagent to use `required_permissions: ["full_network"]` on
-   every Shell call that contacts the JFrog server.
 
 ### Subagent type selection
 

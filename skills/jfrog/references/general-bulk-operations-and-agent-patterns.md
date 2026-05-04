@@ -44,19 +44,9 @@ line and break parsers (e.g. JSON "Extra data" errors).
 - One temp file per worker or chunk, then concatenate; or
 - Use advisory locking (`flock`) if one file must be shared.
 
-## Agent sandboxes and the environment check
-
-`scripts/check-environment.sh` does **not** call your JFrog server, but it may
-make an outbound request to `releases.jfrog.io` for version checking and may
-**write**
-`<skill_path>/local-cache/jfrog-skill-state.json` when the cache is stale or missing. In a
-restricted agent sandbox, **workspace write** access can fail even when
-`full_network` is granted. Request permissions that allow writing `<skill_path>/local-cache`
-when the check fails with a filesystem error.
-
 For bulk API or CLI output files, use `/tmp` or `mktemp`; do not use
-`local-cache/` except for `jfrog-skill-state.json` and the OneModel schema file
-(see main SKILL.md).
+`~/.jfrog/skills-cache/` except for `jfrog-skill-state.json` and the OneModel
+schema file (see main SKILL.md).
 
 ## Shell hygiene
 

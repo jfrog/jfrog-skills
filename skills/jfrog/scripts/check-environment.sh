@@ -2,8 +2,9 @@
 # check-environment.sh — Cached JFrog CLI environment check
 #
 # Checks if jf is installed and its version, using a 24h-TTL cache
-# at <skill_path>/local-cache/jfrog-skill-state.json to avoid redundant checks.
-# local-cache/ is only for this file and the OneModel schema cache — not temp API output.
+# at ${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/jfrog-skill-state.json
+# to avoid redundant checks. The skills-cache/ dir holds only this file and
+# the OneModel schema cache — not temp API output.
 #
 # stdout: eval-able shell exports (JFROG_CLI_USER_AGENT)
 # stderr: JSON state (informational, also written to cache file)
@@ -21,7 +22,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CACHE_DIR="$SKILL_ROOT/local-cache"
+JFROG_HOME="${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}"
+CACHE_DIR="$JFROG_HOME/skills-cache"
 CACHE_FILE="$CACHE_DIR/jfrog-skill-state.json"
 DEFAULT_TTL_HOURS=24
 FORCE=false

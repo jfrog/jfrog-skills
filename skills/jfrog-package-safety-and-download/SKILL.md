@@ -2,7 +2,7 @@
 name: jfrog-package-safety-and-download
 description: >-
   Check JFrog Public Catalog and stored packages for a version, interpret
-  catalog security signals, and download through Artifactory (Jfrog Platform
+  catalog security signals, and download through Artifactory (JFrog Platform
   locations, remote cache, curation-aware package managers, or repo proxy).
   Use when the user asks whether a package is safe, allowed, curated, or
   wants to download npm, Maven, PyPI, Go, or similar packages via JFrog.
@@ -37,12 +37,12 @@ When to read this file:
 flowchart TD
     A[User requests package check / download] --> B{Package in Public Catalog?}
     B -->|Yes| C[Get latest version from Catalog]
-    B -->|No| D{Package in Jfrog Platform Stored Packages?}
+    B -->|No| D{Package in JFrog Platform Stored Packages?}
     D -->|Yes| E[Get latest version from Stored Packages]
     D -->|No| F[Package not found — stop]
-    C --> G{Latest version in Jfrog Platform?}
+    C --> G{Latest version in JFrog Platform?}
     E --> G
-    G -->|Yes| H[Safe — download from Jfrog Platform]
+    G -->|Yes| H[Safe — download from JFrog Platform]
     G -->|No| I{Curation entitled?}
     I -->|Yes| J[Check curation policy via API]
     I -->|No| K[Download via remote repo]
@@ -60,9 +60,9 @@ reduce total latency:
   parallel. Use whichever returns data; if the Public Catalog returns a hit,
   prefer its `latestVersion` for Step 2.
 - **Step 3 + Step 5**: After determining the version, query stored package
-  versions (Jfrog Platform check) and curation entitlement
+  versions (JFrog Platform check) and curation entitlement
   (`/api/system/version`) in parallel. Both are independent reads — the
-  curation result is needed immediately if the Jfrog Platform check returns
+  curation result is needed immediately if the JFrog Platform check returns
   empty.
 
 When issuing parallel Shell calls, each `jf api` call authenticates
@@ -104,9 +104,9 @@ type they mean.
 | Source | Version field |
 |--------|--------------|
 | Public Catalog | `latestVersion.version` (object selection required) |
-| Jfrog Platform Stored Packages | `latestVersionName` on `StoredPackage`, or highest entry from `versionsConnection` |
+| JFrog Platform Stored Packages | `latestVersionName` on `StoredPackage`, or highest entry from `versionsConnection` |
 
-## Step 3: Check if package + latest version exists in Jfrog Platform
+## Step 3: Check if package + latest version exists in JFrog Platform
 
 Query stored package versions using `storedPackages.searchPackageVersions`
 with a `hasPackageWith` filter (see `../jfrog/references/onemodel-query-examples.md`
@@ -117,11 +117,11 @@ details (`repositoryKey`, `repositoryType`, `leadArtifactPath`).
 Execute the query through `jf api` (see
 `../jfrog/references/onemodel-graphql.md` for the invocation pattern).
 
-- **Found with locations** → package is in the Jfrog Platform. Report as **safe to
+- **Found with locations** → package is in the JFrog Platform. Report as **safe to
   download**. Proceed to Step 4.
 - **Not found** → proceed to Step 5.
 
-## Step 4: Download from Jfrog Platform
+## Step 4: Download from JFrog Platform
 
 Use the location info from Step 3. Binary artifact downloads go through
 `jf rt dl` — **not** `jf api`. `jf api` is the unified entry point for the
@@ -224,7 +224,7 @@ fi
 
 ## Step 6b: Download without curation
 
-When curation is not entitled and the package is not in the Jfrog Platform,
+When curation is not entitled and the package is not in the JFrog Platform,
 download directly through a remote repo.
 
 1. **Find a remote repo** of the right package type:

@@ -1,6 +1,5 @@
 ---
 name: jfrog
-version: "0.5.0"
 description: >-
   Interact with the JFrog Platform via the JFrog CLI and REST/GraphQL APIs.
   Use this skill when the user wants to manage Artifactory repositories,
@@ -18,6 +17,7 @@ compatibility: >-
   Requires jq on PATH.
 metadata:
   role: base
+  version: "0.7.0"
 ---
 
 # JFrog Skill
@@ -42,6 +42,20 @@ All HTTP traffic to JFrog Platform APIs goes through the `jf` CLI itself
 (`jf api`, see [Invoking platform APIs with `jf api`](#invoking-platform-apis-with-jf-api) below) —
 no standalone `curl` is required for any JFrog interaction.
 
+**Runtime permission for JFrog calls.** All `jf` calls that touch the network
+need an outbound-HTTPS escalation from the agent runtime. The `~/.jfrog/`
+credential save (`jf config add` during login) additionally needs a
+filesystem-write escalation.
+
+| Runtime     | Network                                       | Network + `~/.jfrog/` write     |
+| ----------- | --------------------------------------------- | ------------------------------- |
+| Cursor      | `required_permissions: ["full_network"]`      | `required_permissions: ["all"]` |
+| Claude Code | `allowed-tools: Bash(jf:*)` + host allowlist  | same + filesystem allowlist     |
+| Other       | Configure at the runtime/sandbox layer        | same                            |
+
+If `jf` exits 1 with empty output, the runtime's network gate is the first
+thing to check — re-run with the appropriate escalation above.
+
 ## Environment check
 
 Before your first JFrog operation in a session, run the environment check.
@@ -53,9 +67,13 @@ eval "$(JFROG_SKILL_MODEL="<model-slug>" bash <skill_path>/scripts/check-environ
 ```
 
 Set `JFROG_SKILL_MODEL` to the precise slug of the underlying LLM, with
-version (e.g. `opus-4.7`, `sonnet-4.5`, `gpt-5-codex`, `gemini-2.5-pro`).
+version (e.g. `opus-4.7`, `sonnet-4.5`, `gpt-5-codex`, `gemini-2.5-pro`,
+`composer-2-fast`, `composer-2.1-fast`). For Cursor's Composer family, the
+product slug (`composer-2`, `composer-2-fast`, `composer-2.1-fast`, etc.)
+IS the canonical identifier — use it as-is, do not fall back to `unknown`
+just because there is no separate weights version.
 **Do not** use harness/role names like `subagent`, `cursor-agent`, `agent`,
-`assistant`, or a family without a version (`claude`, `gpt`). Subagents pass
+`assistant`, or a generic family name (`claude`, `gpt`). Subagents pass
 through the parent's slug. If genuinely unknown, use `unknown`.
 
 The `eval` is required — the script outputs
@@ -64,9 +82,10 @@ on stdout. The JFrog CLI picks this up natively and injects it as the
 `User-Agent` header on every HTTP request. JSON state is printed to stderr
 for informational purposes (also written to the cache file).
 
-The script uses a 24-hour cache at `<skill_path>/local-cache/jfrog-skill-state.json`. If the
-cache is fresh, it returns immediately. If stale or missing, it checks whether
-`jf` is installed, its version, and whether a newer version is available.
+The script uses a 24-hour cache at `${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/jfrog-skill-state.json`
+(co-located with `jf config`). If the cache is fresh, it returns immediately.
+If stale or missing, it checks whether `jf` is installed, its version, and
+whether a newer version is available.
 
 - Exit 0: cache is fresh, CLI is ready — proceed
 - Exit 1: cache was stale and has been refreshed, CLI is ready — proceed
@@ -84,31 +103,10 @@ around it with `jf rt curl`, raw `curl`, or other fallbacks — see
 
 Use **`jq`** for all JSON parsing of CLI and API output (pipes, `-r`, filters).
 
-## Network permissions
+## `~/.jfrog/skills-cache/` — allowed files only
 
-JFrog servers are not on the default sandbox network allowlist. Every Shell
-call that contacts a JFrog server requires
-`required_permissions: ["full_network"]`.
-
-Without this permission, commands fail silently: `jf` exits with code 1 and
-empty output, and downstream JSON parsing crashes. All JFrog operations that
-touch the network need this permission.
-
-### Agent execution environments
-
-`check-environment.sh` does **not** call your JFrog server, but it may make an
-outbound request to `releases.jfrog.io` for version checking and may **write**
-`<skill_path>/local-cache/jfrog-skill-state.json` when the cache is stale. In a **sandboxed**
-agent environment, **`full_network` alone may not suffice**: if the workspace
-cannot be written, the check can fail before any JFrog call. Request
-permissions that allow writing `<skill_path>/local-cache` (or run
-outside a restrictive sandbox) when you see filesystem errors from the
-environment check.
-
-### `local-cache/` — allowed files only
-
-`<skill_path>/local-cache/` is **not** a general scratch or temp directory. Use
-it **only** for these two artifacts:
+`${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/` is **not** a general scratch
+or temp directory. Use it **only** for these two artifacts:
 
 1. **`jfrog-skill-state.json`** — written by `scripts/check-environment.sh`
    (24-hour CLI check cache).
@@ -116,14 +114,128 @@ it **only** for these two artifacts:
    schema (see `references/onemodel-graphql.md`).
 
 **Do not** save HTTP response bodies, GraphQL query results, ad-hoc JSON, reports,
-or any other temporary files under `local-cache/`. Write those to a host temp
+or any other temporary files under `skills-cache/`. Write those to a host temp
 path instead (for example `/tmp/<name>-$$.json` or `mktemp -d`), echo the path
 when a follow-up Shell step must read the file — same pattern as *Preserving
 command output* below.
 
-Apply `full_network` on the **first** Shell call that hits JFrog. Once
-granted for a session, the agent environment typically retains it for
-subsequent calls, but always include it explicitly to avoid silent failures.
+## Cautious execution
+
+Do not run commands speculatively. Before executing any JFrog CLI command or
+API call:
+
+1. Confirm the operation is needed to fulfill the user's request.
+   If the request is ambiguous or could refer to multiple systems (e.g.
+   "builds" could mean Artifactory build-info or CI/CD pipeline runs),
+   **ask the user for clarification** instead of guessing. Never fetch data
+   from the wrong system — a wrong answer is worse than asking a question.
+2. Resolve the target server using the **Server selection rules** below —
+   there must be no ambiguity about which server is used
+3. For mutating operations (create, update, delete, upload), confirm with the
+   user unless the intent is clearly implied
+4. Prefer read operations first to understand current state before making changes
+5. If any command fails with a server-level error (not found, auth, network),
+   stop and ask the user — never retry against a different server
+6. **Never invent preparatory mutations.** If the requested operation fails
+   because a precondition is not met (artifact missing from the specified repo,
+   repository does not exist, package not at the expected location, build not
+   found), **stop and report the gap to the user**. Do not perform copy, move,
+   upload, create-repo, or any other mutating operation to satisfy the
+   precondition unless the user explicitly asks for it. These "helper" mutations
+   can have cascading effects the user has not considered — virtual repository
+   resolution changes, storage quota consumption, replication triggers, Xray
+   re-indexing, or permission propagation.
+
+## Server selection rules (mandatory)
+
+Exactly one server must be resolved before any operation:
+
+1. **User named specific server(s)** — use those only. Pass
+   `--server-id <id>` to every `jf` command.
+2. **User did not name a server** — use the current default. `jf config show`
+   lists every server with a `Default: true/false` line; do **not** pre-filter
+   with `grep "Server ID"` — that drops the `Default` field and the first
+   listed server is not necessarily the default. One-liner:
+
+   ```bash
+   jf config show 2>/dev/null \
+     | awk '/^Server ID:/{id=$NF} /^Default:[[:space:]]*true/{print id; exit}'
+   ```
+
+   If nothing prints, stop and ask which server to use.
+3. **Verify** the resolved server exists in `jf config show` before running.
+
+**Never fall back to a different server.** Different servers hold different
+data and permissions — silent switches corrupt state and leak across
+environments. On any error from the resolved server (401/403, network,
+timeout, 404, missing server-id, etc.), stop with no further `jf` calls
+and respond:
+
+> `<server-id>` returned `<code>` for `<endpoint>`: `<short reason>`.
+> Other configured server(s): `<list>`. The rules forbid me from using
+> them without your explicit instruction. How would you like to proceed?
+
+## When to read reference files
+
+Load the most specific file for the task at hand. Avoid loading more than 2-3
+reference files for a single operation — start with the most relevant one and
+only load additional files if the first doesn't cover the need. File sizes
+vary (~25–640 lines); larger files are noted with approximate line counts
+below.
+
+### Cross-domain
+
+- **Disambiguating a JFrog entity, understanding entity types, or planning operations that span multiple products**: read `references/jfrog-entity-index.md`, then follow pointers to the relevant domain file
+- **Looking up documentation URLs**: read `references/jfrog-url-references.md`
+
+### Artifactory
+
+- **Repository types, artifacts, builds, properties, or permission targets (concepts)**: read `references/artifactory-entities.md` (~220 lines)
+- **Stored packages, package versions, version locations, or the metadata layer over Artifactory (concepts)**: read `references/stored-packages-entities.md` (~165 lines)
+- **Repo, file, build, permission, user/group, or replication operations**: read `references/artifactory-operations.md` (for **listing builds** use AQL with `limit`/`offset` — see § *Listing build names*; for **full build detail** use `GET /api/build/<name>/<number>?project=` — see § *Retrieving full build info*)
+- **AQL queries**: read `references/artifactory-aql-syntax.md` (~585 lines)
+- **Artifactory REST beyond the CLI, structured JSON templates (replacing interactive wizards), or any Artifactory API gap**: read `references/artifactory-api-gaps.md` (~220 lines)
+
+### Xray & security
+
+- **Watches, policies, violations, components, or vulnerability scanning (concepts)**: read `references/xray-entities.md` (~290 lines)
+- **Exposures scanning results (secrets, IaC, service misconfigurations, application security risks)**: read `references/xray-entities.md` § Exposures (Advanced Security)
+- **Curation audit events (approved/blocked packages, dry-run policy evaluations, curation export)**: read `references/xray-entities.md` § Curation audit events
+
+### Release lifecycle & distribution
+
+- **Release bundles, lifecycle stages, distribution, or evidence (concepts)**: read `references/release-lifecycle-entities.md` (~180 lines)
+- **Applications, application versions, releasables, promotions, or AppTrust (concepts)**: read `references/apptrust-entities.md` (~155 lines)
+
+### Catalog
+
+- **Public or custom catalog, package metadata, vulnerability advisories, licenses, OpenSSF, or MCP services (concepts)**: read `references/catalog-entities.md` (~190 lines)
+- **CVE details, vulnerability lookup by CVE ID, or severity/affected-packages/fix-versions for a specific CVE**: go directly to `references/onemodel-query-examples.md` § *Public security domain* for the `searchVulnerabilities` query shape — this is self-contained; do not load the `jfrog-package-safety-and-download` skill for pure CVE lookups
+
+### OneModel (GraphQL)
+
+- **GraphQL queries** (applications, packages, evidence, release bundles, catalog, cross-domain, or "list/search my" platform entities): read `references/onemodel-graphql.md` (~325 lines)
+- **Query templates and domain-specific examples**: read `references/onemodel-query-examples.md` (~555 lines)
+- **Pagination, filtering, GraphQL variables, or date formatting**: read `references/onemodel-common-patterns.md` (~280 lines)
+
+### Platform administration
+
+- **Platform structure, project/repo membership, or project roles vs environments (concepts)**: read `references/platform-access-entities.md`
+- **Access tokens, stats, projects, or system health**: read `references/platform-admin-operations.md`
+- **Managing JFrog Projects, members, or environments**: read `references/projects-api.md` (~260 lines)
+- **Platform REST beyond the CLI, or any platform-level API gap**: read `references/platform-admin-api-gaps.md` (~180 lines)
+
+### CLI setup & authentication
+
+- **Adding a server or logging in**: read `references/jfrog-login-flow.md` (~130 lines)
+- **CLI not installed, upgrade needed, or `jq` unavailable**: read `references/jfrog-cli-install-upgrade.md`
+
+### General patterns
+
+- **Batching, parallel Shell calls, or launching subagents**: read `references/general-parallel-execution.md` (~135 lines)
+- **Large or parallel data gathering, list-vs-detail APIs, cache hygiene**: read `references/general-bulk-operations-and-agent-patterns.md`
+- **Standalone HTML report with JFrog-aligned styling**: read `references/jfrog-brand-html-report.md`
+- **Reusable gotchas from past tasks**: read or extend `references/general-use-case-hints.md`
 
 ## Server management
 
@@ -134,32 +246,6 @@ Server configuration is always read live from `jf config` (never cached).
 - **Switch default**: `jf config use <server-id>`
 - **Add a new server**: read `references/jfrog-login-flow.md` for the full
   login procedure (web login or manual token setup)
-
-### Server selection rules (mandatory)
-
-Exactly one server (or an explicit set of servers) must be resolved before any
-operation. The rules are strict and apply to every CLI command, API call, and
-subagent prompt:
-
-1. **User named specific server(s)** — use those and only those. Pass
-   `--server-id <id>` to every `jf` command. Do not touch any other
-   configured server.
-2. **User did not name a server** — use the current default server and only
-   it. Determine the default via `jf config show` (the entry marked as
-   default). If no default is set, stop and ask the user which server to use.
-3. **Verify before executing** — after resolving the server, confirm it
-   exists in `jf config show` output before running any command against it.
-   If the server-id is not listed, stop and tell the user.
-
-Do not fall back to a different server. Silently switching servers is
-dangerous because different servers hold different data, permissions, and
-configurations — an operation that succeeds on the wrong server can corrupt
-state, leak data across environments, or produce results the user cannot
-reproduce. If the resolved server produces any error — does not exist in
-`jf config`, authentication failure (401/403), network error, connection
-refused, or any other failure — stop immediately and report the error to the
-user. Do not try other configured servers, do not iterate through the server
-list, and do not silently switch servers. Ask the user how to proceed.
 
 ## Command discovery
 
@@ -200,25 +286,12 @@ Top-level security commands: `audit`, `scan`, `build-scan`, `curation-audit`,
 Top-level other: `access-token-create` (`atc`), `login`, `how`, `stats`,
 `generate-summary-markdown`, `exchange-oidc-token`, `completion`.
 
-## Artifactory operations
-
-Artifactory resources are managed through the `jf rt` namespace — repos, files,
-builds, permissions, users/groups, and replication. Read
-`references/artifactory-operations.md` when performing any of these operations.
-
-## Platform administration
-
-Access tokens, login, stats, projects, and system health. Read
-`references/platform-admin-operations.md` when performing any of these
-operations.
-
 ## Invoking platform APIs with `jf api`
 
 When the CLI lacks a dedicated subcommand, use `jf api` — the unified entry
 point for every JFrog Platform REST and GraphQL endpoint, auto-authenticated
 against the resolved server. **Do not use `jf rt curl` or `jf xr curl`** —
-they are superseded by `jf api`. All `jf api` calls require
-`required_permissions: ["full_network"]` (see [Network permissions](#network-permissions)).
+they are superseded by `jf api`.
 
 ### Product-prefix table
 
@@ -270,7 +343,7 @@ jq . "$RESPONSE"
 ```
 
 Schema discovery: `jf api /onemodel/api/v1/supergraph/schema > "$SCHEMA_FILE"`
-(store only under `<skill_path>/local-cache/`, never query responses). Read
+(store only under `~/.jfrog/skills-cache/`, never query responses). Read
 `references/onemodel-graphql.md` for the full workflow (schema fetch,
 validation, pagination, errors), plus `references/onemodel-query-examples.md`
 and `references/onemodel-common-patterns.md` for query shapes, pagination,
@@ -292,11 +365,6 @@ this repo GET, see **Any API gap** under [When to read reference files](#when-to
 
 ## Gotchas
 
-- JFrog network calls require `required_permissions: ["full_network"]` in the
-  Shell tool. Without it, commands fail silently with empty output. The
-  environment check does **not** call your JFrog server (it may contact
-  `releases.jfrog.io` for version checking), but it may need **workspace
-  write** access for its cache file (see [Agent execution environments](#agent-execution-environments)).
 - `jf api` requires the **product prefix** in the path (`/artifactory/...`, `/xray/...`, `/access/...`, `/evidence/...`,
   `/lifecycle/...`, `/apptrust/...`, `/distribution/...`, `/onemodel/...`,
   `/mc/...`). Omitting the prefix returns 404. See the
@@ -365,29 +433,6 @@ this repo GET, see **Any API gap** under [When to read reference files](#when-to
   — read when debugging odd failures; **append** a short entry when you confirm
   a new, reusable gotcha.
 
-## Cautious execution
-
-Do not run commands speculatively. Before executing any JFrog CLI command or
-API call:
-
-1. Confirm the operation is needed to fulfill the user's request
-2. Resolve the target server using the **Server selection rules** above —
-   there must be no ambiguity about which server is used
-3. For mutating operations (create, update, delete, upload), confirm with the
-   user unless the intent is clearly implied
-4. Prefer read operations first to understand current state before making changes
-5. If any command fails with a server-level error (not found, auth, network),
-   stop and ask the user — never retry against a different server
-6. **Never invent preparatory mutations.** If the requested operation fails
-   because a precondition is not met (artifact missing from the specified repo,
-   repository does not exist, package not at the expected location, build not
-   found), **stop and report the gap to the user**. Do not perform copy, move,
-   upload, create-repo, or any other mutating operation to satisfy the
-   precondition unless the user explicitly asks for it. These "helper" mutations
-   can have cascading effects the user has not considered — virtual repository
-   resolution changes, storage quota consumption, replication triggers, Xray
-   re-indexing, or permission propagation.
-
 ## Batch and parallel execution
 
 When a task requires multiple independent operations, use the lightest
@@ -436,65 +481,3 @@ of re-running the same `jf api` or other identical network-backed command.
 Do **not** reuse saved output across unrelated steps or changed contexts (different
 server, user, or intent). The file is only valid for the immediate sequence of
 operations that motivated the original call.
-
-## When to read reference files
-
-Load the most specific file for the task at hand. Avoid loading more than 2-3
-reference files for a single operation — start with the most relevant one and
-only load additional files if the first doesn't cover the need. File sizes
-vary (~25–640 lines); larger files are noted with approximate line counts
-below.
-
-### Cross-domain
-
-- **Disambiguating a JFrog entity, understanding entity types, or planning operations that span multiple products**: read `references/jfrog-entity-index.md`, then follow pointers to the relevant domain file
-- **Looking up documentation URLs**: read `references/jfrog-url-references.md`
-
-### Artifactory
-
-- **Repository types, artifacts, builds, properties, or permission targets (concepts)**: read `references/artifactory-entities.md` (~220 lines)
-- **Stored packages, package versions, version locations, or the metadata layer over Artifactory (concepts)**: read `references/stored-packages-entities.md` (~165 lines)
-- **Repo, file, build, permission, user/group, or replication operations**: read `references/artifactory-operations.md` (for **listing builds** with a known project key: REST `GET /api/build?project=`, then `GET /api/build/<name>?project=` — see § *Listing builds when the project key is known*)
-- **AQL queries**: read `references/artifactory-aql-syntax.md` (~585 lines)
-- **Artifactory REST beyond the CLI, structured JSON templates (replacing interactive wizards), or any Artifactory API gap**: read `references/artifactory-api-gaps.md` (~220 lines)
-
-### Xray & security
-
-- **Watches, policies, violations, components, or vulnerability scanning (concepts)**: read `references/xray-entities.md` (~290 lines)
-- **Exposures scanning results (secrets, IaC, service misconfigurations, application security risks)**: read `references/xray-entities.md` § Exposures (Advanced Security)
-- **Curation audit events (approved/blocked packages, dry-run policy evaluations, curation export)**: read `references/xray-entities.md` § Curation audit events
-
-### Release lifecycle & distribution
-
-- **Release bundles, lifecycle stages, distribution, or evidence (concepts)**: read `references/release-lifecycle-entities.md` (~180 lines)
-- **Applications, application versions, releasables, promotions, or AppTrust (concepts)**: read `references/apptrust-entities.md` (~155 lines)
-
-### Catalog
-
-- **Public or custom catalog, package metadata, vulnerability advisories, licenses, OpenSSF, or MCP services (concepts)**: read `references/catalog-entities.md` (~190 lines)
-- **CVE details, vulnerability lookup by CVE ID, or severity/affected-packages/fix-versions for a specific CVE**: go directly to `references/onemodel-query-examples.md` § *Public security domain* for the `searchVulnerabilities` query shape — this is self-contained; do not load the `jfrog-package-safety-and-download` skill for pure CVE lookups
-
-### OneModel (GraphQL)
-
-- **GraphQL queries** (applications, packages, evidence, release bundles, catalog, cross-domain, or "list/search my" platform entities): read `references/onemodel-graphql.md` (~325 lines)
-- **Query templates and domain-specific examples**: read `references/onemodel-query-examples.md` (~555 lines)
-- **Pagination, filtering, GraphQL variables, or date formatting**: read `references/onemodel-common-patterns.md` (~280 lines)
-
-### Platform administration
-
-- **Platform structure, project/repo membership, or project roles vs environments (concepts)**: read `references/platform-access-entities.md`
-- **Access tokens, stats, projects, or system health**: read `references/platform-admin-operations.md`
-- **Managing JFrog Projects, members, or environments**: read `references/projects-api.md` (~260 lines)
-- **Platform REST beyond the CLI, or any platform-level API gap**: read `references/platform-admin-api-gaps.md` (~180 lines)
-
-### CLI setup & authentication
-
-- **Adding a server or logging in**: read `references/jfrog-login-flow.md` (~130 lines)
-- **CLI not installed, upgrade needed, or `jq` unavailable**: read `references/jfrog-cli-install-upgrade.md`
-
-### General patterns
-
-- **Batching, parallel Shell calls, or launching subagents**: read `references/general-parallel-execution.md` (~135 lines)
-- **Large or parallel data gathering, list-vs-detail APIs, sandbox/cache issues**: read `references/general-bulk-operations-and-agent-patterns.md`
-- **Standalone HTML report with JFrog-aligned styling**: read `references/jfrog-brand-html-report.md`
-- **Reusable gotchas from past tasks**: read or extend `references/general-use-case-hints.md`
