@@ -50,8 +50,11 @@ jf api /access/api/v1/projects \
   }'
 ```
 
-The `project_key` must be 2-32 lowercase alphanumeric characters (hyphens
-allowed, no leading/trailing hyphen).
+The `project_key` must be 2-32 lowercase alphanumeric characters and hyphens,
+and **must start with a letter** (no leading digit, no leading/trailing
+hyphen). The key is **immutable** after creation — it cannot be renamed.
+It is also used as the prefix applied to repositories created within the
+project, so choose a short, meaningful identifier.
 
 ### Update a project
 
@@ -234,7 +237,8 @@ versions).
   `members` key for group entries; empty lists look like `{"members": []}`.
   Always check the array rather than the status code alone.
 - **Invalid project key on create**: returns 400 if `project_key` is outside
-  2-32 chars, contains uppercase letters, or has leading/trailing hyphens.
+  2-32 chars, contains uppercase letters, has leading/trailing hyphens, or
+  starts with a digit.
 - **Project not found**: returns 404 with `{"errors": [{"message": "..."}]}`.
 - **Insufficient permissions**: `jf api` exits with code 1 on non-2xx and
   prints `[Warn] jf api: ... returned 403` on stderr when the token lacks
