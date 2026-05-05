@@ -1,0 +1,203 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jfrog.com/skills/project-templates/schema.json",
+  "title": "JFrog Project Template",
+  "description": "Declarative description of a JFrog Project covering Phase 1 (entity), Phase 2 (identity & access), and reserved slots for Phase 3 (repository structure) and Phase 4 (sharing). Consumed by jfrog-project-create-from-template.sh and jfrog-project-validate-template.sh.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["template_version", "project"],
+  "properties": {
+    "template_version": {
+      "type": "string",
+      "description": "Semver-style template schema version. Apply scripts refuse templates whose major version they do not recognise.",
+      "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+    },
+    "blueprint": {
+      "type": "string",
+      "description": "Optional reference to the blueprint this template was customized from (informational only).",
+      "enum": ["team-default", "enterprise-budget-id", "delegated-admin", "custom"]
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "display_name", "admin_privileges"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Immutable project key. 2-32 chars, lowercase alphanumeric and hyphens, must start with a letter, no leading/trailing hyphen.",
+          "pattern": "^[a-z][a-z0-9-]{0,30}[a-z0-9]$",
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "quota_gb": {
+          "description": "Storage quota in GB. Omit or set to null for Unlimited.",
+          "anyOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        },
+        "admin_privileges": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["manage_members", "manage_resources", "index_resources"],
+          "properties": {
+            "manage_members": { "type": "boolean" },
+            "manage_resources": { "type": "boolean" },
+            "index_resources": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "admins": {
+      "type": "object",
+      "description": "Project Admin assignments. Prefer groups over users.",
+      "additionalProperties": false,
+      "properties": {
+        "users": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "default": []
+        },
+        "groups": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    },
+    "roles": {
+      "type": "array",
+      "description": "Project roles to ensure exist. Predefined roles can be referenced without recreating; CUSTOM roles are created/updated.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "type": { "enum": ["PREDEFINED", "CUSTOM", "ADMIN"] },
+          "description": { "type": "string" },
+          "environments": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_-]*$" },
+            "uniqueItems": true
+          },
+          "actions": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Z_]+$" },
+            "uniqueItems": true
+          }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "type": { "const": "CUSTOM" } } },
+            "then": { "required": ["environments", "actions"] }
+          }
+        ]
+      }
+    },
+    "members": {
+      "type": "array",
+      "description": "Project member assignments. Each entry is exactly one user OR one group with one or more roles.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["roles"],
+        "properties": {
+          "user": { "type": "string", "minLength": 1 },
+          "group": { "type": "string", "minLength": 1 },
+          "roles": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        },
+        "oneOf": [
+          { "required": ["user"], "not": { "required": ["group"] } },
+          { "required": ["group"], "not": { "required": ["user"] } }
+        ]
+      }
+    },
+    "oidc": {
+      "type": "object",
+      "description": "Optional OIDC provider and identity mappings to ensure exist. The provider is platform-scoped; mappings can reference project-scoped groups via token_spec.scope.",
+      "additionalProperties": false,
+      "required": ["provider"],
+      "properties": {
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "issuer_url", "provider_type"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "issuer_url": { "type": "string", "format": "uri" },
+            "provider_type": { "enum": ["github", "gitlab", "generic"] },
+            "audience": { "type": "string" },
+            "description": { "type": "string" }
+          }
+        },
+        "identity_mappings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "claims", "token_spec"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "priority": { "type": "integer", "minimum": 1, "maximum": 1000 },
+              "description": { "type": "string" },
+              "claims": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": { "type": "string" }
+              },
+              "token_spec": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["scope"],
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "pattern": "^applied-permissions/(admin|user|groups:.+)$"
+                  },
+                  "expires_in": { "type": "integer", "minimum": 60, "maximum": 31536000 },
+                  "audience": { "type": "string" },
+                  "refreshable": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "description": "Phase 3 (handled by jfrog-project-repo-structure). List of stage names this project will use, e.g. [\"DEV\", \"QA\", \"PROD\", \"External\"]. Validation of contents is deferred to the Phase 3+4 schema extension.",
+      "items": { "type": "string" }
+    },
+    "repositories": {
+      "type": "array",
+      "description": "Phase 3 (handled by jfrog-project-repo-structure). Repository definitions; validation deferred."
+    },
+    "sharing": {
+      "type": "array",
+      "description": "Phase 4 (handled by jfrog-project-repo-structure). Cross-project sharing entries; validation deferred."
+    }
+  }
+}

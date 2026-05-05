@@ -1,0 +1,27 @@
+{
+  "template_version": "1.0",
+  "blueprint": "team-default",
+  "project": {
+    "key": "team-x",
+    "display_name": "Team X",
+    "description": "Default 'Team = Project' starting point. One team, one workspace, one virtual repository URL for developers. Replace placeholders before applying.",
+    "quota_gb": 50,
+    "admin_privileges": {
+      "manage_members": true,
+      "manage_resources": true,
+      "index_resources": true
+    }
+  },
+  "admins": {
+    "users": [],
+    "groups": ["team-x-leads"]
+  },
+  "roles": [
+    { "name": "Developer", "type": "PREDEFINED" },
+    { "name": "Release Manager", "type": "PREDEFINED" }
+  ],
+  "members": [
+    { "group": "team-x-devs", "roles": ["Developer"] },
+    { "group": "team-x-leads", "roles": ["Release Manager"] }
+  ]
+}

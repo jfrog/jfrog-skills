@@ -1,0 +1,72 @@
+{
+  "template_version": "1.0",
+  "blueprint": "enterprise-budget-id",
+  "project": {
+    "key": "fin-1042",
+    "display_name": "Finance Platform 1042",
+    "description": "Project key tied to internal budget identifier (immutable, survives reorgs). Membership flows from a central IdP sync, so manage_members is off. Roles align with a three-tier flow that the Phase 3+4 skill maps to repository stages.",
+    "quota_gb": 200,
+    "admin_privileges": {
+      "manage_members": false,
+      "manage_resources": true,
+      "index_resources": true
+    }
+  },
+  "admins": {
+    "users": [],
+    "groups": ["fin-1042-admins"]
+  },
+  "roles": [
+    { "name": "Developer", "type": "PREDEFINED" },
+    { "name": "Contributor", "type": "PREDEFINED" },
+    { "name": "Release Manager", "type": "PREDEFINED" },
+    { "name": "Security Manager", "type": "PREDEFINED" }
+  ],
+  "members": [
+    { "group": "fin-1042-developers", "roles": ["Developer"] },
+    { "group": "fin-1042-curators", "roles": ["Contributor"] },
+    { "group": "fin-1042-release", "roles": ["Release Manager"] },
+    { "group": "fin-1042-security", "roles": ["Security Manager"] }
+  ],
+  "oidc": {
+    "provider": {
+      "name": "fin-1042-gha",
+      "issuer_url": "https://token.actions.githubusercontent.com",
+      "provider_type": "github",
+      "audience": "https://mycompany.jfrog.io",
+      "description": "GitHub Actions for the Finance 1042 source repositories"
+    },
+    "identity_mappings": [
+      {
+        "name": "main-branch-publish",
+        "priority": 100,
+        "description": "Issue Developer-scope tokens for main-branch builds in the canonical source repo",
+        "claims": {
+          "repository_owner": "myorg",
+          "repository": "myorg/fin-1042-app",
+          "ref": "refs/heads/main"
+        },
+        "token_spec": {
+          "scope": "applied-permissions/groups:fin-1042-developers",
+          "expires_in": 1800,
+          "audience": "*@*"
+        }
+      },
+      {
+        "name": "release-publish",
+        "priority": 200,
+        "description": "Issue Release Manager-scope tokens when the release workflow runs",
+        "claims": {
+          "repository_owner": "myorg",
+          "repository": "myorg/fin-1042-app",
+          "workflow": "release.yml"
+        },
+        "token_spec": {
+          "scope": "applied-permissions/groups:fin-1042-release",
+          "expires_in": 1800,
+          "audience": "*@*"
+        }
+      }
+    ]
+  }
+}
