@@ -6,6 +6,7 @@ This repository ships AI agent skills for the JFrog Platform:
 
 - **`jfrog`** (required): The base skill covering CLI setup, artifact operations, security queries, AQL, and GraphQL. All other skills depend on it.
 - **`jfrog-package-safety-and-download`**: A workflow skill for package safety checks and curation-aware downloads. Requires `jfrog`.
+- **`jfrog-project-creation`**: A workflow skill that walks Platform Admins through Phases 1+2 of JFrog's Projects Setup Best Practices (project entity, identity, and access), customises one of three shipped blueprints, and applies the resulting JSON template idempotently. Requires `jfrog`.
 
 Install them in your AI coding agent and interact with JFrog through natural language. The `jfrog` skill must always be installed — workflow skills build on top of it.
 
@@ -19,13 +20,19 @@ Install them in your AI coding agent and interact with JFrog through natural lan
 From remote repository:
 
 ```bash
-npx skills add git@github.com:jfrog/jfrog-skills.git -g --skill jfrog --skill jfrog-package-safety-and-download
+npx skills add git@github.com:jfrog/jfrog-skills.git -g \
+  --skill jfrog \
+  --skill jfrog-package-safety-and-download \
+  --skill jfrog-project-creation
 ```
 
 From a local clone:
 
 ```bash
-npx skills add . -g --skill jfrog --skill jfrog-package-safety-and-download
+npx skills add . -g \
+  --skill jfrog \
+  --skill jfrog-package-safety-and-download \
+  --skill jfrog-project-creation
 ```
 
 The `-g` flag installs into the global scope (recommended). Drop it to install into the current project only. Run `npx skills --help` for more usage information.

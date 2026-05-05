@@ -14,12 +14,15 @@ flowchart TD
 
     subgraph workflows ["Workflow Skills"]
         PS["jfrog-package-safety-and-download"]
+        PC["jfrog-project-creation"]
         Future["...future workflow skills"]
     end
 
     JF -->|"routes to"| PS
+    JF -->|"routes to"| PC
     JF -.->|"future"| Future
     PS -.->|"prereq"| JF
+    PC -.->|"prereq"| JF
 ```
 
 **Base skill (`jfrog`)** — the single foundational skill. Covers platform concepts, CLI setup and authentication, REST/GraphQL API patterns, and intent routing to workflow skills. Every other skill declares it as a prerequisite.
@@ -99,6 +102,8 @@ These files tell the agent *how* to perform specific operations.
 | `platform-admin-operations.md` | Tokens, stats, projects, system health |
 | `artifactory-aql-syntax.md` | AQL domains, criteria, query construction |
 | `projects-api.md` | Access API for JFrog Projects (via `jf api`) |
+| `projects-best-practices.md` | Phase 1+2 doctrine: scope, key conventions, RBAC strategy, customer archetypes |
+| `oidc-integration.md` | OIDC provider config, identity mappings, CI claim recipes |
 
 #### API gaps (REST-only operations)
 

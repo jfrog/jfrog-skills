@@ -222,7 +222,10 @@ below.
 
 - **Platform structure, project/repo membership, or project roles vs environments (concepts)**: read `references/platform-access-entities.md`
 - **Access tokens, stats, projects, or system health**: read `references/platform-admin-operations.md`
-- **Managing JFrog Projects, members, or environments**: read `references/projects-api.md` (~260 lines)
+- **Project best practices, "Team = Project" decisions, customer archetypes, or RBAC-by-stage doctrine (Phases 1+2 of JFrog's Projects Setup Best Practices)**: read `references/projects-best-practices.md`
+- **Creating a new project end-to-end (entity + identity & access)**: load the `jfrog-project-creation` workflow skill — it ships three blueprints under `assets/project-templates/`, walks the user through Phases 1+2, and applies a customised JSON template via an idempotent script. Do **not** orchestrate project creation by hand-rolling `projects-api.md` calls when this workflow skill is available.
+- **Managing existing JFrog Projects, members, or environments via REST**: read `references/projects-api.md` (~260 lines)
+- **OIDC providers, identity mappings, CI claim recipes (GitHub Actions, GitLab CI, generic), or `jf exchange-oidc-token`**: read `references/oidc-integration.md`
 - **Platform REST beyond the CLI, or any platform-level API gap**: read `references/platform-admin-api-gaps.md` (~180 lines)
 
 ### CLI setup & authentication
