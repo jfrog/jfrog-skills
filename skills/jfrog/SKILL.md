@@ -17,7 +17,7 @@ compatibility: >-
   Requires jq on PATH.
 metadata:
   role: base
-  version: "0.7.0"
+  version: "0.8.0"
 ---
 
 # JFrog Skill
@@ -58,46 +58,48 @@ thing to check — re-run with the appropriate escalation above.
 
 ## Environment check
 
-Before your first JFrog operation in a session, run the environment check.
-It verifies the CLI is installed, checks for updates, and exports
-`JFROG_CLI_USER_AGENT` so every outbound request is identifiable:
+Before your first JFrog operation in a session, run the environment check
+and **remember its stdout** as `<UA>` for the rest of the session:
 
 ```bash
-eval "$(JFROG_SKILL_MODEL="<model-slug>" bash <skill_path>/scripts/check-environment.sh)"
+bash <skill_path>/scripts/check-environment.sh <model-slug>
+# stdout (one line): model/<model-slug> jfrog-skills/<version> jfrog-cli-go/<cli-version>
+# stderr: JSON state (cached 24h at ${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/jfrog-skill-state.json)
 ```
 
-Set `JFROG_SKILL_MODEL` to the precise slug of the underlying LLM, with
-version (e.g. `opus-4.7`, `sonnet-4.5`, `gpt-5-codex`, `gemini-2.5-pro`,
-`composer-2-fast`, `composer-2.1-fast`). For Cursor's Composer family, the
-product slug (`composer-2`, `composer-2-fast`, `composer-2.1-fast`, etc.)
-IS the canonical identifier — use it as-is, do not fall back to `unknown`
-just because there is no separate weights version.
-**Do not** use harness/role names like `subagent`, `cursor-agent`, `agent`,
-`assistant`, or a generic family name (`claude`, `gpt`). Subagents pass
-through the parent's slug. If genuinely unknown, use `unknown`.
+Pass the precise underlying-model slug with version: `opus-4.7`,
+`sonnet-4.5`, `gpt-5-codex`, `gemini-2.5-pro`, `composer-2-fast`. Cursor's
+Composer product slug **is** the canonical id — use it as-is. Do **not**
+pass harness/role names (`subagent`, `agent`, `assistant`) or bare family
+names (`claude`, `gpt`); subagents inherit the parent's slug. If genuinely
+unknown, pass `unknown`.
 
-The `eval` is required — the script outputs
-`export JFROG_CLI_USER_AGENT='model/<model-slug> jfrog-skills/<version> jfrog-cli-go/<cli-version>'`
-on stdout. The JFrog CLI picks this up natively and injects it as the
-`User-Agent` header on every HTTP request. JSON state is printed to stderr
-for informational purposes (also written to the cache file).
+### Export `JFROG_CLI_USER_AGENT` once per bash invocation
 
-The script uses a 24-hour cache at `${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/jfrog-skill-state.json`
-(co-located with `jf config`). If the cache is fresh, it returns immediately.
-If stale or missing, it checks whether `jf` is installed, its version, and
-whether a newer version is available.
+At the top of every bash invocation that runs `jf`, export `<UA>` once;
+all `jf` calls in that invocation pick it up:
 
-- Exit 0: cache is fresh, CLI is ready — proceed
-- Exit 1: cache was stale and has been refreshed, CLI is ready — proceed
-- Exit 2: `jf` is not installed — **STOP** (see below)
-- Exit 3: `jf` is installed but below the minimum version required by this skill (the script prints the minimum and the detected version to stderr) — **STOP** (see below)
+```bash
+export JFROG_CLI_USER_AGENT='<UA>'
+jf config show
+jf api /artifactory/api/system/version
+```
 
-Bypass the cache only when the user explicitly asks to install, upgrade, or
-reconfigure the CLI.
+Do **not** repeat the assignment per `jf` call (`JFROG_CLI_USER_AGENT='<UA>' jf …`
+on every line). Examples elsewhere in this skill and in `references/*.md`
+omit the export for readability — the rule is global. When launching a
+subagent, pass `<UA>` in its prompt; subagents do not re-run the script.
 
-**On exit 2 or 3, stop and ask the user to install or upgrade.** Do not work
-around it with `jf rt curl`, raw `curl`, or other fallbacks — see
-`references/jfrog-cli-install-upgrade.md`.
+| Exit | Meaning |
+|------|---------|
+| 0 | Cache fresh — proceed |
+| 1 | Cache refreshed — proceed |
+| 2 | `jf` not installed — **STOP**, ask the user to install |
+| 3 | `jf` below minimum version — **STOP**, ask the user to upgrade |
+
+On exit 2 or 3, do not fall back to `jf rt curl`, raw `curl`, or other
+workarounds — see `references/jfrog-cli-install-upgrade.md`. Re-run with
+`--force` only when the user explicitly asks to refresh or install/upgrade.
 
 ### JSON parsing (`jq`)
 
@@ -134,9 +136,7 @@ API call:
 3. For mutating operations (create, update, delete, upload), confirm with the
    user unless the intent is clearly implied
 4. Prefer read operations first to understand current state before making changes
-5. If any command fails with a server-level error (not found, auth, network),
-   stop and ask the user — never retry against a different server
-6. **Never invent preparatory mutations.** If the requested operation fails
+5. **Never invent preparatory mutations.** If the requested operation fails
    because a precondition is not met (artifact missing from the specified repo,
    repository does not exist, package not at the expected location, build not
    found), **stop and report the gap to the user**. Do not perform copy, move,
@@ -148,32 +148,47 @@ API call:
 
 ## Server selection rules (mandatory)
 
-Exactly one server must be resolved before any operation:
+**Single-server invariant.** Every `jf` call MUST pass `--server-id <SID>`
+(default resolved below); for one user request, all `jf` calls use **exactly
+one** server-id. A wrong answer from the wrong server is worse than a stop-and-ask.
 
-1. **User named specific server(s)** — use those only. Pass
-   `--server-id <id>` to every `jf` command.
-2. **User did not name a server** — use the current default. `jf config show`
-   lists every server with a `Default: true/false` line; do **not** pre-filter
-   with `grep "Server ID"` — that drops the `Default` field and the first
-   listed server is not necessarily the default. One-liner:
+**MUST NOT** retry on a second configured server after 401/403/404, empty, or
+partial results; **MUST NOT** infer multi-server intent from "my"/"our" or
+from seeing extra entries in `jf config show`. **Override:** only when the user
+**explicitly** names another id ("on `<id>`, …", "use `<id>`", "compare `<a>`
+and `<b>`") — inferred intent is not an override.
 
-   ```bash
-   jf config show 2>/dev/null \
-     | awk '/^Server ID:/{id=$NF} /^Default:[[:space:]]*true/{print id; exit}'
-   ```
+### Resolve the default once per session
 
-   If nothing prints, stop and ask which server to use.
-3. **Verify** the resolved server exists in `jf config show` before running.
+Before your first `jf` call, resolve the default server-id and **remember it**
+as `<SID>` for the rest of the session — same pattern as `<UA>`:
 
-**Never fall back to a different server.** Different servers hold different
-data and permissions — silent switches corrupt state and leak across
-environments. On any error from the resolved server (401/403, network,
-timeout, 404, missing server-id, etc.), stop with no further `jf` calls
-and respond:
+```bash
+jf config show 2>/dev/null \
+  | awk '/^Server ID:/{id=$NF} /^Default:[[:space:]]*true/{print id; exit}'
+# stdout: the default server-id; if empty, stop and ask which to use
+```
 
-> `<server-id>` returned `<code>` for `<endpoint>`: `<short reason>`.
-> Other configured server(s): `<list>`. The rules forbid me from using
-> them without your explicit instruction. How would you like to proceed?
+Pass `--server-id <SID>` to every subsequent `jf` call. The flag goes
+**after** the subcommand name, not after `jf` itself:
+
+- ✅ `jf api --server-id <SID> /artifactory/api/system/version`
+- ✅ `jf rt ping --server-id <SID>`
+- ❌ `jf --server-id <SID> api /…` — fails with `flag provided but not defined`
+
+When launching a subagent, pass `<SID>` in its prompt — subagents do not
+re-resolve. Examples elsewhere in this skill and in `references/*.md` omit
+`--server-id` for readability; the rule is global, same as
+`JFROG_CLI_USER_AGENT`.
+
+### On any error, stop — never switch
+
+If a `jf` call returns 401/403, 404, network error, timeout, or any other
+failure, **stop with no further `jf` calls** and respond:
+
+> `<server-id>` returned `<code>` for `<endpoint>`: `<short reason>`. Other
+> configured server(s): `<list>` — I won't query them without your explicit
+> instruction. How would you like to proceed?
 
 ## When to read reference files
 
