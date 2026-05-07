@@ -541,7 +541,7 @@ rerunning the script.
 | --- | --- |
 | Project creation | **Done** as part of `jfrog-project-creation` (Phase 1) |
 | Project identity and access configuration | **Done** as part of `jfrog-project-creation` (Phase 2). Could be re-split into a post-creation skill if preferred — flagged for review |
-| Project repository structure configuration | **Planned** as `jfrog-project-repo-structure` (Phases 3+4 plan ready) |
+| Project repository structure configuration | **Done** as `jfrog-project-repo-structure` (Phases 3+4) |
 | Project CI/CD | Planned. Depends on the OIDC reference shipped in Phase 1+2; consumes the `oidc` block of the template |
 | Project application creation | Planned. Will consume `apptrust-entities.md` (already exists) plus a new operations file |
 | Project curation enablement | Planned. Curation entities exist in `xray-entities.md`; needs an operations file |
@@ -554,8 +554,8 @@ flowchart LR
     Tpl["Project template<br/>(JSON, user-owned)"] --> P12["Phase 1+2 fields<br/>project, admins, roles, members, oidc"]
     Tpl --> P34["Phase 3+4 fields<br/>stages, repositories, sharing"]
     Tpl --> Future["Future: applications,<br/>curation, policies"]
-    P12 --> Sk1["jfrog-project-creation<br/>(this PR)"]
-    P34 --> Sk2["jfrog-project-repo-structure<br/>(next)"]
+    P12 --> Sk1["jfrog-project-creation<br/>(Phase 1+2 — shipped)"]
+    P34 --> Sk2["jfrog-project-repo-structure<br/>(Phase 3+4 — shipped)"]
     Future --> Sk3["jfrog-project-application<br/>jfrog-project-curation<br/>jfrog-project-policies"]
 ```
 
@@ -564,13 +564,16 @@ information has to be re-collected from the user. This is how the seven
 roadmap skills avoid overlap with each other and with the existing base
 skill.
 
-## Phase 3+4 plan (what comes next)
+## Phase 3+4 implementation (what was added on top of Phase 1+2)
 
-Drafted in parallel with Phase 1+2; not yet implemented. Same two-mode
-design (interactive AI + deterministic script), same template-as-contract
-model, same idempotency guarantees. The skill is intended to be **a
-direct continuation** of `jfrog-project-creation`: it extends the same
-JSON template the user wrote in Phase 1+2 with new top-level sections.
+Implemented as the new workflow skill `jfrog-project-repo-structure` on
+the stacked branch `design/project-repo-structure` (off
+`design/project-creation-phase-1-2`). Same two-mode design (interactive
+AI + deterministic script), same template-as-contract model, same
+idempotency guarantees. The skill is **a direct continuation** of
+`jfrog-project-creation`: it extends the same JSON template the user
+wrote in Phase 1+2 with new top-level sections, and the agent never
+needs to re-collect Phase 1+2 information.
 
 ### Persona
 
@@ -631,41 +634,69 @@ What the skill will support:
 
 In the base skill:
 
-- `skills/jfrog/references/projects-best-practices.md` extended with
-  Phase 3+4 sections (Team / Tech / Maturity / Locator naming;
-  External-stage pattern; sharing patterns; consumer-read-only rule).
-  Alternatively, a separate `projects-best-practices-repos.md` if the
-  combined file gets too long.
-- `skills/jfrog/assets/project-templates/schema.json` extended with
-  full validation for the `stages`, `repositories`, and `sharing`
-  top-level sections. The slots are already reserved in the Phase 1+2
-  schema, so this is non-breaking.
-- The three shipped blueprints
-  (`team-default.json`, `enterprise-budget-id.json`,
-  `delegated-admin.json`) updated with sample Phase 3+4 structures
-  matching their archetype:
-  - `team-default` — Maven + npm DEV/PROD/External with a virtual
-    aggregator per tech.
-  - `enterprise-budget-id` — three-tier Curation/Central/Certified
-    structure mapped to repository stages.
-  - `delegated-admin` — minimal repo set with a clear self-service
-    expansion pattern.
+- `skills/jfrog/references/projects-best-practices-repos.md` (new) —
+  Phase 3+4 doctrine: technology scoping, SDLC stages, four-part
+  naming, per-tech repo blueprint, virtual-aggregator ordering,
+  External-stage RBAC table, Phase 4 push vs pull comparison,
+  read-only-consumer rule, and verification steps. Honours the
+  forward reference that already lived in
+  `projects-best-practices.md`.
+- `skills/jfrog/assets/project-templates/schema.json` — extended in
+  place with full validation of `stages`, `repositories`
+  (locator-conditional shape: `url` required for remote,
+  `aggregates` + `resolution_order` required for virtual),
+  `external_stage_rbac`, and `sharing` (role-conditional shape:
+  producer with `consumer_projects`, consumer with `via: direct` or
+  `via: smart-remote`). Non-breaking: Phase 1+2 templates still
+  validate.
+- The three shipped blueprints updated in place with archetype-sized
+  Phase 3+4 sections:
+  - `team-default` — Maven + npm with `DEV`, `PROD`, `External`,
+    virtual aggregator per tech, and the External-stage RBAC overlay.
+  - `enterprise-budget-id` — Maven + npm + Docker with
+    `DEV/QA/PROD/External`, full virtual ordering, and a producer
+    sharing entry to two sibling finance projects.
+  - `delegated-admin` — Docker-only minimal set with a self-service
+    expansion note and a consumer-side smart-remote sharing entry.
 
 In a new workflow skill (`skills/jfrog-project-repo-structure/`):
 
 - `SKILL.md` — workflow-role frontmatter, prereq on the base skill,
-  description triggering on "set up repos for project X" and similar.
-- `references/repo-structure-flow.md` — conversational walkthrough for
-  Phase 3 (technology selection, stage selection, naming, aggregator).
+  rich description with verb-led intents, keyword bag, and negative
+  scoping (declines AppTrust / curation / CI/CD / unified policies and
+  routes Phase 1+2 work to `jfrog-project-creation`).
+- `references/repo-structure-flow.md` — eleven-stage conversational
+  walkthrough for Phase 3 (discovery, stages, technologies, repo plan
+  with `name_override` for legacy repos, virtual aggregator,
+  External-stage RBAC, optional sharing, preview, write, apply,
+  verify) with explicit cautious-execution gates.
 - `references/sharing-patterns.md` — Phase 4 push vs pull decision
-  guide, when to use each, role assignments.
-- `references/naming-convention.md` — the 4-part naming rule with
-  examples and the validator's diagnostic output.
-- `scripts/jfrog-project-apply-repo-structure.sh` — idempotent applier
-  for repos, virtual aggregators, and sharing config.
-- `scripts/jfrog-project-validate-repo-structure.sh` — offline checks
-  on naming, virtual ordering, External-stage RBAC consistency; with
-  `--check-platform`, delegates to apply `--dry-run`.
+  tree, producer-side flow, consumer-side direct flow, consumer-side
+  smart-remote flow, read-only-consumer rule, anti-patterns.
+- `references/verification-and-idempotency.md` — Phase 3+4 idempotency
+  contract per resource (project environments, local/remote/virtual
+  repos, project assignment, External-stage RBAC, sharing producer
+  and consumer variants), structured outcome JSON shape, and five
+  post-apply checks.
+- `scripts/jfrog-project-apply-repo-structure.sh` — idempotent
+  applier that reuses the Phase 1+2 helper patterns
+  (`http_status_of`, `api_call`, `record_resource`, `write_action`),
+  verifies the project exists and the caller has the right scope,
+  applies stages → repos (locals → remotes → virtuals, two passes so
+  virtuals reference already-applied repos) → External-stage RBAC →
+  sharing, with refusals for `project_assignment_conflict`,
+  `tech_drift`, `not_producer`, `principal_missing`,
+  `not_shared_with_consumer`, and `writer_grant_cross_project`.
+  Supports `--server-id`, `--dry-run`, and `--strict-naming`. Emits
+  the same structured JSON outcome as Phase 1+2.
+- `scripts/jfrog-project-validate-repo-structure.sh` — offline
+  validator that runs structural checks (stage format, repo
+  locator-conditional shape, virtual aggregator coherence, naming
+  convention with strict mode, External-stage RBAC action format,
+  sharing role-conditional shape, refusal to share dev-local,
+  duplicate name detection) plus `ajv` schema validation when
+  installed. With `--check-platform`, delegates to the apply script
+  in dry-run mode.
 
 ### Template extensions (illustrative)
 
@@ -780,6 +811,8 @@ These are split into later workflow skills so each remains focused:
 
 ## Verification performed locally
 
+Phase 1+2:
+
 - Bash syntax check (`bash -n`) on both new scripts: pass.
 - `jq -e .` on the schema and all three blueprints: pass.
 - `jfrog-project-validate-template.sh` against all three blueprints:
@@ -787,4 +820,15 @@ These are split into later workflow skills so each remains focused:
 - `jfrog-project-validate-template.sh` against a deliberately broken
   template: catches eight crafted errors with clear messages.
 - Cursor lint check on every changed/added file: pass.
-- All twelve plan todos completed.
+
+Phase 3+4 (added on top):
+
+- Bash syntax check on the new apply and validate scripts: pass.
+- `jq -e .` on the extended schema and the three updated blueprints:
+  pass.
+- `jfrog-project-validate-repo-structure.sh` against all three
+  blueprints: pass (one warning each, the `ajv_missing` notice).
+- `jfrog-project-validate-repo-structure.sh` against a deliberately
+  broken Phase 3+4 template: catches sixteen crafted errors with
+  clear messages.
+- Cursor lint check on every changed/added file: pass.
