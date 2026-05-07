@@ -66,5 +66,32 @@
         }
       }
     ]
-  }
+  },
+  "stages": ["DEV", "PROD", "External"],
+  "repositories": [
+    { "tech": "docker", "maturity": "dev",      "locator": "local"  },
+    { "tech": "docker", "maturity": "prod",     "locator": "local"  },
+    { "tech": "docker", "maturity": "external", "locator": "remote",
+      "url": "https://registry-1.docker.io/",
+      "description": "Self-service expansion: add more remotes (gcr.io, ghcr.io) under the same External stage as the application grows." },
+    { "tech": "docker", "maturity": "all",      "locator": "virtual",
+      "aggregates": ["prod", "dev", "external"],
+      "resolution_order": ["prod", "dev", "external"] }
+  ],
+  "external_stage_rbac": {
+    "Developer":        ["READ_REPOSITORY", "ANNOTATE_REPOSITORY", "DEPLOY_CACHE_REPOSITORY"],
+    "Release Manager":  ["READ_REPOSITORY"],
+    "Security Manager": ["READ_REPOSITORY"],
+    "Viewer":           ["READ_REPOSITORY"]
+  },
+  "sharing": [
+    {
+      "role": "consumer",
+      "via": "smart-remote",
+      "from_project": "team-platform",
+      "from_repository": "team-platform-docker-prod-local",
+      "into_repository": "app-04217-team-platform-docker-remote",
+      "description": "Pull base images from the platform team via a smart remote (cache-decoupled from producer lifecycle)"
+    }
+  ]
 }
