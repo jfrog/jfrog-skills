@@ -11,8 +11,9 @@ When to read this file:
 
 For the four-part repository naming convention, virtual aggregator pattern,
 the External-stage pattern, and the two collaboration patterns (push vs.
-pull), see Phases 3+4 in `projects-best-practices-repos.md` (added by the
-`jfrog-project-repo-structure` skill).
+pull), see Phases 3+4 in
+[`projects-best-practices-repos.md`](projects-best-practices-repos.md)
+(consumed by the `jfrog-project-repo-structure` skill).
 
 For endpoint-level call examples, see [`projects-api.md`](projects-api.md)
 and [`oidc-integration.md`](oidc-integration.md).
