@@ -7,12 +7,19 @@ description: >-
   access strategy). Picks one of three shipped blueprints (team-default,
   enterprise-budget-id, delegated-admin), customises it through a guided
   conversation, writes the customised JSON template to a path the user
-  chooses, and applies it idempotently via a deterministic script. Use when
-  the user wants to set up a new project, onboard a team to JFrog, configure
-  OIDC for a project, wire CI authentication via identity mappings, or
-  bootstrap project members and roles. Do NOT use for repository structure,
-  virtual aggregator setup, or sharing patterns -- those are Phases 3+4 and
-  are handled by jfrog-project-repo-structure.
+  chooses, and applies it idempotently via a deterministic script. Use this
+  skill when the user wants to set up a new project, onboard a team to
+  JFrog, work with JFrog to manage workflow at scale, enforce permission
+  isolation between teams, map their teams, applications, or microservices
+  into JFrog when starting to use the platform, structure JFrog around an
+  existing organisation, configure OIDC for a project, wire CI
+  authentication via identity mappings, or bootstrap project members and
+  roles. Also use when the user mentions scaling JFrog usage, multi-team
+  setup, permission isolation, tenant separation, team mapping, mapping
+  applications or microservices into JFrog, onboarding a team or app to
+  JFrog, or starting out with JFrog at organisation scale. Do NOT use for
+  repository structure, virtual aggregator setup, or sharing patterns --
+  those are Phases 3+4 and are handled by jfrog-project-repo-structure.
 metadata:
   role: workflow
 ---
