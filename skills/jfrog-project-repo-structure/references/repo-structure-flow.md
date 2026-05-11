@@ -194,8 +194,86 @@ Schema fragment (Smart Remote):
   "into_repository": "team-x-platform-maven-remote" }
 ```
 
-See `sharing-patterns.md` for the full decision tree and the
+See *Sharing patterns* below for the decision tree and the
 read-only-consumer guard.
+
+## Sharing patterns
+
+Push (direct share) vs pull (Smart Remote) for cross-project
+artifact sharing. The apply script encodes the endpoint detail; the
+agent decides which pattern fits via the conversation.
+
+### Decision tree
+
+```mermaid
+flowchart TD
+    Need["Two projects need to share artifacts"] --> Q1{"Consumer must survive<br/>producer-side changes?"}
+    Q1 -->|"yes - need isolation"| Pull["Pull: Smart Remote"]
+    Q1 -->|"no - tightly coupled"| Push["Push: direct share"]
+    Pull --> RuleA["Consumer creates Smart Remote;<br/>independent cache lifetime"]
+    Push --> RuleB["Producer marks repo Shared;<br/>consumer attaches to virtual aggregator"]
+```
+
+### Push (direct share)
+
+Best for tightly coupled internal sharing where the producer owns
+the lifecycle. Mechanics:
+
+- Producer marks its `prod` local repo as Shared.
+- Consumers add the shared repo to their virtual aggregator.
+- Producer-side deletion removes consumer access.
+
+The apply script PUTs the share entry on the producer side and
+updates the consumer's virtual aggregator to include the shared
+repo in doctrine order (typically after `prod`).
+
+### Pull (Smart Remote)
+
+Best for stricter segregation or any case where the consumer must
+survive producer-side changes. Mechanics:
+
+- Consumer creates a smart-remote repo pointing at the producer's
+  repo URL.
+- Cache lifetime is independent.
+- Network hop on first fetch; cached locally thereafter.
+
+The apply script PUTs the consumer's remote repo with
+`contentSynchronisation` enabled and updates the consumer's virtual
+aggregator to include it.
+
+### Read-only consumer rule
+
+**Regardless of method**, consumers must hold read-only roles on
+the producer's assets. The apply script refuses any sharing entry
+that would grant cross-project write — outcome: `errored` with
+`error: cross_project_write_forbidden`. Validate also flags this
+ahead of apply.
+
+Why: cross-project write would let consumer pipelines push into the
+producer's stage and bypass the producer's gates.
+
+### Naming for cross-project repos
+
+The four-part convention extends to consumed repos. Two shapes:
+
+- **Smart Remote into a producer's repo** —
+  `<consumer_key>-<producer_key>-<tech>-remote`. Example:
+  `team-x-platform-maven-remote`.
+- **Direct-shared repo attached to a consumer virtual** — the repo
+  keeps its producer-side name
+  (`team-platform-maven-prod-local`). Only the consumer's virtual
+  aggregator changes.
+
+The `<consumer_key>` prefix on Smart Remotes is doctrine, not
+enforced unless `--strict-naming` is set.
+
+### When sharing is not the answer
+
+- **Same team, multiple sub-projects** → one project with multiple
+  repos, not two projects sharing.
+- **Build-info across teams** → AppTrust applications (planned
+  `jfrog-project-application` skill).
+- **Multi-write (federation)** → out of scope here.
 
 ## Stage 5 — Preview JSON inline
 

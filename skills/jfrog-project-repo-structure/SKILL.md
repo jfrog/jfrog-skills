@@ -48,10 +48,8 @@ mutations. **The agent never writes any file to disk.**
 - Read `../jfrog/references/projects-best-practices-repos.md` for the
   doctrine the conversation enforces (4-part naming, virtual
   aggregator order, External-stage pattern, sharing decision tree).
-- Read `references/repo-structure-flow.md` for the repository and
-  stages walkthrough.
-- Read `references/sharing-patterns.md` when the user wants
-  cross-project sharing.
+- Read `references/repo-structure-flow.md` for the repository,
+  stages, and sharing walkthrough.
 
 The skill does **not** probe the caller's token for Project Admin or
 Platform Admin scope. JFrog will return 403 if the caller lacks the
@@ -167,9 +165,10 @@ patterns, and the `--audit` contract, see
 Load these only when the situation calls for them. Avoid loading more
 than 2-3 in a single conversation turn.
 
-- `references/repo-structure-flow.md` — full conversational flow for
-  stages, repositories, External-stage RBAC, virtual aggregator
-  resolution, push vs pull sharing decision tree.
+- `references/repo-structure-flow.md` — full conversational flow
+  for stages, repositories, External-stage RBAC, virtual aggregator
+  resolution; includes the push vs pull sharing decision tree and
+  the read-only-consumer rule in its *Sharing patterns* section.
 - `../jfrog/references/projects-verification-contract.md` —
   idempotency state machine, outcome JSON shape, recovery patterns,
   `--audit` contract (shared with `jfrog-project-creation`).
@@ -218,8 +217,9 @@ reports on stdout.
   script refuses any sharing entry that would grant write
   cross-project.
 - **Smart Remote vs direct share** trade-offs are documented in
-  `references/sharing-patterns.md`. Smart Remote isolates the
-  consumer cache; direct share keeps producer-side lifecycle.
+  `references/repo-structure-flow.md` §*Sharing patterns*. Smart
+  Remote isolates the consumer cache; direct share keeps
+  producer-side lifecycle.
 - **Existing-repo migration.** Many users have repos that predate
   this skill and don't follow the 4-part convention. Default mode
   warns and continues; `--strict-naming` fails. Never rename or
