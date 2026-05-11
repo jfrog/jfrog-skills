@@ -222,8 +222,7 @@ below.
 
 - **Platform structure, project/repo membership, or project roles vs environments (concepts)**: read `references/platform-access-entities.md`
 - **Access tokens, stats, projects, or system health**: read `references/platform-admin-operations.md`
-- **Project best practices, "Team = Project" decisions, customer archetypes, or RBAC-by-stage doctrine**: read `references/projects-best-practices.md`
-- **Repository structure, four-part naming convention, SDLC stages, External-stage pattern, virtual aggregator ordering, or cross-project sharing (push vs pull) doctrine**: read `references/projects-best-practices-repos.md`
+- **Project doctrine: "Team = Project" decisions, customer archetypes, RBAC-by-stage, four-part repo naming, SDLC stages, External-stage pattern, virtual aggregator ordering, or cross-project sharing (push vs pull)**: read `references/projects-best-practices.md`
 - **Creating a new project, onboarding a team, or setting up project members + roles + OIDC**: load the `jfrog-project-creation` workflow skill. It fetches a starting template from the org's Artifactory templates repo (falls back to bundled blueprints under `assets/project-templates/`), customises it in-memory through the conversation, and pipes the result to an idempotent apply script via stdin. Do **not** orchestrate project creation by hand-rolling `projects-api.md` calls when this workflow skill is available.
 - **Configuring repositories, stages, virtual aggregators, External-stage RBAC, four-part naming, or cross-project sharing (Smart Remote, producer/consumer) for a project**: load the `jfrog-project-repo-structure` workflow skill. Same fetch + in-memory customise + stdin-pipe pattern.
 - **Where project templates live in Artifactory, the discovery and fetch chain, or how the org seeds its templates repo**: read `references/project-templates-artifactory-repo.md`

@@ -108,8 +108,7 @@ These files tell the agent *how* to perform specific operations.
 | `platform-admin-operations.md` | Tokens, stats, projects, system health |
 | `artifactory-aql-syntax.md` | AQL domains, criteria, query construction |
 | `projects-api.md` | Access API for JFrog Projects (via `jf api`) |
-| `projects-best-practices.md` | Project entity + identity doctrine: scope, key conventions, RBAC strategy, customer archetypes |
-| `projects-best-practices-repos.md` | Repository-structure doctrine: four-part naming, SDLC stages, virtual aggregator ordering, External-stage pattern, push vs pull sharing |
+| `projects-best-practices.md` | Project doctrine: scope, key conventions, RBAC strategy, customer archetypes, four-part repo naming, SDLC stages, virtual aggregator ordering, External-stage pattern, push vs pull sharing |
 | `project-templates-artifactory-repo.md` | How the project workflow skills discover and fetch project templates from the org's Artifactory templates repo (with bundled fallback) |
 | `oidc-integration.md` | OIDC provider config, identity mappings, CI claim recipes |
 

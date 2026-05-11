@@ -45,7 +45,7 @@ mutations. **The agent never writes any file to disk.**
   `required_permissions: ["full_network"]` on the Shell tool.
 - Read `../jfrog/references/project-templates-artifactory-repo.md` —
   same templates-repo contract as `jfrog-project-creation`.
-- Read `../jfrog/references/projects-best-practices-repos.md` for the
+- Read `../jfrog/references/projects-best-practices.md` for the
   doctrine the conversation enforces (4-part naming, virtual
   aggregator order, External-stage pattern, sharing decision tree).
 - Read `references/repo-structure-flow.md` for the repository,
@@ -174,9 +174,9 @@ than 2-3 in a single conversation turn.
   `--audit` contract (shared with `jfrog-project-creation`).
 - `../jfrog/references/project-templates-artifactory-repo.md` —
   templates-repo discovery, fetch chain.
-- `../jfrog/references/projects-best-practices-repos.md` — the
-  repository-structure doctrine (4-part naming, virtual order,
-  External pattern, sharing).
+- `../jfrog/references/projects-best-practices.md` — the project
+  doctrine, including repository structure (4-part naming, virtual
+  order, External pattern, push vs pull sharing).
 - `../jfrog/references/artifactory-entities.md` — repository concepts
   (local / remote / virtual / federated).
 
