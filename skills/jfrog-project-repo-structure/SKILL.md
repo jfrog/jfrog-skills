@@ -239,11 +239,3 @@ reports on stdout.
 
 - Creating the project itself, project members, project roles, OIDC
   → `jfrog-project-creation`.
-- CI/CD pipeline templates that consume the repos → planned
-  `jfrog-project-cicd`.
-- AppTrust application creation against the project → planned
-  `jfrog-project-application`.
-- Curation indexing of the External-stage remotes → planned
-  `jfrog-project-curation`.
-- Unified gates and lifecycle policies across stages → planned
-  `jfrog-project-policies`.

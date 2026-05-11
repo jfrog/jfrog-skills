@@ -236,11 +236,3 @@ safe.
 - Repository structure, naming convention enforcement, virtual
   aggregators, External-stage pattern, cross-project sharing →
   `jfrog-project-repo-structure`.
-- CI/CD pipeline templates beyond the OIDC handshake → planned
-  `jfrog-project-cicd`.
-- AppTrust application creation and version linking → planned
-  `jfrog-project-application`.
-- Curation indexing, policy creation, dry-run → planned
-  `jfrog-project-curation`.
-- Unified gates and lifecycle policies → planned
-  `jfrog-project-policies`.
