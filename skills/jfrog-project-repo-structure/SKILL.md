@@ -146,13 +146,18 @@ patterns, and the `--audit` contract, see
 Load these only when the situation calls for them. Avoid loading more
 than 2-3 in a single conversation turn.
 
-- `references/repo-structure-flow.md` — full conversational flow
-  for stages, repositories, External-stage RBAC, virtual aggregator
-  resolution; includes the push vs pull sharing decision tree and
-  the read-only-consumer rule in its *Sharing patterns* section.
+- `references/repo-structure-flow.md` — skill-specific stages
+  (Phase 3 + Phase 4) for stages, repositories, External-stage
+  RBAC, virtual aggregator resolution; includes the push vs pull
+  sharing decision tree and the read-only-consumer rule in its
+  *Sharing patterns* section.
+- `../jfrog/references/project-skills-conversation-contract.md` —
+  Stage 5 (preview), Stage 6 (pipe + report), `--audit`, re-apply
+  loop, "what this flow does not do" (shared with
+  `jfrog-project-creation`).
 - `../jfrog/references/projects-verification-contract.md` —
   idempotency state machine, outcome JSON shape, recovery patterns,
-  `--audit` contract (shared with `jfrog-project-creation`).
+  `--audit` contract, shared gotchas (also shared).
 - `../jfrog/references/project-templates-artifactory-repo.md` —
   templates-repo discovery, fetch chain.
 - `../jfrog/references/projects-best-practices.md` — the project

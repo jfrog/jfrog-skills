@@ -143,11 +143,16 @@ patterns, and the `--audit` contract, see
 Load these only when the situation calls for them. Avoid loading more
 than 2-3 in a single conversation turn.
 
-- `references/creation-flow.md` — the full conversational flow and
-  the per-archetype customisation prompts.
+- `references/creation-flow.md` — the skill-specific stages
+  (resolution → Phase 1 → Phase 2) and per-archetype customisation
+  prompts.
+- `../jfrog/references/project-skills-conversation-contract.md` —
+  Stage 5 (preview), Stage 6 (pipe + report), `--audit`, re-apply
+  loop, "what this flow does not do" (shared with
+  `jfrog-project-repo-structure`).
 - `../jfrog/references/projects-verification-contract.md` —
   idempotency state machine, outcome JSON shape, recovery patterns,
-  `--audit` contract (shared with `jfrog-project-repo-structure`).
+  `--audit` contract, shared gotchas (also shared).
 - `../jfrog/references/project-templates-artifactory-repo.md` —
   templates-repo discovery, fetch chain, seeding instructions.
 - `../jfrog/references/projects-best-practices.md` — project

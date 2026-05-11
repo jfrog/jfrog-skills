@@ -5,6 +5,12 @@ wants a new project" to "outcome JSON reported back". v2: no local
 writes, templates fetched from Artifactory with a bundled fallback,
 JSON piped to the apply script via stdin.
 
+Stages 5 (preview), 6 (pipe + report), the re-apply loop, the
+`--audit` opt-in, and the "what this flow does not do" rules are
+shared with `jfrog-project-repo-structure` and live in
+[`../../jfrog/references/project-skills-conversation-contract.md`](../../jfrog/references/project-skills-conversation-contract.md).
+This file covers only the skill-specific stages (1-4).
+
 ## Six-stage shape
 
 ```mermaid
@@ -112,88 +118,13 @@ Same in-memory customise pattern.
    Skip the entire block if the user is not wiring CI right now; they
    can re-run later to add it.
 
-## Stage 5 — Preview JSON inline
+## Stages 5-6, audit, recovery
 
-Render the full customised JSON in the conversation as a single
-```json fenced block. **Do not write it to disk yet.** Ask:
-
-> "Apply this to `<server-id>` now? Reply `yes` to pipe it to the
-> apply script, or tell me what to change."
-
-If the user requests changes, return to Stage 3 or Stage 4 as
-appropriate. Iterate until the user approves.
-
-## Stage 6 — Pipe to the apply script; report
-
-When the user approves:
-
-1. **Validate offline first** (optional but recommended):
-
-   ```bash
-   echo "$CUSTOMISED_JSON" \
-     | bash <skill_path>/scripts/jfrog-project-validate-template.sh
-   ```
-
-2. **Apply**:
-
-   ```bash
-   echo "$CUSTOMISED_JSON" \
-     | bash <skill_path>/scripts/jfrog-project-create-from-template.sh \
-         --server-id "$SERVER_ID"
-   ```
-
-   Pipe the in-memory JSON via stdin. The agent should construct the
-   command in a single Shell call so the JSON does not have to be
-   held in a temp file.
-
-3. **Capture the outcome JSON** (printed on stdout). Re-read it
-   instead of re-running the script.
-4. **Run post-apply checks** per the *Post-apply checks* subsection
-   in [`../SKILL.md`](../SKILL.md). For the per-resource state
-   machine and recovery patterns, see
-   [`../../jfrog/references/projects-verification-contract.md`](../../jfrog/references/projects-verification-contract.md).
-5. **Summarise to the user**: per-resource status from the outcome
-   JSON (`created`, `updated`, `already_exists`, `skipped` with
-   reason, or `errored`).
-
-## Re-applying after a failure
-
-The apply script is idempotent. If a resource errors:
-
-1. Show the user the error from the outcome JSON.
-2. Fix the input (e.g. a missing group on the platform → user
-   creates the group, or the agent edits the customised JSON to drop
-   the group reference).
-3. Re-pipe the corrected JSON to the apply script. Resources that
-   succeeded the first time report `already_exists` on the rerun.
-
-The agent never deletes or recreates a project to "clean up" a
-partial apply. The script will refuse to recreate an existing
-`project_key`, and the agent must surface that refusal verbatim.
-
-## Audit trail (opt-in)
-
-If the user wants every applied template archived in Artifactory,
-pass `--audit` to the apply script:
-
-```bash
-echo "$CUSTOMISED_JSON" \
-  | bash <skill_path>/scripts/jfrog-project-create-from-template.sh \
-      --server-id "$SERVER_ID" --audit
-```
-
-After a successful apply, the script writes
-`/artifactory/<templates-repo>/applied/<project-key>-<iso8601>.json`
-through the platform — no local file write involved.
-
-## What this flow does not do
-
-- It does not write any file to local disk. Customised JSON lives in
-  the agent's context window between fetch and apply.
-- It does not probe the caller's role before starting. Permission
-  errors come from the platform and are surfaced verbatim.
-- It does not create the templates repo on the user's behalf. If the
-  conventional repo is missing and no env var is set, the agent uses
-  the bundled blueprints.
-- It does not orchestrate API calls by hand. The apply script is the
-  authoritative mutator.
+Render the customised JSON inline, get user approval, pipe to
+`scripts/jfrog-project-create-from-template.sh` (validate first via
+`scripts/jfrog-project-validate-template.sh` if uncertain), capture
+the outcome JSON, run post-apply checks. Full pattern (preview,
+pipe-to-apply, capture outcome, run post-apply checks, summarise),
+plus the re-apply-after-failure loop, the `--audit` flag, and the
+"what this flow does not do" rules: see
+[`../../jfrog/references/project-skills-conversation-contract.md`](../../jfrog/references/project-skills-conversation-contract.md).

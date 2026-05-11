@@ -110,6 +110,8 @@ These files tell the agent *how* to perform specific operations.
 | `projects-api.md` | Access API for JFrog Projects (via `jf api`) |
 | `projects-best-practices.md` | Project doctrine: scope, key conventions, RBAC strategy, customer archetypes, four-part repo naming, SDLC stages, virtual aggregator ordering, External-stage pattern, push vs pull sharing |
 | `project-templates-artifactory-repo.md` | How the project workflow skills discover and fetch project templates from the org's Artifactory templates repo (with bundled fallback) |
+| `project-skills-conversation-contract.md` | Shared preview / pipe-to-apply / re-apply / `--audit` patterns used by both project workflow skills' flows |
+| `projects-verification-contract.md` | Shared idempotency state machine, outcome JSON v2 shape, recovery patterns, shared gotchas for both project workflow skills |
 | `oidc-integration.md` | OIDC provider config, identity mappings, CI claim recipes |
 
 #### API gaps (REST-only operations)

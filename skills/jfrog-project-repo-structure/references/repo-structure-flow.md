@@ -5,6 +5,13 @@ The walkthrough the `jfrog-project-repo-structure` skill follows from
 back". v2: no local writes, template fetched from Artifactory, JSON
 piped to the apply script via stdin.
 
+Stages 5 (preview), 6 (pipe + report), the re-apply loop, the
+`--audit` opt-in, and the "what this flow does not do" rules are
+shared with `jfrog-project-creation` and live in
+[`../../jfrog/references/project-skills-conversation-contract.md`](../../jfrog/references/project-skills-conversation-contract.md).
+This file covers only the skill-specific stages (1-4) plus the
+Sharing patterns subsection.
+
 ## Six-stage shape
 
 ```mermaid
@@ -275,67 +282,21 @@ enforced unless `--strict-naming` is set.
   `jfrog-project-application` skill).
 - **Multi-write (federation)** → out of scope here.
 
-## Stage 5 — Preview JSON inline
+## Stages 5-6, audit, recovery
 
-Render the customised JSON inline as a fenced ```json block. Show
-only the `stages`, `repositories`, `external_stage_rbac`, and
-`sharing` sections plus a one-line reminder of the project key —
-omit the project-entity sections to keep the preview focused.
+Render the customised JSON inline (preview can omit project-entity
+sections and focus on `stages`, `repositories`,
+`external_stage_rbac`, `sharing` plus a one-line project-key
+reminder). Get user approval, pipe to
+`scripts/jfrog-project-apply-repo-structure.sh` (validate first via
+`scripts/jfrog-project-validate-repo-structure.sh --strict-naming`
+if uncertain), capture the outcome JSON, run post-apply checks.
+Full pattern, plus the re-apply-after-failure loop, the `--audit`
+flag (suffix is `-repos-<iso8601>.json`), and the "what this flow
+does not do" rules: see
+[`../../jfrog/references/project-skills-conversation-contract.md`](../../jfrog/references/project-skills-conversation-contract.md).
 
-Ask:
-
-> "Apply this to `<server-id>` now? Reply `yes` to pipe it to the
-> apply script, or tell me what to change."
-
-If the user requests changes, return to Stage 3 or 4 as appropriate.
-
-## Stage 6 — Pipe to the apply script; report
-
-When the user approves:
-
-1. **Validate offline first** (optional but recommended):
-
-   ```bash
-   echo "$CUSTOMISED_JSON" \
-     | bash <skill_path>/scripts/jfrog-project-validate-repo-structure.sh \
-         --strict-naming
-   ```
-
-2. **Apply**:
-
-   ```bash
-   echo "$CUSTOMISED_JSON" \
-     | bash <skill_path>/scripts/jfrog-project-apply-repo-structure.sh \
-         --server-id "$SERVER_ID"
-   ```
-
-3. **Capture the outcome JSON** from stdout. Re-read it instead of
-   re-running the script.
-4. **Run post-apply checks** per the *Post-apply checks* subsection
-   in [`../SKILL.md`](../SKILL.md). For the per-resource state
-   machine and recovery patterns, see
-   [`../../jfrog/references/projects-verification-contract.md`](../../jfrog/references/projects-verification-contract.md).
-5. **Summarise**: per-resource status from the outcome JSON.
-
-## Re-applying after a failure
-
-The apply script is idempotent. Resources that succeeded the first
-time report `already_exists` on the rerun. The script never deletes a
-repository the template does not mention; if the user wants to drop a
-repo, they delete it manually first and then re-run.
-
-## Audit trail (opt-in)
-
-Same `--audit` flag as `jfrog-project-creation`. On success, the
-script PUTs a copy of the input to
-`/artifactory/<templates-repo>/applied/<project-key>-repos-<iso8601>.json`.
-
-## What this flow does not do
-
-- Does not write any file to local disk.
-- Does not probe the caller's role before starting.
-- Does not create the project entity — `jfrog-project-creation`
-  handles that.
-- Does not rename or delete existing repositories. Naming-convention
-  violations on existing repos are reported as warnings (or errors
-  in `--strict-naming` mode); the user fixes them manually.
+This flow additionally never renames or deletes existing
+repositories: naming-convention violations on existing repos are
+reported as warnings (or errors in `--strict-naming` mode); the
+user fixes them manually.
