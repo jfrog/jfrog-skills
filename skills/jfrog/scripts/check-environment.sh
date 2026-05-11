@@ -6,19 +6,17 @@
 # to avoid redundant checks. The skills-cache/ dir holds only this file and
 # the OneModel schema cache — not temp API output.
 #
-# Usage:
-#   bash check-environment.sh [<model-slug>] [--force]
-#
-# stdout: bare JFROG_CLI_USER_AGENT value (one line) — agent captures it
-#         and runs `export JFROG_CLI_USER_AGENT='<v>'` once at the top of
-#         every bash invocation that calls jf
+# stdout: eval-able shell exports (JFROG_CLI_USER_AGENT)
 # stderr: JSON state (informational, also written to cache file)
 #
 # Exit codes:
-#   0 — cache fresh, CLI ready
-#   1 — cache refreshed, CLI ready
-#   2 — jf not installed
-#   3 — jf below MIN_CLI_VERSION (required for `jf api`)
+#   0 — Cache is fresh, CLI is ready
+#   1 — Cache was stale/missing and has been refreshed
+#   2 — jf is not installed
+#   3 — jf is installed but below MIN_CLI_VERSION (required for `jf api`)
+#
+# Usage:
+#   eval "$(bash check-environment.sh [--force])"
 
 set -euo pipefail
 
@@ -35,14 +33,9 @@ FORCE=false
 # skill) landed in 2.100.0; older CLIs fail with "unknown command: api".
 MIN_CLI_VERSION="2.100.0"
 
-MODEL_SLUG=""
-for arg in "$@"; do
-  if [[ "$arg" == "--force" ]]; then
-    FORCE=true
-  elif [[ -z "$MODEL_SLUG" ]]; then
-    MODEL_SLUG="$arg"
-  fi
-done
+if [[ "${1:-}" == "--force" ]]; then
+  FORCE=true
+fi
 
 now_epoch() {
   date -u +%s
@@ -151,11 +144,11 @@ emit_skill_env() {
   skill_version="${skill_version:-unknown}"
   cli_version=$(jq -r '.cli_version // "unknown"' "$CACHE_FILE" 2>/dev/null || echo "unknown")
   ua=""
-  if [[ -n "$MODEL_SLUG" ]]; then
-    ua="model/${MODEL_SLUG} "
+  if [[ -n "${JFROG_SKILL_MODEL:-}" ]]; then
+    ua="model/${JFROG_SKILL_MODEL} "
   fi
   ua="${ua}jfrog-skills/${skill_version} jfrog-cli-go/${cli_version}"
-  printf '%s\n' "$ua"
+  echo "export JFROG_CLI_USER_AGENT='${ua}'"
 }
 
 # Main

@@ -1,0 +1,115 @@
+{
+  "template_version": "1.0",
+  "blueprint": "enterprise-budget-id",
+  "project": {
+    "key": "fin-1042",
+    "display_name": "Finance Platform 1042",
+    "description": "Project key tied to internal budget identifier (immutable, survives reorgs). Membership flows from a central IdP sync, so manage_members is off. Roles align with a three-tier flow that the Phase 3+4 skill maps to repository stages.",
+    "quota_gb": 200,
+    "admin_privileges": {
+      "manage_members": false,
+      "manage_resources": true,
+      "index_resources": true
+    }
+  },
+  "admins": {
+    "users": [],
+    "groups": ["fin-1042-admins"]
+  },
+  "roles": [
+    { "name": "Developer", "type": "PREDEFINED" },
+    { "name": "Contributor", "type": "PREDEFINED" },
+    { "name": "Release Manager", "type": "PREDEFINED" },
+    { "name": "Security Manager", "type": "PREDEFINED" }
+  ],
+  "members": [
+    { "group": "fin-1042-developers", "roles": ["Developer"] },
+    { "group": "fin-1042-curators", "roles": ["Contributor"] },
+    { "group": "fin-1042-release", "roles": ["Release Manager"] },
+    { "group": "fin-1042-security", "roles": ["Security Manager"] }
+  ],
+  "oidc": {
+    "provider": {
+      "name": "fin-1042-gha",
+      "issuer_url": "https://token.actions.githubusercontent.com",
+      "provider_type": "github",
+      "audience": "https://mycompany.jfrog.io",
+      "description": "GitHub Actions for the Finance 1042 source repositories"
+    },
+    "identity_mappings": [
+      {
+        "name": "main-branch-publish",
+        "priority": 100,
+        "description": "Issue Developer-scope tokens for main-branch builds in the canonical source repo",
+        "claims": {
+          "repository_owner": "myorg",
+          "repository": "myorg/fin-1042-app",
+          "ref": "refs/heads/main"
+        },
+        "token_spec": {
+          "scope": "applied-permissions/groups:fin-1042-developers",
+          "expires_in": 1800,
+          "audience": "*@*"
+        }
+      },
+      {
+        "name": "release-publish",
+        "priority": 200,
+        "description": "Issue Release Manager-scope tokens when the release workflow runs",
+        "claims": {
+          "repository_owner": "myorg",
+          "repository": "myorg/fin-1042-app",
+          "workflow": "release.yml"
+        },
+        "token_spec": {
+          "scope": "applied-permissions/groups:fin-1042-release",
+          "expires_in": 1800,
+          "audience": "*@*"
+        }
+      }
+    ]
+  },
+  "stages": ["DEV", "QA", "PROD", "External"],
+  "repositories": [
+    { "tech": "maven", "maturity": "dev",      "locator": "local"  },
+    { "tech": "maven", "maturity": "qa",       "locator": "local"  },
+    { "tech": "maven", "maturity": "prod",     "locator": "local"  },
+    { "tech": "maven", "maturity": "external", "locator": "remote",
+      "url": "https://repo.maven.apache.org/maven2/" },
+    { "tech": "maven", "maturity": "all",      "locator": "virtual",
+      "aggregates": ["prod", "qa", "dev", "external"],
+      "resolution_order": ["prod", "qa", "dev", "external"] },
+
+    { "tech": "npm", "maturity": "dev",      "locator": "local"  },
+    { "tech": "npm", "maturity": "qa",       "locator": "local"  },
+    { "tech": "npm", "maturity": "prod",     "locator": "local"  },
+    { "tech": "npm", "maturity": "external", "locator": "remote",
+      "url": "https://registry.npmjs.org/" },
+    { "tech": "npm", "maturity": "all",      "locator": "virtual",
+      "aggregates": ["prod", "qa", "dev", "external"],
+      "resolution_order": ["prod", "qa", "dev", "external"] },
+
+    { "tech": "docker", "maturity": "dev",      "locator": "local"  },
+    { "tech": "docker", "maturity": "qa",       "locator": "local"  },
+    { "tech": "docker", "maturity": "prod",     "locator": "local"  },
+    { "tech": "docker", "maturity": "external", "locator": "remote",
+      "url": "https://registry-1.docker.io/" },
+    { "tech": "docker", "maturity": "all",      "locator": "virtual",
+      "aggregates": ["prod", "qa", "dev", "external"],
+      "resolution_order": ["prod", "qa", "dev", "external"] }
+  ],
+  "external_stage_rbac": {
+    "Developer":        ["READ_REPOSITORY", "ANNOTATE_REPOSITORY", "DEPLOY_CACHE_REPOSITORY"],
+    "Contributor":      ["READ_REPOSITORY", "ANNOTATE_REPOSITORY", "DEPLOY_CACHE_REPOSITORY"],
+    "Release Manager":  ["READ_REPOSITORY"],
+    "Security Manager": ["READ_REPOSITORY"]
+  },
+  "sharing": [
+    {
+      "role": "producer",
+      "repository": "fin-1042-maven-prod-local",
+      "consumer_projects": ["fin-1043", "fin-1044"],
+      "description": "Share Finance Platform 1042's Maven prod artifacts with sibling finance projects (read-only)"
+    }
+  ]
+}

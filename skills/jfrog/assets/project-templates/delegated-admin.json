@@ -1,0 +1,97 @@
+{
+  "template_version": "1.0",
+  "blueprint": "delegated-admin",
+  "project": {
+    "key": "app-04217",
+    "display_name": "Application 04217",
+    "description": "Delegated-admin archetype. Application owner group holds Project Admin so the platform team is not a bottleneck. Membership is groups-only; OIDC is required for any CI publish. Suitable for orgs with thousands of applications.",
+    "quota_gb": 100,
+    "admin_privileges": {
+      "manage_members": true,
+      "manage_resources": true,
+      "index_resources": true
+    }
+  },
+  "admins": {
+    "users": [],
+    "groups": ["app-04217-owners"]
+  },
+  "roles": [
+    { "name": "Developer", "type": "PREDEFINED" },
+    { "name": "Release Manager", "type": "PREDEFINED" },
+    { "name": "Security Manager", "type": "PREDEFINED" },
+    { "name": "Viewer", "type": "PREDEFINED" }
+  ],
+  "members": [
+    { "group": "app-04217-developers", "roles": ["Developer"] },
+    { "group": "app-04217-release", "roles": ["Release Manager"] },
+    { "group": "app-04217-security", "roles": ["Security Manager"] },
+    { "group": "app-04217-readers", "roles": ["Viewer"] }
+  ],
+  "oidc": {
+    "provider": {
+      "name": "app-04217-gha",
+      "issuer_url": "https://token.actions.githubusercontent.com",
+      "provider_type": "github",
+      "audience": "https://mycompany.jfrog.io",
+      "description": "GitHub Actions OIDC for app-04217 source repositories"
+    },
+    "identity_mappings": [
+      {
+        "name": "main-branch-publish",
+        "priority": 100,
+        "description": "Developer-scope token for main-branch CI runs",
+        "claims": {
+          "repository": "myorg/app-04217-service",
+          "ref": "refs/heads/main"
+        },
+        "token_spec": {
+          "scope": "applied-permissions/groups:app-04217-developers",
+          "expires_in": 1800,
+          "audience": "*@*"
+        }
+      },
+      {
+        "name": "pr-readonly",
+        "priority": 200,
+        "description": "Read-only token for pull-request validation runs",
+        "claims": {
+          "repository": "myorg/app-04217-service",
+          "event_name": "pull_request"
+        },
+        "token_spec": {
+          "scope": "applied-permissions/groups:app-04217-readers",
+          "expires_in": 900,
+          "audience": "*@*"
+        }
+      }
+    ]
+  },
+  "stages": ["DEV", "PROD", "External"],
+  "repositories": [
+    { "tech": "docker", "maturity": "dev",      "locator": "local"  },
+    { "tech": "docker", "maturity": "prod",     "locator": "local"  },
+    { "tech": "docker", "maturity": "external", "locator": "remote",
+      "url": "https://registry-1.docker.io/",
+      "description": "Self-service expansion: add more remotes (gcr.io, ghcr.io) under the same External stage as the application grows." },
+    { "tech": "docker", "maturity": "all",      "locator": "virtual",
+      "aggregates": ["prod", "dev", "external"],
+      "resolution_order": ["prod", "dev", "external"] }
+  ],
+  "external_stage_rbac": {
+    "Developer":        ["READ_REPOSITORY", "ANNOTATE_REPOSITORY", "DEPLOY_CACHE_REPOSITORY"],
+    "Release Manager":  ["READ_REPOSITORY"],
+    "Security Manager": ["READ_REPOSITORY"],
+    "Viewer":           ["READ_REPOSITORY"]
+  },
+  "sharing": [
+    {
+      "role": "consumer",
+      "via": "smart-remote",
+      "from_project": "team-platform",
+      "from_repository": "team-platform-docker-prod-local",
+      "into_repository": "app-04217-team-platform-docker-remote",
+      "description": "Pull base images from the platform team via a smart remote (cache-decoupled from producer lifecycle)"
+    }
+  ]
+}
