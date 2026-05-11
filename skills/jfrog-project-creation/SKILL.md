@@ -112,27 +112,6 @@ Phase 2 questions, preview, apply, verify — lives in
 `references/creation-flow.md`. Read it once at the start of the first
 project-creation turn.
 
-### Brief outline
-
-1. Resolve the templates repo and **fetch a starting template** via
-   the three-tier chain (per-project / org-default / archetype) or
-   the bundled fallback.
-2. Phase 1 questions: project key (validate against the regex in
-   `../jfrog/references/projects-api.md`), display name, description,
-   quota in GB or Unlimited, `admin_privileges` flags, Project Admin
-   groups.
-3. Phase 2 questions: which predefined roles to enable, any custom
-   roles, group → role bindings, whether to wire OIDC and (if yes)
-   provider details plus identity-mapping claim filters.
-4. Show the customised JSON template **inline in the conversation**.
-   Confirm with the user before any mutation — the cautious-execution
-   gate from the base SKILL.md.
-5. Pipe the JSON via stdin to
-   `scripts/jfrog-project-create-from-template.sh`. Do not write the
-   JSON to disk first.
-6. Run the **Post-apply checks** below and report the structured
-   outcome.
-
 ### Post-apply checks
 
 After the apply script returns, run these read-only checks against

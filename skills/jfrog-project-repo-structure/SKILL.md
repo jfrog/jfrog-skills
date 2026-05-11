@@ -114,25 +114,6 @@ RBAC, sharing, preview, apply, verify — lives in
 `references/repo-structure-flow.md`. Read it once at the start of the
 first repo-structure turn.
 
-### Brief outline
-
-1. Resolve the templates repo and **fetch the project's template**.
-   Use the same three-tier chain as `jfrog-project-creation` so the
-   in-memory JSON carries the project's identity (Phase 1+2
-   sections) alongside whatever Phase 3+4 sections already exist.
-2. **Phase 3 questions:** which technology stacks (Maven, npm, PyPI,
-   Docker, Go, NuGet, Helm, etc.), which stages (default
-   DEV/QA/PROD/External, can be customised), External-stage RBAC
-   confirmation, virtual aggregator resolution order.
-3. **Phase 4 questions (optional, skip if no cross-project sharing):**
-   producer or consumer side; if producer, which repo to share and
-   with which projects; if consumer, which producer repo to attach
-   via push or Smart Remote.
-4. Show the customised JSON inline. Confirm with the user — the
-   cautious-execution gate.
-5. Pipe to `scripts/jfrog-project-apply-repo-structure.sh` via stdin.
-6. Run the **Post-apply checks** below and report.
-
 ### Post-apply checks
 
 After the apply script returns, run these read-only checks against
