@@ -211,25 +211,15 @@ safe.
 - **Membership is groups-first.** Templates that list users without
   groups will pass validation but the agent should warn the user
   during the walkthrough.
-- **OIDC provider is platform-scoped.** Two projects sharing the
-  same GitHub org typically share one provider; the script checks
-  for an existing provider with the same name before creating, and
-  adds new identity mappings non-destructively.
 - **Storage quota at 100% may block deployments.** Surface this when
   setting `quota_gb`. Quotas are editable later; project keys are
   not.
-- **Cross-call shell PIDs differ.** Save and echo temp file paths
-  per the base SKILL.md *Preserving command output* pattern when
-  handing state between Shell calls.
-- **Permissions errors come from the platform, not from the skill.**
-  If the caller cannot create projects or members, the apply script
-  surfaces the 403 from the platform. The skill does not probe
-  caller permissions before piping; do not add a `system/permissions`
-  preflight to the agent flow.
-- **Test data hygiene.** Every example, comment, and prompt in this
-  skill uses generic placeholder names (`mycompany.jfrog.io`,
-  `team-x`, `app-04217`, `fin-1042`). Do not introduce real customer
-  or internal names.
+
+Cross-skill gotchas (cross-call shell PIDs, permissions errors from
+the platform, OIDC provider scoping, `--audit` behaviour, test data
+hygiene) live in
+[`../jfrog/references/projects-verification-contract.md`](../jfrog/references/projects-verification-contract.md)
+§*Shared gotchas*.
 
 ## Out of scope (handled by other workflow skills)
 

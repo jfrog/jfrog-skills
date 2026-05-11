@@ -227,13 +227,12 @@ reports on stdout.
 - **Action-vocabulary varies by platform version.** The apply
   script's External-stage RBAC block reads the live vocabulary from
   the platform when present rather than hard-coding action names.
-- **Cross-call shell PIDs differ.** Save and echo temp file paths
-  per the base SKILL.md *Preserving command output* pattern.
-- **Permissions errors come from the platform, not from the skill.**
-  No `system/permissions` preflight; the platform 403 is surfaced
-  verbatim.
-- **Test data hygiene.** Generic placeholder names only
-  (`mycompany.jfrog.io`, `team-x`, `team-y`, `app-04217`).
+
+Cross-skill gotchas (cross-call shell PIDs, permissions errors from
+the platform, OIDC provider scoping, `--audit` behaviour, test data
+hygiene) live in
+[`../jfrog/references/projects-verification-contract.md`](../jfrog/references/projects-verification-contract.md)
+§*Shared gotchas*.
 
 ## Out of scope (handled by other workflow skills)
 

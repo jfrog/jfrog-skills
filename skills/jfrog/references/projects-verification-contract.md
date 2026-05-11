@@ -194,3 +194,32 @@ templates repo resolved), verification is identical. The only
 difference is no Artifactory record of the input — opt into
 `--audit` on the next apply for a durable record, or upload the
 final JSON to the templates repo manually.
+
+## Shared gotchas
+
+These apply to both `jfrog-project-creation` and
+`jfrog-project-repo-structure`; the workflow SKILL.mds carry only
+their skill-specific gotchas and point here for the rest.
+
+- **Cross-call shell PIDs differ.** Save and echo temp file paths
+  per the base SKILL.md *Preserving command output* pattern when
+  handing state between Shell calls.
+- **Permissions errors come from the platform, not from the
+  skill.** Neither apply script probes caller permissions; a 403
+  from the platform is recorded `errored` on the offending resource
+  and surfaced verbatim. Do not add a `system/permissions`
+  preflight to either agent flow.
+- **OIDC provider is platform-scoped.** Two projects sharing the
+  same GitHub org typically share one provider; the creation apply
+  script checks for an existing provider with the same name before
+  creating and adds new identity mappings non-destructively.
+  Identity-mapping scopes can still be project-specific.
+- **`--audit` is opt-in.** Off by default. When set, a successful
+  apply PUTs a copy of the input to
+  `/artifactory/<templates-repo>/applied/<key>-<ts>.json` (or
+  `-repos-<ts>.json` for repo-structure). Audit upload failures are
+  warnings, not errors.
+- **Test data hygiene.** Every example, comment, and prompt uses
+  generic placeholder names (`mycompany.jfrog.io`, `team-x`,
+  `team-y`, `app-04217`, `fin-1042`). Do not introduce real
+  customer or internal names.
