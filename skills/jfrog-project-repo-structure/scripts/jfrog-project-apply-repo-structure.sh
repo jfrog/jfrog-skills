@@ -60,187 +60,21 @@ set -euo pipefail
 # Audit (optional):
 #   PUT    /artifactory/<templates-repo>/applied/<key>-<ISO8601>.json
 
-# ---------------------------------------------------------------------------
-# Argument parsing
-# ---------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../../jfrog/scripts/lib/project-template-runtime.sh"
 
-SERVER_ID=""
-TEMPLATE_URL=""
-DRY_RUN=0
-STRICT_NAMING=0
-AUDIT=0
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --server-id) SERVER_ID="${2:-}"; shift 2 ;;
-    --server-id=*) SERVER_ID="${1#--server-id=}"; shift ;;
-    --template-url) TEMPLATE_URL="${2:-}"; shift 2 ;;
-    --template-url=*) TEMPLATE_URL="${1#--template-url=}"; shift ;;
-    --dry-run) DRY_RUN=1; shift ;;
-    --strict-naming) STRICT_NAMING=1; shift ;;
-    --audit) AUDIT=1; shift ;;
-    -h|--help)
-      sed -n '2,40p' "$0"
-      exit 0
-      ;;
-    *)
-      echo "ERROR: unexpected argument: $1" >&2
-      exit 1
-      ;;
-  esac
-done
-
-for cmd in jq jf; do
-  if ! command -v "$cmd" &>/dev/null; then
-    echo "ERROR: ${cmd} is not installed on PATH" >&2
-    exit 1
-  fi
-done
-
-SERVER_FLAG=()
-if [[ -n "$SERVER_ID" ]]; then
-  SERVER_FLAG=(--server-id="$SERVER_ID")
-fi
-
-# ---------------------------------------------------------------------------
-# Workspace + input ingestion
-# ---------------------------------------------------------------------------
-
-WORKDIR=$(mktemp -d -t jfrog-project-apply-repos.XXXXXX)
-trap 'rm -rf "$WORKDIR"' EXIT
-TEMPLATE_PATH="$WORKDIR/template.json"
-RESOURCES_FILE="$WORKDIR/resources.ndjson"
-WARNINGS_FILE="$WORKDIR/warnings.ndjson"
-ERRORS_FILE="$WORKDIR/errors.ndjson"
-: >"$RESOURCES_FILE" >"$WARNINGS_FILE" >"$ERRORS_FILE"
-
-INPUT_SOURCE="stdin"
-if [[ -n "$TEMPLATE_URL" ]]; then
-  INPUT_SOURCE="template-url"
-  if ! jf api "$TEMPLATE_URL" "${SERVER_FLAG[@]}" >"$TEMPLATE_PATH" 2>"$WORKDIR/fetch.err"; then
-    echo "ERROR: failed to fetch template from $TEMPLATE_URL" >&2
-    cat "$WORKDIR/fetch.err" >&2 || true
-    exit 1
-  fi
-else
-  if [[ -t 0 ]]; then
-    echo "ERROR: no template on stdin and --template-url not set" >&2
-    echo "Usage: echo \"\$JSON\" | $0 [--server-id <id>] [--dry-run] [--strict-naming] [--audit]" >&2
-    exit 1
-  fi
-  cat - >"$TEMPLATE_PATH"
-fi
-
-if [[ ! -s "$TEMPLATE_PATH" ]]; then
-  echo "ERROR: template input is empty" >&2
-  exit 1
-fi
-
-if ! jq -e . "$TEMPLATE_PATH" >/dev/null 2>&1; then
-  echo "ERROR: template input is not valid JSON" >&2
-  exit 1
-fi
-
-TPL_VERSION=$(jq -r '.template_version // empty' "$TEMPLATE_PATH")
-if [[ -z "$TPL_VERSION" ]]; then
-  echo "ERROR: template_version missing in input" >&2
-  exit 1
-fi
-TPL_MAJOR="${TPL_VERSION%%.*}"
-if [[ "$TPL_MAJOR" != "1" ]]; then
-  echo "ERROR: template_version $TPL_VERSION not supported (this script handles 1.x)" >&2
-  exit 1
-fi
-
-PROJECT_KEY=$(jq -r '.project.key // empty' "$TEMPLATE_PATH")
-if [[ -z "$PROJECT_KEY" ]]; then
-  echo "ERROR: project.key missing in template" >&2
-  exit 1
-fi
-if ! [[ "$PROJECT_KEY" =~ ^[a-z][a-z0-9-]{0,30}[a-z0-9]$ ]]; then
-  echo "ERROR: project.key '$PROJECT_KEY' violates the naming rule" >&2
-  exit 1
-fi
-
-STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+parse_common_args "$@"
+check_prereqs jq jf
+setup_workspace jfrog-project-apply-repos
+ingest_template
+validate_template_basics
 
 # Naming-convention regex: <project_key>-<tech>-<maturity>-<locator>
 NAMING_REGEX="^${PROJECT_KEY}-[a-z][a-z0-9]*-[a-z][a-z0-9-]*-(local|remote|virtual)$"
 
 # ---------------------------------------------------------------------------
-# Helpers (mirrored from jfrog-project-create-from-template.sh)
+# Repo-name helpers (specific to this script)
 # ---------------------------------------------------------------------------
-
-http_status_of() {
-  local err_file="$1"
-  local line
-  line=$(grep -F 'Http Status:' "$err_file" 2>/dev/null | tail -1 || true)
-  if [[ "$line" =~ Http\ Status:\ ([0-9]+) ]]; then
-    echo "${BASH_REMATCH[1]}"
-    return
-  fi
-  line=$(grep -E 'returned [0-9]+' "$err_file" 2>/dev/null | tail -1 || true)
-  if [[ "$line" =~ returned\ ([0-9]+) ]]; then
-    echo "${BASH_REMATCH[1]}"
-    return
-  fi
-  echo "0"
-}
-
-api_call() {
-  local method="$1"
-  local path="$2"
-  local body="${3:-}"
-  local out err
-  out=$(mktemp -p "$WORKDIR" out.XXXXXX)
-  err=$(mktemp -p "$WORKDIR" err.XXXXXX)
-  set +e
-  if [[ -n "$body" ]]; then
-    local body_file
-    body_file=$(mktemp -p "$WORKDIR" body.XXXXXX)
-    printf '%s' "$body" >"$body_file"
-    jf api "$path" -X "$method" -H "Content-Type: application/json" \
-      --input "$body_file" "${SERVER_FLAG[@]}" >"$out" 2>"$err"
-  else
-    jf api "$path" -X "$method" "${SERVER_FLAG[@]}" >"$out" 2>"$err"
-  fi
-  API_RC=$?
-  set -e
-  API_STATUS=$(http_status_of "$err")
-  API_OUT_FILE="$out"
-  API_ERR_FILE="$err"
-}
-
-record_resource() {
-  local kind="$1"
-  local id="$2"
-  local outcome="$3"
-  local extra="${4:-{\}}"
-  jq -nc \
-    --arg kind "$kind" \
-    --arg id "$id" \
-    --arg outcome "$outcome" \
-    --argjson extra "$extra" \
-    '{kind:$kind, key:$id, status:$outcome} + $extra' \
-    >>"$RESOURCES_FILE"
-}
-
-record_warning() {
-  jq -nc --arg msg "$1" '{message:$msg}' >>"$WARNINGS_FILE"
-}
-
-record_error() {
-  jq -nc --arg msg "$1" '{message:$msg}' >>"$ERRORS_FILE"
-}
-
-write_action() {
-  if (( DRY_RUN == 1 )); then
-    API_RC=0
-    API_STATUS=200
-    return 0
-  fi
-  return 1
-}
 
 # Derive the full repo name from a template entry.
 # Args: tech, maturity, locator, name_override
@@ -774,7 +608,7 @@ apply_sharing_consumer_smart_remote() {
   # Resolve active server URL via jf config show
   local server_url=""
   set +e
-  server_url=$(jf config show "${SERVER_FLAG[@]/--server-id=/}" 2>/dev/null \
+  server_url=$(jf config show "${SERVER_FLAG[@]+"${SERVER_FLAG[@]/--server-id=/}"}" 2>/dev/null \
     | awk -F': ' '/^Url:/ {print $2; exit}')
   set -e
   if [[ -z "$server_url" ]]; then
@@ -861,93 +695,23 @@ apply_sharing_consumer_smart_remote() {
 # Run
 # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Audit (opt-in PUT to Artifactory)
-# ---------------------------------------------------------------------------
-
-apply_audit() {
-  (( AUDIT == 1 )) || return 0
-  local error_count
-  error_count=$(wc -l <"$ERRORS_FILE" | tr -d ' ')
-  if [[ "$error_count" -ne 0 ]]; then
-    record_warning "Audit upload skipped: apply produced errors."
-    return 0
-  fi
-
-  local repo
-  repo="${JFROG_PROJECT_TEMPLATES_REPO:-project-templates-generic-local}"
-  local ts
-  ts=$(date -u +%Y%m%dT%H%M%SZ)
-  local path="/artifactory/$repo/applied/$PROJECT_KEY-repos-$ts.json"
-
-  if (( DRY_RUN == 1 )); then
-    record_resource audit "$path" skipped '{"note": "dry_run"}'
-    return 0
-  fi
-
-  if ! jf api "$path" -X PUT -H "Content-Type: application/json" \
-        --input "$TEMPLATE_PATH" "${SERVER_FLAG[@]}" \
-        >"$WORKDIR/audit.out" 2>"$WORKDIR/audit.err"; then
-    local status
-    status=$(http_status_of "$WORKDIR/audit.err")
-    record_resource audit "$path" errored "$(jq -nc --arg s "$status" '{http_status: ($s|tonumber), error: "audit_upload_failed"}')"
-    record_warning "Audit upload to $path failed (HTTP $status); apply itself succeeded."
-    return 0
-  fi
-  record_resource audit "$path" created '{"http_status": 201}'
-}
-
 if verify_project; then
   apply_stages
   apply_repositories
   apply_external_rbac
   apply_sharing
-  apply_audit
+  audit_upload "-repos"
 fi
-
-FINISHED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # ---------------------------------------------------------------------------
 # Outcome report
 # ---------------------------------------------------------------------------
 
-REPORT=$(jq -n \
-  --arg schema_version "2.0" \
-  --arg input_source "$INPUT_SOURCE" \
-  --arg template_url "$TEMPLATE_URL" \
-  --arg template_version "$TPL_VERSION" \
-  --arg blueprint "$(jq -r '.blueprint // "custom"' "$TEMPLATE_PATH")" \
-  --arg project_key "$PROJECT_KEY" \
-  --arg server_id "${SERVER_ID:-default}" \
-  --arg started_at "$STARTED_AT" \
-  --arg finished_at "$FINISHED_AT" \
-  --argjson dry_run "$( ((DRY_RUN == 1)) && echo true || echo false )" \
-  --argjson strict_naming "$( ((STRICT_NAMING == 1)) && echo true || echo false )" \
-  --argjson audit "$( ((AUDIT == 1)) && echo true || echo false )" \
-  --slurpfile resources "$RESOURCES_FILE" \
-  --slurpfile warnings  "$WARNINGS_FILE" \
-  --slurpfile errors    "$ERRORS_FILE" \
-  '
-    {
-      schema_version: $schema_version,
-      input_source: $input_source,
-      template_url: (if $template_url == "" then null else $template_url end),
-      template_version: $template_version,
-      blueprint: $blueprint,
-      project_key: $project_key,
-      server_id: $server_id,
-      dry_run: $dry_run,
-      strict_naming: $strict_naming,
-      audit: $audit,
-      started_at: $started_at,
-      finished_at: $finished_at,
-      summary: ($resources | group_by(.status) | map({(.[0].status): length}) | add // {}),
-      resources: $resources,
-      warnings: ($warnings | map(.message)),
-      errors:   ($errors   | map(.message))
-    }
-  ')
-
+EXTRAS=$(jq -nc \
+  --arg b "$(jq -r '.blueprint // "custom"' "$TEMPLATE_PATH")" \
+  --argjson sn "$( ((STRICT_NAMING == 1)) && echo true || echo false )" \
+  '{blueprint: $b, strict_naming: $sn}')
+REPORT=$(emit_outcome "$EXTRAS")
 echo "$REPORT"
 
 ERROR_COUNT=$(echo "$REPORT" | jq '.errors | length')

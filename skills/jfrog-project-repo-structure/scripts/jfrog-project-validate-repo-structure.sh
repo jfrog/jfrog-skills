@@ -25,84 +25,23 @@
 
 set -euo pipefail
 
-SERVER_ID=""
-TEMPLATE_URL=""
-CHECK_PLATFORM=0
-STRICT_NAMING=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../../jfrog/scripts/lib/project-template-runtime.sh"
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --server-id) SERVER_ID="${2:-}"; shift 2 ;;
-    --server-id=*) SERVER_ID="${1#--server-id=}"; shift ;;
-    --template-url) TEMPLATE_URL="${2:-}"; shift 2 ;;
-    --template-url=*) TEMPLATE_URL="${1#--template-url=}"; shift ;;
-    --check-platform) CHECK_PLATFORM=1; shift ;;
-    --strict-naming) STRICT_NAMING=1; shift ;;
-    -h|--help)
-      sed -n '2,26p' "$0"
-      exit 0
-      ;;
-    *)
-      echo "ERROR: unexpected argument: $1" >&2
-      exit 1
-      ;;
-  esac
-done
+parse_common_args "$@"
+check_prereqs jq
 
-for cmd in jq; do
-  if ! command -v "$cmd" &>/dev/null; then
-    echo "ERROR: $cmd is not installed on PATH" >&2
-    exit 1
-  fi
-done
-
-SERVER_FLAG=()
-if [[ -n "$SERVER_ID" ]]; then SERVER_FLAG=(--server-id="$SERVER_ID"); fi
-
-# Resolve schema path relative to the script
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SCHEMA_PATH="$SCRIPT_DIR/../../jfrog/assets/project-templates/schema.json"
 if [[ ! -f "$SCHEMA_PATH" ]]; then
   echo "ERROR: schema.json not found at $SCHEMA_PATH" >&2
   exit 1
 fi
 
-WORKDIR=$(mktemp -d -t jfrog-validate-repos.XXXXXX)
-trap 'rm -rf "$WORKDIR"' EXIT
-TEMPLATE_PATH="$WORKDIR/template.json"
-ERRORS_FILE="$WORKDIR/errors.ndjson"
-WARNINGS_FILE="$WORKDIR/warnings.ndjson"
-: >"$ERRORS_FILE" >"$WARNINGS_FILE"
+setup_workspace jfrog-validate-repos
+ingest_template
 
-if [[ -n "$TEMPLATE_URL" ]]; then
-  if ! command -v jf >/dev/null 2>&1; then
-    echo "ERROR: --template-url requires jf CLI" >&2
-    exit 1
-  fi
-  if ! jf api "$TEMPLATE_URL" "${SERVER_FLAG[@]}" >"$TEMPLATE_PATH" 2>"$WORKDIR/fetch.err"; then
-    echo "ERROR: failed to fetch template from $TEMPLATE_URL" >&2
-    cat "$WORKDIR/fetch.err" >&2 || true
-    exit 1
-  fi
-else
-  if [[ -t 0 ]]; then
-    echo "ERROR: no template on stdin and --template-url not set" >&2
-    echo "Usage: echo \"\$JSON\" | $0 [--check-platform] [--server-id <id>] [--strict-naming]" >&2
-    exit 1
-  fi
-  cat - >"$TEMPLATE_PATH"
-fi
-
-if [[ ! -s "$TEMPLATE_PATH" ]]; then
-  echo "ERROR: template input is empty" >&2
-  exit 1
-fi
-
-if ! jq -e . "$TEMPLATE_PATH" >/dev/null 2>&1; then
-  echo "ERROR: template input is not valid JSON" >&2
-  exit 1
-fi
-
+# Validate-repo flavour records {code, message}, not {message}. Override
+# the lib's apply-flavour helpers for this script only.
 record_error()   { jq -nc --arg c "$1" --arg m "$2" '{code:$c, message:$m}' >>"$ERRORS_FILE"; }
 record_warning() { jq -nc --arg c "$1" --arg m "$2" '{code:$c, message:$m}' >>"$WARNINGS_FILE"; }
 
@@ -387,13 +326,13 @@ fi
 
 REPORT=$(jq -n \
   --arg schema_version "2.0" \
-  --arg input_source "$([[ -n "$TEMPLATE_URL" ]] && echo template-url || echo stdin)" \
+  --arg input_source "$INPUT_SOURCE" \
   --arg template_url "$TEMPLATE_URL" \
   --arg project_key "$PROJECT_KEY" \
   --argjson ajv_ran "$AJV_RAN" \
   --argjson check_platform "$( ((CHECK_PLATFORM == 1)) && echo true || echo false )" \
   --argjson strict_naming "$( ((STRICT_NAMING == 1)) && echo true || echo false )" \
-  --slurpfile errors "$ERRORS_FILE" \
+  --slurpfile errors   "$ERRORS_FILE" \
   --slurpfile warnings "$WARNINGS_FILE" \
   --argjson platform_dry_run "$PLATFORM_REPORT" \
   '

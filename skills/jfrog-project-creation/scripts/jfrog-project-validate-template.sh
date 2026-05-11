@@ -31,79 +31,21 @@
 
 set -euo pipefail
 
-CHECK_PLATFORM=0
-SERVER_ID=""
-TEMPLATE_URL=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../../jfrog/scripts/lib/project-template-runtime.sh"
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --check-platform) CHECK_PLATFORM=1; shift ;;
-    --server-id) SERVER_ID="${2:-}"; shift 2 ;;
-    --server-id=*) SERVER_ID="${1#--server-id=}"; shift ;;
-    --template-url) TEMPLATE_URL="${2:-}"; shift 2 ;;
-    --template-url=*) TEMPLATE_URL="${1#--template-url=}"; shift ;;
-    -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
-    *) echo "ERROR: unexpected argument: $1" >&2; exit 1 ;;
-  esac
-done
+parse_common_args "$@"
+check_prereqs jq
+setup_workspace jfrog-project-validate
+ingest_template
 
-for cmd in jq; do
-  if ! command -v "$cmd" &>/dev/null; then
-    echo "ERROR: $cmd is not installed on PATH" >&2
-    exit 1
-  fi
-done
-
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 APPLY_SCRIPT="$SCRIPT_DIR/jfrog-project-create-from-template.sh"
 SCHEMA_FILE="$SCRIPT_DIR/../../jfrog/assets/project-templates/schema.json"
 
-WORKDIR=$(mktemp -d -t jfrog-project-validate.XXXXXX)
-trap 'rm -rf "$WORKDIR"' EXIT
-TEMPLATE_PATH="$WORKDIR/template.json"
-ERRORS_FILE="$WORKDIR/errors.txt"
-WARNINGS_FILE="$WORKDIR/warnings.txt"
-: >"$ERRORS_FILE" >"$WARNINGS_FILE"
-
-SERVER_FLAG=()
-if [[ -n "$SERVER_ID" ]]; then SERVER_FLAG=(--server-id="$SERVER_ID"); fi
-
-err()  { echo "ERROR: $*" >>"$ERRORS_FILE";   echo "ERROR: $*" >&2; }
-warn() { echo "WARN:  $*" >>"$WARNINGS_FILE"; echo "WARN:  $*" >&2; }
-
-# ---------------------------------------------------------------------------
-# Ingest template (stdin or --template-url)
-# ---------------------------------------------------------------------------
-
-if [[ -n "$TEMPLATE_URL" ]]; then
-  if ! command -v jf >/dev/null 2>&1; then
-    echo "ERROR: --template-url requires jf CLI" >&2
-    exit 1
-  fi
-  if ! jf api "$TEMPLATE_URL" "${SERVER_FLAG[@]}" >"$TEMPLATE_PATH" 2>"$WORKDIR/fetch.err"; then
-    echo "ERROR: failed to fetch template from $TEMPLATE_URL" >&2
-    cat "$WORKDIR/fetch.err" >&2 || true
-    exit 1
-  fi
-else
-  if [[ -t 0 ]]; then
-    echo "ERROR: no template on stdin and --template-url not set" >&2
-    echo "Usage: echo \"\$JSON\" | $0 [--check-platform] [--server-id <id>]" >&2
-    exit 1
-  fi
-  cat - >"$TEMPLATE_PATH"
-fi
-
-if [[ ! -s "$TEMPLATE_PATH" ]]; then
-  echo "ERROR: template input is empty" >&2
-  exit 1
-fi
-
-if ! jq -e . "$TEMPLATE_PATH" >/dev/null 2>&1; then
-  err "Template is not valid JSON"
-  echo '{"valid": false, "errors": ["template is not valid JSON"]}'
-  exit 2
-fi
+# Validate-script flavour: also surface every recorded error/warning on
+# stderr so a human reading the script's output sees them inline.
+err()  { record_error   "$1"; echo "ERROR: $1" >&2; }
+warn() { record_warning "$1"; echo "WARN:  $1" >&2; }
 
 # ---------------------------------------------------------------------------
 # Optional ajv schema validation
@@ -312,27 +254,27 @@ fi
 # Summary
 # ---------------------------------------------------------------------------
 
-ERROR_COUNT=$(wc -l <"$ERRORS_FILE"  | tr -d ' ')
+ERROR_COUNT=$(wc -l <"$ERRORS_FILE"   | tr -d ' ')
 WARN_COUNT=$( wc -l <"$WARNINGS_FILE" | tr -d ' ')
 
 VALID=$([[ "$ERROR_COUNT" -eq 0 ]] && echo true || echo false)
 
 REPORT=$(jq -n \
   --arg schema_version "2.0" \
-  --arg input_source "$([[ -n "$TEMPLATE_URL" ]] && echo template-url || echo stdin)" \
+  --arg input_source "$INPUT_SOURCE" \
   --arg template_url "$TEMPLATE_URL" \
   --argjson valid "$VALID" \
   --slurpfile platform <(if [[ -n "$PLATFORM_REPORT_FILE" && -f "$PLATFORM_REPORT_FILE" ]]; then cat "$PLATFORM_REPORT_FILE"; else echo "null"; fi) \
-  --rawfile errors_text   "$ERRORS_FILE" \
-  --rawfile warnings_text "$WARNINGS_FILE" \
+  --slurpfile errors   "$ERRORS_FILE" \
+  --slurpfile warnings "$WARNINGS_FILE" \
   '
     {
       schema_version: $schema_version,
       input_source: $input_source,
       template_url: (if $template_url == "" then null else $template_url end),
       valid: $valid,
-      errors:   ($errors_text   | split("\n") | map(select(. != "")) | map(sub("^ERROR: "; ""))),
-      warnings: ($warnings_text | split("\n") | map(select(. != "")) | map(sub("^WARN:  "; ""))),
+      errors:   ($errors   | map(.message)),
+      warnings: ($warnings | map(.message)),
       platform_dry_run: $platform[0]
     }
   ')
