@@ -1,239 +1,149 @@
 # OIDC integration
 
-When to read this file:
+Read this file to configure an OpenID Connect provider on the JFrog
+Platform, wire a CI system (GitHub Actions, GitLab CI, generic
+OIDC) to authenticate without static credentials, or use
+`jf exchange-oidc-token` (alias `jf eot`) inside a CI job.
 
-- Configuring an OpenID Connect provider on the JFrog Platform.
-- Wiring a CI system (GitHub Actions, GitLab CI, generic OIDC) to authenticate
-  to JFrog without static credentials.
-- Creating or auditing **identity mappings** that bind incoming OIDC claims to
-  JFrog roles, groups, or project scopes.
-- Using `jf exchange-oidc-token` (alias `jf eot`) inside a CI job to mint a
-  short-lived JFrog access token.
-
-For the conceptual role of OIDC inside a project's identity strategy, see
-[`projects-best-practices.md`](projects-best-practices.md) §"OIDC for CI
-authentication". For project-side member/role wiring, see
+For the conceptual role of OIDC inside a project's identity
+strategy, see
+[`projects-best-practices.md`](projects-best-practices.md) §"OIDC
+for CI authentication". For project-side member/role wiring, see
 [`projects-api.md`](projects-api.md).
 
-All endpoints below run through `jf api` (see the base SKILL.md *Invoking
-platform APIs with `jf api`* section). Calls require
-`required_permissions: ["full_network"]` in the Shell tool. OIDC provider and
-identity-mapping management requires platform-admin permissions on the
-resolved server.
+All endpoints run through `jf api` and require
+`required_permissions: ["full_network"]` in the Shell tool. Provider
+and identity-mapping management requires platform-admin permissions
+on the resolved server.
 
 Source: [OpenID Connect Integration](https://docs.jfrog.com/administration/docs/openid-connect-integration).
 
-## Two-layer model
+## Endpoints
 
-```mermaid
-flowchart LR
-    CI[CI job runner] -->|"OIDC ID token"| Provider[OIDC provider config<br/>POST /access/api/v1/oidc]
-    Provider -->|"validates issuer + audience"| Mapping[Identity mapping<br/>claim filter + token spec]
-    Mapping -->|"issues JFrog access token"| JF[JFrog Platform token<br/>scope: applied-permissions/groups:..."]
-    JF -->|"used by jf rt / jf api"| Resources[Project resources]
+Two-layer model: one **provider** per external issuer; one or more
+**identity mappings** per provider. The provider is platform-scoped;
+the mapping's `token_spec.scope` is how OIDC reaches a specific
+project.
+
+| Operation                  | Method  | Path                                                                     |
+| -------------------------- | ------- | ------------------------------------------------------------------------ |
+| List providers             | GET     | `/access/api/v1/oidc`                                                    |
+| Get provider               | GET     | `/access/api/v1/oidc/<provider>`                                         |
+| Create provider            | POST    | `/access/api/v1/oidc`                                                    |
+| Update provider            | PUT     | `/access/api/v1/oidc/<provider>`                                         |
+| Delete provider (cascades) | DELETE  | `/access/api/v1/oidc/<provider>`                                         |
+| List mappings              | GET     | `/access/api/v1/oidc/<provider>/identity_mappings`                       |
+| Get mapping                | GET     | `/access/api/v1/oidc/<provider>/identity_mappings/<mapping>`             |
+| Create mapping             | POST    | `/access/api/v1/oidc/<provider>/identity_mappings`                       |
+| Update mapping             | PUT     | `/access/api/v1/oidc/<provider>/identity_mappings/<mapping>`             |
+| Delete mapping             | DELETE  | `/access/api/v1/oidc/<provider>/identity_mappings/<mapping>`             |
+| List issued tokens         | GET     | `/access/api/v1/tokens`                                                  |
+| Revoke a token             | DELETE  | `/access/api/v1/tokens/<token-id>`                                       |
+
+Provider `provider_type`: `github`, `gitlab`, or `generic` (and
+others added over time — call `GET /access/api/v1/oidc` on the
+target server to confirm).
+
+Deleting a provider deletes its mappings. There is no undo.
+
+## Identity mapping anatomy
+
+```json
+{
+  "name": "main-branch-publish",
+  "priority": 100,
+  "claims": {
+    "repository": "myorg/team-x-app",
+    "ref": "refs/heads/main"
+  },
+  "token_spec": {
+    "scope": "applied-permissions/groups:team-x-devs",
+    "expires_in": 3600,
+    "audience": "*@*"
+  }
+}
 ```
 
-- **OIDC provider config** — one entry per external issuer (one for GitHub
-  Actions, one for GitLab Cloud, one for an internal IdP). Holds
-  `issuer_url`, `provider_type`, audience, and (for some types) public-key
-  configuration.
-- **Identity mappings** — children of a provider. Each mapping pairs a
-  **claim filter** (e.g. `repository = myorg/team-x-app`) with a **token
-  spec** (scope, expiry, refreshability). Multiple mappings on one provider
-  let one CI system serve many projects.
+- `claims` are exact-match strings; **all** must match for the
+  mapping to apply. Wildcards are not supported.
+- `priority` breaks ties when multiple mappings match. Lower number
+  = higher priority. Use distinct priorities.
+- `token_spec.expires_in` in seconds. Keep short (≤ 3600) for CI.
+- `token_spec.audience` restricts where the token can be used.
+  `*@*` means any service on the platform.
 
-The `provider` is platform-scoped; the `token_spec.scope` inside a mapping is
-how OIDC connects to a specific project — for example
-`applied-permissions/groups:team-x-devs` issues a token whose effective
-permissions are those of the `team-x-devs` group, which has its own project
-role assignment.
+### Scope syntax
 
-## Providers
+| `token_spec.scope`                                         | Effect                                                          |
+| ---------------------------------------------------------- | --------------------------------------------------------------- |
+| `applied-permissions/admin`                                | Platform admin. Avoid for CI.                                   |
+| `applied-permissions/groups:<group>[,<group>...]`          | Effective permissions = union of named groups. **Recommended.** |
+| `applied-permissions/user`                                 | OIDC subject acts as a specific user. Last resort.              |
 
-### List providers
-
-```bash
-jf api /access/api/v1/oidc
-```
-
-Returns an array of provider objects (`name`, `provider_type`, `issuer_url`,
-`audience`, `description`).
-
-### Get a provider
-
-```bash
-jf api /access/api/v1/oidc/<provider-name>
-```
-
-### Create a provider
-
-```bash
-jf api /access/api/v1/oidc \
-  -X POST -H "Content-Type: application/json" \
-  -d '{
-    "name": "team-x-gha",
-    "issuer_url": "https://token.actions.githubusercontent.com",
-    "provider_type": "github",
-    "description": "GitHub Actions for myorg/team-x-* repos",
-    "audience": "https://mycompany.jfrog.io"
-  }'
-```
-
-Common `provider_type` values: `github`, `gitlab`, `generic`. Platform
-versions add additional first-class types over time — call
-`GET /access/api/v1/oidc` on the target server to see what is currently
-recognised before assuming a value.
-
-### Update a provider
-
-```bash
-jf api /access/api/v1/oidc/<provider-name> \
-  -X PUT -H "Content-Type: application/json" \
-  -d '{"description": "Updated description"}'
-```
-
-### Delete a provider
-
-```bash
-jf api /access/api/v1/oidc/<provider-name> -X DELETE
-```
-
-Deleting a provider also removes its identity mappings.
-
-## Identity mappings
-
-### List mappings on a provider
-
-```bash
-jf api /access/api/v1/oidc/<provider-name>/identity_mappings
-```
-
-Returns an array of mapping objects, each with `name`, `priority`, `claims`,
-`token_spec`, and `description`.
-
-### Get a mapping
-
-```bash
-jf api /access/api/v1/oidc/<provider-name>/identity_mappings/<mapping-name>
-```
-
-### Create a mapping
-
-```bash
-jf api /access/api/v1/oidc/<provider-name>/identity_mappings \
-  -X POST -H "Content-Type: application/json" \
-  -d '{
-    "name": "main-branch-publish",
-    "priority": 100,
-    "claims": {
-      "repository": "myorg/team-x-app",
-      "ref": "refs/heads/main"
-    },
-    "token_spec": {
-      "scope": "applied-permissions/groups:team-x-devs",
-      "expires_in": 3600,
-      "audience": "*@*"
-    },
-    "description": "Issue Developer-scope tokens for main-branch builds"
-  }'
-```
-
-The mapping match rules:
-
-- **`claims`** is an object whose keys are claim names from the incoming
-  OIDC token; values are exact-match strings. **All** claims must match for
-  the mapping to apply.
-- **`priority`** breaks ties when multiple mappings could match. Lower number
-  = higher priority. Use distinct priorities to make ordering explicit.
-- **`token_spec.scope`** uses the standard JFrog scope syntax:
-  - `applied-permissions/admin` — platform admin (avoid for CI)
-  - `applied-permissions/groups:<group>[,<group>]` — recommended; effective
-    permissions are the union of the named groups
-  - `applied-permissions/user` — the OIDC subject acts as a specific user
-- **`token_spec.expires_in`** in seconds. Keep short (≤ 3600) for CI.
-- **`token_spec.audience`** restricts where the token can be used; `*@*`
-  means any service on the platform.
-
-### Update a mapping
-
-```bash
-jf api /access/api/v1/oidc/<provider-name>/identity_mappings/<mapping-name> \
-  -X PUT -H "Content-Type: application/json" \
-  -d '{"token_spec": {"scope": "applied-permissions/groups:team-x-leads", "expires_in": 1800}}'
-```
-
-### Delete a mapping
-
-```bash
-jf api /access/api/v1/oidc/<provider-name>/identity_mappings/<mapping-name> \
-  -X DELETE
-```
+Tie one identity mapping per project to a group like
+`applied-permissions/groups:team-x-devs`; that group's project role
+controls effective access.
 
 ## CI claim recipes
 
-The claim names below come from the CI system itself — they are what the CI
+The claim names below come from the CI system; they are what the
 runner puts into the OIDC ID token before sending it to JFrog.
 
 ### GitHub Actions
 
-Common claims worth filtering on:
+Useful claims: `repository` (`<org>/<repo>`), `repository_owner`,
+`ref` (full git ref), `workflow`, `event_name`, `environment`,
+`actor`.
 
-- `repository` — `<org>/<repo>` (e.g. `myorg/team-x-app`)
-- `repository_owner` — `<org>` (e.g. `myorg`)
-- `ref` — full git ref (e.g. `refs/heads/main`, `refs/tags/v1.2.3`)
-- `workflow` — workflow file name
-- `event_name` — `push`, `pull_request`, `workflow_dispatch`, etc.
-- `environment` — set when the job uses an `environment:` declaration
-- `actor` — username that triggered the run
+```json
+{
+  "name": "main-branch-publish",
+  "claims": {
+    "repository": "myorg/team-x-app",
+    "ref": "refs/heads/main",
+    "event_name": "push"
+  },
+  "token_spec": { "scope": "applied-permissions/groups:team-x-devs", "expires_in": 3600 }
+}
+```
 
-Recommended mappings:
+Tag publishes can't be filtered with a `refs/tags/*` wildcard
+(exact match only) — restrict by `workflow` (e.g.
+`workflow: release.yml`) and let the workflow gate tags. PR checks:
+`{repository, event_name: pull_request}` mapped to a read-only
+group.
 
-- **Main-branch publish** — claims `{repository, ref: refs/heads/main}` →
-  scope `groups:<team>-devs`.
-- **Tag release publish** — claims `{repository, ref: refs/tags/*}` is **not**
-  supported (exact match only); instead, restrict by `workflow` (e.g.
-  `workflow: release.yml`) and rely on the workflow itself to gate tags.
-- **PR check (read-only)** — claims `{repository, event_name: pull_request}`
-  → scope `groups:<team>-pr-checkers` with read-only permissions.
-
-CI runner side: GitHub Actions exposes the OIDC token via
-`actions/checkout` + `actions/jf-setup-cli`, or via the
-`ACTIONS_ID_TOKEN_REQUEST_TOKEN` and `ACTIONS_ID_TOKEN_REQUEST_URL`
-environment variables. The
-[setup-jfrog-cli](https://github.com/jfrog/setup-jfrog-cli) action handles
-the OIDC handshake and configures the CLI in one step.
+Use the
+[setup-jfrog-cli](https://github.com/jfrog/setup-jfrog-cli) action
+to handle the handshake; it reads
+`ACTIONS_ID_TOKEN_REQUEST_TOKEN` / `_URL` automatically.
 
 ### GitLab CI
 
-Common claims:
+Useful claims: `project_path` (`<group>/<project>`),
+`namespace_path`, `ref`, `ref_type` (`branch`|`tag`),
+`pipeline_source`, `user_email`, `user_login`.
 
-- `project_path` — `<group>/<project>`
-- `namespace_path` — top-level group
-- `ref` — full git ref
-- `ref_type` — `branch` or `tag`
-- `pipeline_source` — `push`, `merge_request_event`, etc.
-- `user_email`, `user_login`
+```json
+{
+  "name": "main-branch-publish",
+  "claims": {
+    "project_path": "myorg/team-x-app",
+    "ref_type": "branch",
+    "ref": "main"
+  },
+  "token_spec": { "scope": "applied-permissions/groups:team-x-devs", "expires_in": 3600 }
+}
+```
 
-Recommended mapping:
+GitLab exposes the ID token via the `id_tokens:` keyword.
 
-- Claims `{project_path: myorg/team-x-app, ref_type: branch, ref: main}` →
-  scope `groups:<team>-devs`.
+### Generic OIDC (Okta, Auth0, Keycloak, etc.)
 
-The GitLab CI runner exposes an `ID_TOKEN` job variable via the
-`id_tokens:` keyword.
-
-### Generic OIDC (any IdP)
-
-For an internal IdP (Okta, Auth0, Keycloak, Azure AD as identity provider for
-non-Azure resources), use `provider_type: "generic"`. The minimum viable claim
-set is:
-
-- `iss` — issuer URL (already validated by the provider config)
-- `aud` — must match the provider's `audience`
-- `sub` — subject identifier; for service identities this is the only stable
-  claim available
-
-A typical generic mapping:
+Use `provider_type: "generic"`. Minimum viable claims: `iss`
+(already validated by the provider config), `aud` (must match the
+provider's `audience`), `sub` (subject — for service identities
+this is often the only stable claim).
 
 ```json
 {
@@ -243,104 +153,40 @@ A typical generic mapping:
 }
 ```
 
-## Using OIDC from a CI job
+## Exchanging an OIDC token from a CI job
 
-Two paths inside a CI job. Prefer the first when available.
-
-### 1. Setup-jfrog-cli action / official integration
-
-Use the official integration (e.g.
-[setup-jfrog-cli](https://github.com/jfrog/setup-jfrog-cli) for GitHub
-Actions, the JFrog GitLab CI integration, the official Bitbucket Pipe). It
-performs the OIDC handshake and runs `jf c add` for the rest of the job.
-
-### 2. Manual exchange via `jf exchange-oidc-token`
-
-Inside the CI job:
+Prefer the official integration
+([setup-jfrog-cli](https://github.com/jfrog/setup-jfrog-cli) for
+GitHub Actions, the JFrog GitLab CI integration, the official
+Bitbucket Pipe). Manual exchange via `jf exchange-oidc-token`
+(alias `jf eot`):
 
 ```bash
-JFROG_OIDC_TOKEN="$(<request-the-OIDC-token-from-the-CI-runner>)"
+JFROG_OIDC_TOKEN="$(<request-OIDC-token-from-runner>)"
 jf exchange-oidc-token \
   --url=https://mycompany.jfrog.io \
   --provider-name=team-x-gha \
   --oidc-token="$JFROG_OIDC_TOKEN" \
   > /tmp/jfrog-token.json
 ACCESS_TOKEN=$(jq -r '.access_token' /tmp/jfrog-token.json)
-jf c add ci-server \
-  --url=https://mycompany.jfrog.io \
-  --access-token="$ACCESS_TOKEN" \
-  --interactive=false
+jf c add ci-server --url=https://mycompany.jfrog.io \
+  --access-token="$ACCESS_TOKEN" --interactive=false
 ```
 
-Notes:
+The exchanged token expires after `token_spec.expires_in` seconds —
+long jobs must re-exchange, not extend an existing token. Never log
+either the input OIDC token or the exchanged JFrog access token.
 
-- `jf eot` is the short alias for `jf exchange-oidc-token`.
-- The exchanged JFrog token expires after `token_spec.expires_in` seconds —
-  jobs longer than that must re-exchange or use a token refresh, not extend
-  expiry on the existing token.
-- The OIDC token from the CI runner is the **input**; the JFrog access token
-  is the **output**. Never log either of them.
+## Verifying without running CI
 
-## Listing and revoking issued tokens
+`GET` the provider and mappings to confirm config; then use a
+manually-crafted ID token (from a CI runner debug job or your IdP's
+test endpoint) and call `jf eot` from a workstation. A successful
+exchange returns a JFrog access token; a failed exchange surfaces
+the mismatch reason.
 
-OIDC-issued access tokens appear in the standard token list:
-
-```bash
-jf api /access/api/v1/tokens
-```
-
-Filter on `subject` patterns to find OIDC-issued tokens (the subject usually
-encodes the provider name and the matched mapping).
-
-Revoke an individual token:
-
-```bash
-jf api /access/api/v1/tokens/<token-id> -X DELETE
-```
-
-To force expiry across an entire CI integration, delete the **provider**
-(remove and recreate); deleting individual mappings prevents future tokens
-without revoking already-issued ones.
-
-## Common errors
-
-- **401 from the OIDC exchange** — the OIDC token's `iss` does not match the
-  provider's `issuer_url`, or the `aud` does not match the provider's
-  `audience`. Inspect the OIDC token (decode the JWT payload) and confirm.
-- **403 after exchange** — the exchange succeeded but the issued JFrog token
-  lacks permissions for the requested operation. Check the matched
-  mapping's `token_spec.scope` against the project role bound to that group.
-- **No mapping matched** — the exchange returns 4xx with a "no matching
-  identity mapping" error. Add or relax the mapping; verify claim values
-  with the actual OIDC token.
-- **Token expiry mid-job** — `token_spec.expires_in` is too short for the
-  longest CI step. Increase it for that mapping (within reason; never
-  exceed an hour for CI).
-- **Provider deletion cascades** — deleting a provider deletes all its
-  identity mappings. There is no undo.
-
-## Verifying an OIDC setup without running CI
-
-After creating a provider and mappings, you can verify wiring without a real
-CI run:
-
-1. `GET /access/api/v1/oidc/<provider>` — confirm `issuer_url`, `audience`,
-   `provider_type`.
-2. `GET /access/api/v1/oidc/<provider>/identity_mappings` — confirm priority
-   ordering and claim filters.
-3. Use a manually-crafted ID token (from the CI runner via a debug job, or
-   via your IdP's test endpoint) and call
-   `jf eot --provider-name=<provider> --oidc-token=<token>` from a
-   workstation. A successful exchange returns a JFrog access token; a
-   failed exchange surfaces the mismatch reason.
-
-## Further reading
-
-- [`projects-best-practices.md`](projects-best-practices.md) §Phase 2 — why
-  OIDC is the recommended identity strategy.
-- [`projects-api.md`](projects-api.md) — project-side roles, members, and
-  groups that OIDC mappings target.
-- [OpenID Connect Integration](https://docs.jfrog.com/administration/docs/openid-connect-integration)
-  — full vendor documentation.
-- [setup-jfrog-cli](https://github.com/jfrog/setup-jfrog-cli) — official
-  GitHub Actions integration.
+Common errors: **401** (token's `iss` doesn't match provider's
+`issuer_url`, or `aud` mismatch); **403** after exchange (mapping's
+`token_spec.scope` lacks permission for the operation); **"no
+matching identity mapping"** (claim values don't exactly match any
+mapping).
