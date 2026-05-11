@@ -150,8 +150,10 @@ When the user approves:
 
 3. **Capture the outcome JSON** (printed on stdout). Re-read it
    instead of re-running the script.
-4. **Run post-apply checks** per
-   `verification-and-idempotency.md` §*Post-apply checks*.
+4. **Run post-apply checks** per the *Post-apply checks* subsection
+   in [`../SKILL.md`](../SKILL.md). For the per-resource state
+   machine and recovery patterns, see
+   [`../../jfrog/references/projects-verification-contract.md`](../../jfrog/references/projects-verification-contract.md).
 5. **Summarise to the user**: per-resource status from the outcome
    JSON (`created`, `updated`, `already_exists`, `skipped` with
    reason, or `errored`).

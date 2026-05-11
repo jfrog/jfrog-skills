@@ -133,8 +133,34 @@ first repo-structure turn.
 4. Show the customised JSON inline. Confirm with the user — the
    cautious-execution gate.
 5. Pipe to `scripts/jfrog-project-apply-repo-structure.sh` via stdin.
-6. Run the post-apply checks from
-   `references/verification-and-idempotency.md` and report.
+6. Run the **Post-apply checks** below and report.
+
+### Post-apply checks
+
+After the apply script returns, run these read-only checks against
+the live platform and confirm they match the template the agent
+piped in. Save each response to a temp file per the base SKILL.md
+*Preserving command output* pattern.
+
+- `GET /access/api/v1/projects/<project_key>` — sanity check that
+  the project still exists.
+- `GET /artifactory/api/repositories/<each repo key>` — expect 200;
+  compare `rclass`, `packageType`, `url` (for remote),
+  `repositories[]` (for virtual) against the template.
+- `GET /artifactory/api/repositories?project=<project_key>` —
+  expect every repo declared in the template plus any pre-existing
+  repos.
+- For each virtual repo with `resolution_order` in the template:
+  confirm the live `repositories[]` array matches.
+- `GET /access/api/v1/projects/<producer_project>/share/repositories`
+  — expect every `sharing[]` producer entry.
+- `GET /access/api/v1/projects/<project_key>/roles/<role>` (when
+  `external_stage_rbac` is in the template) — expect
+  `environments` and `actions` to reflect the template.
+
+For the per-resource state machine, outcome JSON shape, recovery
+patterns, and the `--audit` contract, see
+[`../jfrog/references/projects-verification-contract.md`](../jfrog/references/projects-verification-contract.md).
 
 ## Reference files
 
@@ -143,11 +169,10 @@ than 2-3 in a single conversation turn.
 
 - `references/repo-structure-flow.md` — full conversational flow for
   stages, repositories, External-stage RBAC, virtual aggregator
-  resolution.
-- `references/sharing-patterns.md` — Phase 4 (push vs pull) decision
-  tree, read-only consumer guard, naming for cross-project repos.
-- `references/verification-and-idempotency.md` — post-apply checks
-  and the idempotency contract.
+  resolution, push vs pull sharing decision tree.
+- `../jfrog/references/projects-verification-contract.md` —
+  idempotency state machine, outcome JSON shape, recovery patterns,
+  `--audit` contract (shared with `jfrog-project-creation`).
 - `../jfrog/references/project-templates-artifactory-repo.md` —
   templates-repo discovery, fetch chain.
 - `../jfrog/references/projects-best-practices-repos.md` — the

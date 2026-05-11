@@ -130,9 +130,34 @@ project-creation turn.
 5. Pipe the JSON via stdin to
    `scripts/jfrog-project-create-from-template.sh`. Do not write the
    JSON to disk first.
-6. Run the post-apply checks from
-   `references/verification-and-idempotency.md` and report the
-   structured outcome.
+6. Run the **Post-apply checks** below and report the structured
+   outcome.
+
+### Post-apply checks
+
+After the apply script returns, run these read-only checks against
+the live platform and confirm they match the template the agent
+piped in. Save each response to a temp file per the base SKILL.md
+*Preserving command output* pattern.
+
+- `GET /access/api/v1/projects/<project_key>` — expect 200 with
+  `display_name`, `description`, `admin_privileges`, and
+  `storage_quota_bytes` matching the template.
+- `GET /access/api/v1/projects/<project_key>/roles` — expect every
+  CUSTOM role in the template plus the predefined set.
+- `GET /access/api/v1/projects/<project_key>/groups` and
+  `/users` — expect every `members[]` entry with the right role.
+- `GET /access/api/v1/oidc/<provider_name>` and
+  `/identity_mappings` (when the template had an `oidc` block) —
+  expect the provider record and one entry per
+  `identity_mappings[]`.
+- `GET /artifactory/api/repositories?project=<project_key>` —
+  expect `[]` unless the user has already run the repo-structure
+  skill.
+
+For the per-resource state machine, outcome JSON shape, recovery
+patterns, and the `--audit` contract, see
+[`../jfrog/references/projects-verification-contract.md`](../jfrog/references/projects-verification-contract.md).
 
 ## Reference files
 
@@ -141,8 +166,9 @@ than 2-3 in a single conversation turn.
 
 - `references/creation-flow.md` — the full conversational flow and
   the per-archetype customisation prompts.
-- `references/verification-and-idempotency.md` — post-apply checks
-  plus the idempotency contract the apply script implements.
+- `../jfrog/references/projects-verification-contract.md` —
+  idempotency state machine, outcome JSON shape, recovery patterns,
+  `--audit` contract (shared with `jfrog-project-repo-structure`).
 - `../jfrog/references/project-templates-artifactory-repo.md` —
   templates-repo discovery, fetch chain, seeding instructions.
 - `../jfrog/references/projects-best-practices.md` — project
