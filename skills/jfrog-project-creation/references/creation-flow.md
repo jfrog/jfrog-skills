@@ -31,16 +31,14 @@ flowchart LR
      `../../jfrog/assets/project-templates/` if neither resolves.
 3. Tell the user which source resolved. One-liner the agent says back:
    "Using templates from `<repo>`" or "No org templates repo
-   configured; using the bundled `team-default` / `enterprise-budget-id`
-   / `delegated-admin` blueprints as the starting set."
+   configured; using the bundled `team-default` / `delegated-admin`
+   blueprints as the starting set."
 
 ## Stage 2 — Fetch a starting template
 
 Ask which archetype best matches before fetching:
 
 - `team-default` — single team, one workspace, OIDC optional.
-- `enterprise-budget-id` — project key tied to an immutable budget
-  identifier; central IdP holds membership; OIDC required.
 - `delegated-admin` — heavy delegation to application owners;
   groups-only membership; OIDC required.
 

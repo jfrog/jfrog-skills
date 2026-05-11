@@ -15,7 +15,7 @@
     "blueprint": {
       "type": "string",
       "description": "Optional reference to the blueprint this template was customized from (informational only).",
-      "enum": ["team-default", "enterprise-budget-id", "delegated-admin", "custom"]
+      "enum": ["team-default", "delegated-admin", "custom"]
     },
     "project": {
       "type": "object",

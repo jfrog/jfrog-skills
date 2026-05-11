@@ -86,9 +86,11 @@ GET /artifactory/{repo_key}/{archetype}.json
 Accept: application/json
 ```
 
-Where `{archetype}` is one of `team-default`, `enterprise-budget-id`, or
-`delegated-admin`. Handles orgs that copied the bundled blueprints into
-Artifactory unchanged and let users pick which archetype fits.
+Where `{archetype}` is one of `team-default` or `delegated-admin`.
+Handles orgs that copied the bundled blueprints into Artifactory
+unchanged and let users pick which archetype fits. Orgs needing a
+different archetype (e.g. budget-ID-as-key) author it directly in
+the templates repo.
 
 ### Listing what is available
 
@@ -106,11 +108,10 @@ Filter to `folder: false` and `uri` ending in `.json`.
 ## Bundled fallback
 
 If no Artifactory templates repo is resolved, or every tier above 404s,
-the agent uses the three bundled blueprints shipped at
+the agent uses the two bundled blueprints shipped at
 `<base_skill_path>/assets/project-templates/`:
 
 - `team-default.json`
-- `enterprise-budget-id.json`
 - `delegated-admin.json`
 
 These are **read-only patterns**. The agent never edits them on disk and
@@ -141,9 +142,8 @@ do this for them. The recommended seed steps:
    canonical starting set. Upload them as-is and edit afterwards:
 
    ```sh
-   jf rt u team-default.json         project-templates-generic-local/team-default.json
-   jf rt u enterprise-budget-id.json project-templates-generic-local/enterprise-budget-id.json
-   jf rt u delegated-admin.json      project-templates-generic-local/delegated-admin.json
+   jf rt u team-default.json    project-templates-generic-local/team-default.json
+   jf rt u delegated-admin.json project-templates-generic-local/delegated-admin.json
    ```
 
    Or via the REST API:

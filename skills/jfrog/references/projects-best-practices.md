@@ -192,9 +192,11 @@ and per-CI claim recipes.
 
 ## Customer archetypes
 
-Three archetypes from the public best-practices doc become
-blueprint files in `skills/jfrog/assets/project-templates/`. Pick
-one as the starting point for any new project.
+Two archetypes from the public best-practices doc ship as blueprint
+files in `skills/jfrog/assets/project-templates/`. Pick one as the
+starting point for any new project; orgs that need a different
+shape (e.g. budget-ID-as-key for finance-driven naming) author it
+directly in their Artifactory templates repo.
 
 ### `team-default` — single team, default settings
 
@@ -209,22 +211,6 @@ path to a working project.
 - Predefined Developer + Release Manager roles only; one group per
   role.
 - OIDC optional.
-
-### `enterprise-budget-id` — large enterprise, mapped by budget ID
-
-For project keys tied to an immutable internal identifier (budget,
-app catalog, funding code) that survives reorgs; strict three-tier
-flow (Curation → Central → Certified); high volume of projects
-provisioned by automation.
-
-- Project key is the budget ID (`fin-1042`, `ent-7501`).
-- Quota sized per budget tier.
-- `admin_privileges.manage_members` **off** (central IdP sync owns
-  membership).
-- Predefined Developer in Curation/Central, Release Manager in
-  Certified.
-- OIDC required for CI publishing into Central; identity mappings
-  tied to the source GitHub org and repo.
 
 ### `delegated-admin` — heavy delegation, application-team-driven
 

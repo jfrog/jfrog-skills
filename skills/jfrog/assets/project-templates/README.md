@@ -16,9 +16,6 @@ and fallback diagram.
   satisfy, used by the validate scripts in both workflow skills.
 - `team-default.json` — single team, one workspace; OIDC optional;
   predefined roles. Smallest archetype.
-- `enterprise-budget-id.json` — project key tied to an immutable
-  budget identifier; central IdP holds membership; OIDC required;
-  three-tier role split.
 - `delegated-admin.json` — heavy delegation to application owners;
   groups-only membership; OIDC required.
 
