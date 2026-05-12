@@ -1,0 +1,344 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jfrog.com/skills/project-templates/schema.json",
+  "title": "JFrog Project Template",
+  "description": "Declarative description of a JFrog Project covering Phase 1 (entity), Phase 2 (identity & access), and reserved slots for Phase 3 (repository structure) and Phase 4 (sharing). Consumed by jfrog-project-create-from-template.sh and jfrog-project-apply-repo-structure.sh, and usable out-of-band with `ajv` for offline linting of org-authored templates.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["template_version", "project"],
+  "properties": {
+    "template_version": {
+      "type": "string",
+      "description": "Semver-style template schema version. Apply scripts refuse templates whose major version they do not recognise.",
+      "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+    },
+    "blueprint": {
+      "type": "string",
+      "description": "Optional reference to the blueprint this template was customized from (informational only).",
+      "enum": ["team-default", "custom"]
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "display_name", "admin_privileges"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Immutable project key. 2-32 chars, lowercase alphanumeric and hyphens, must start with a letter, no leading/trailing hyphen.",
+          "pattern": "^[a-z][a-z0-9-]{0,30}[a-z0-9]$",
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "quota_gb": {
+          "description": "Storage quota in GB. Omit or set to null for Unlimited.",
+          "anyOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        },
+        "admin_privileges": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["manage_members", "manage_resources", "index_resources"],
+          "properties": {
+            "manage_members": { "type": "boolean" },
+            "manage_resources": { "type": "boolean" },
+            "index_resources": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "admins": {
+      "type": "object",
+      "description": "Project Admin assignments. Prefer groups over users.",
+      "additionalProperties": false,
+      "properties": {
+        "users": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "default": []
+        },
+        "groups": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    },
+    "roles": {
+      "type": "array",
+      "description": "Project roles to ensure exist. Predefined roles can be referenced without recreating; CUSTOM roles are created/updated.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "type": { "enum": ["PREDEFINED", "CUSTOM", "ADMIN"] },
+          "description": { "type": "string" },
+          "environments": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_-]*$" },
+            "uniqueItems": true
+          },
+          "actions": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Z_]+$" },
+            "uniqueItems": true
+          }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "type": { "const": "CUSTOM" } } },
+            "then": { "required": ["environments", "actions"] }
+          }
+        ]
+      }
+    },
+    "members": {
+      "type": "array",
+      "description": "Project member assignments. Each entry is exactly one user OR one group with one or more roles.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["roles"],
+        "properties": {
+          "user": { "type": "string", "minLength": 1 },
+          "group": { "type": "string", "minLength": 1 },
+          "roles": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        },
+        "oneOf": [
+          { "required": ["user"], "not": { "required": ["group"] } },
+          { "required": ["group"], "not": { "required": ["user"] } }
+        ]
+      }
+    },
+    "oidc": {
+      "type": "object",
+      "description": "Optional OIDC provider and identity mappings to ensure exist. The provider is platform-scoped; mappings can reference project-scoped groups via token_spec.scope.",
+      "additionalProperties": false,
+      "required": ["provider"],
+      "properties": {
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "issuer_url", "provider_type"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "issuer_url": { "type": "string", "format": "uri" },
+            "provider_type": { "enum": ["github", "gitlab", "generic"] },
+            "audience": { "type": "string" },
+            "description": { "type": "string" }
+          }
+        },
+        "identity_mappings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "claims", "token_spec"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "priority": { "type": "integer", "minimum": 1, "maximum": 1000 },
+              "description": { "type": "string" },
+              "claims": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": { "type": "string" }
+              },
+              "token_spec": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["scope"],
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "pattern": "^applied-permissions/(admin|user|groups:.+)$"
+                  },
+                  "expires_in": { "type": "integer", "minimum": 60, "maximum": 31536000 },
+                  "audience": { "type": "string" },
+                  "refreshable": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "description": "Phase 3. Stage names this project will use, e.g. [\"DEV\", \"QA\", \"PROD\", \"External\"]. Mirror of the project's Access environments. Names are uppercase by convention; \"External\" is recommended even when no third-party packages are in scope today.",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "repositories": {
+      "type": "array",
+      "description": "Phase 3. Repository definitions. Repository name is derived as <project_key>-<tech>-<maturity>-<locator> unless name_override is set. Aggregator (virtual) entries reference other repos by their derived or overridden name.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tech", "maturity", "locator"],
+        "properties": {
+          "tech": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*$",
+            "description": "Lowercase technology / package-type token (e.g. maven, npm, pypi, docker, go, helm, generic)."
+          },
+          "maturity": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "description": "Maturity / stage token in lowercase (matches a name in stages[] case-insensitively). Use 'all' for an aggregator that spans every stage."
+          },
+          "locator": {
+            "enum": ["local", "remote", "virtual"]
+          },
+          "name_override": {
+            "type": "string",
+            "description": "Use this exact repository name instead of deriving the 4-part name. Use only for legacy repos that pre-date the convention.",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Required for remote locator. Canonical upstream URL (Maven Central, npm registry, PyPI, etc.)."
+          },
+          "aggregates": {
+            "type": "array",
+            "description": "For virtual locator: list of maturity tokens or full repo names to include.",
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+          },
+          "resolution_order": {
+            "type": "array",
+            "description": "For virtual locator: explicit resolution order for the aggregated repos. Must reference each entry in aggregates[] exactly once. Recommended order: prod, dev, external, smart-remotes.",
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+          },
+          "description": { "type": "string" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "locator": { "const": "remote" } } },
+            "then": { "required": ["url"] }
+          },
+          {
+            "if": { "properties": { "locator": { "const": "virtual" } } },
+            "then": { "required": ["aggregates", "resolution_order"] }
+          }
+        ]
+      }
+    },
+    "external_stage_rbac": {
+      "type": "object",
+      "description": "Phase 3. Defines the External-stage RBAC overlay applied on top of project member roles. Names match roles defined in the project (PREDEFINED or CUSTOM). Each entry lists the actions to grant on the External stage. Roles not listed are not modified on External.",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string", "pattern": "^[A-Z_]+$" },
+        "uniqueItems": true,
+        "minItems": 1
+      }
+    },
+    "sharing": {
+      "type": "array",
+      "description": "Phase 4. Cross-project sharing entries. Each entry is either a producer-side share or a consumer-side reference (direct or smart-remote).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role"],
+        "properties": {
+          "role": { "enum": ["producer", "consumer"] },
+          "via": { "enum": ["direct", "smart-remote"] },
+          "repository": { "type": "string", "minLength": 1 },
+          "consumer_projects": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,30}[a-z0-9]$"
+            },
+            "uniqueItems": true,
+            "minItems": 1
+          },
+          "from_project": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,30}[a-z0-9]$"
+          },
+          "from_repository": { "type": "string", "minLength": 1 },
+          "into_repository": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "role": { "const": "producer" } } },
+            "then": {
+              "required": ["repository", "consumer_projects"],
+              "not": { "anyOf": [
+                { "required": ["from_project"] },
+                { "required": ["from_repository"] },
+                { "required": ["into_repository"] }
+              ] }
+            }
+          },
+          {
+            "if": {
+              "allOf": [
+                { "properties": { "role": { "const": "consumer" } } },
+                { "properties": { "via": { "const": "direct" } } }
+              ]
+            },
+            "then": {
+              "required": ["via", "from_project", "from_repository"],
+              "not": { "anyOf": [
+                { "required": ["into_repository"] },
+                { "required": ["consumer_projects"] }
+              ] }
+            }
+          },
+          {
+            "if": {
+              "allOf": [
+                { "properties": { "role": { "const": "consumer" } } },
+                { "properties": { "via": { "const": "smart-remote" } } }
+              ]
+            },
+            "then": {
+              "required": ["via", "from_project", "from_repository", "into_repository"],
+              "not": { "required": ["consumer_projects"] }
+            }
+          },
+          {
+            "if": { "properties": { "role": { "const": "consumer" } } },
+            "then": { "required": ["via"] }
+          }
+        ]
+      }
+    }
+  }
+}

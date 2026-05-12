@@ -14,13 +14,18 @@ flowchart TD
 
     subgraph workflows ["Workflow Skills"]
         PS["jfrog-package-safety-and-download"]
+        PSet["jfrog-project-setup<br/>(Phase 1+2 + Phase 3+4)"]
         Future["...future workflow skills"]
     end
 
     JF -->|"routes to"| PS
+    JF -->|"routes to"| PSet
     JF -.->|"future"| Future
     PS -.->|"prereq"| JF
+    PSet -.->|"prereq"| JF
 ```
+
+**Project skill template flow.** The `jfrog-project-setup` skill fetches a starting JSON template from the org's Artifactory templates repo (defaults to `project-templates-generic-local`), falling back to the bundled blueprints under [`skills/jfrog/assets/project-templates/`](skills/jfrog/assets/project-templates/) when no templates repo is configured. The agent customises the template in memory through a guided conversation and pipes the result to a deterministic apply script via stdin. **The agent never writes any file to disk;** see [`skills/jfrog/references/project-templates-artifactory-repo.md`](skills/jfrog/references/project-templates-artifactory-repo.md) for the full discovery and fetch contract. The skill internally routes by user intent between two phase groups (Phase 1+2 — project entity + identity and access; Phase 3+4 — repositories + cross-project sharing) and supports running both back-to-back in one conversation, since both share the same template format, conversation contract, and verification contract.
 
 **Base skill (`jfrog`)** — the single foundational skill. Covers platform concepts, CLI setup and authentication, REST/GraphQL API patterns, and intent routing to workflow skills. Every other skill declares it as a prerequisite.
 
@@ -36,27 +41,30 @@ The base skill is the largest and most complex component. Its structure is desig
 
 ### Entry point: SKILL.md
 
-`skills/jfrog/SKILL.md` is the agent's entry point. The sections below appear in source order; the file is deliberately ordered for **chunked-read robustness**, so the safety-critical and routing sections (`Cautious execution`, `Server selection rules`, `When to read reference files`) appear early enough to land in the first chunk an agent reads.
+`skills/jfrog/SKILL.md` is the agent's entry point. It covers:
 
 | Section | Purpose |
 |---------|---------|
-| **Prerequisites** | Required tools (`jq`); per-runtime network and filesystem permission table (Cursor / Claude Code / Other) — replaces the old standalone "Network permissions" section |
-| **Environment check** | Cached CLI detection via `scripts/check-environment.sh <model-slug>`; script prints the user-agent value on stdout for the agent to remember and `export JFROG_CLI_USER_AGENT='<value>'` once at the top of every bash invocation that runs `jf` (covers any number of `jf` calls in that invocation; works in runtimes that do not persist shell state across tool invocations); exit-code contract |
-| **`~/.jfrog/skills-cache/` — allowed files only** | Restricts the cache to two artifacts; routes everything else to `/tmp` |
-| **Cautious execution** | Confirm-before-mutate, ask-on-ambiguity, never invent preparatory mutations |
-| **Server selection rules (mandatory)** | Single-server resolution; `awk` one-liner for the default server; no silent fallback; standard error-response template |
-| **When to read reference files** | Domain-organized routing index that maps task categories to specific reference files so the agent loads only what it needs |
-| **Server management** | Live `jf config` reads, `--server-id` targeting, switching defaults |
+| **Prerequisites** | Required tools (`jq`) — `jf api` handles all HTTP traffic |
+| **Environment check** | Cached CLI detection via `scripts/check-environment.sh` |
+| **Network permissions** | `full_network` requirement for all JFrog traffic |
+| **Server management** | `jf config` for server CRUD, multi-instance targeting |
 | **Command discovery** | CLI namespace table, `--help` patterns, sunset notices |
+| **Artifactory operations** | Routing to `references/artifactory-operations.md` (mandatory first read) |
+| **Platform administration** | Routing to `references/platform-admin-operations.md` |
 | **Invoking platform APIs with `jf api`** | Single unified API entry point covering Artifactory, Xray, Access, Evidence, AppTrust, Distribution, Lifecycle, Curation, and OneModel GraphQL |
 | **Structured inputs** | Template workaround via REST GET instead of interactive wizards |
 | **Gotchas** | Non-interactive CLI, `jf api` product prefixes and exit-code semantics, build scope, auth errors, NDJSON |
-| **Batch and parallel execution** | Three-tier parallelism model |
+| **Cautious execution** | Confirm-before-mutate, read-first patterns |
+| **Batch/parallel execution** | Three-tier parallelism model |
 | **Preserving command output** | Temp-file patterns to avoid duplicate network calls |
+| **When to read reference files** | Index of all reference files with load conditions |
+
+The final section — "When to read reference files" — acts as a routing table. It maps task categories to specific reference files so the agent loads only what it needs.
 
 ### Reference files
 
-The `references/` directory contains markdown files organized into five categories:
+The `references/` directory contains markdown files organized into four categories:
 
 #### Domain model (entity definitions and relationships)
 
@@ -96,18 +104,11 @@ These files tell the agent *how* to perform specific operations.
 | `platform-admin-operations.md` | Tokens, stats, projects, system health |
 | `artifactory-aql-syntax.md` | AQL domains, criteria, query construction |
 | `projects-api.md` | Access API for JFrog Projects (via `jf api`) |
-
-#### OneModel (GraphQL)
-
-The OneModel GraphQL API has its own family of references because the query
-surface, schema cache, and pagination model differ from the REST endpoints
-above. The schema is cached per-server under `~/.jfrog/skills-cache/onemodel-schema-<server-id>.graphql`.
-
-| File | Scope |
-|------|-------|
-| `onemodel-graphql.md` | GraphQL endpoint overview, schema-discovery flow, query catalog |
-| `onemodel-query-examples.md` | Domain-specific query templates (applications, packages, evidence, release bundles, catalog, public security / CVE lookups) |
-| `onemodel-common-patterns.md` | Pagination, filtering, GraphQL variables, date formatting |
+| `projects-best-practices.md` | Project doctrine: scope, key conventions, RBAC strategy, customer archetypes, four-part repo naming, SDLC stages, virtual aggregator ordering, External-stage pattern, push vs pull sharing |
+| `project-templates-artifactory-repo.md` | How the `jfrog-project-setup` skill discovers and fetches project templates from the org's Artifactory templates repo (with bundled fallback) |
+| `project-skills-conversation-contract.md` | Shared preview / pipe-to-apply / re-apply / `--audit` patterns used by both phase groups of `jfrog-project-setup` |
+| `projects-verification-contract.md` | Shared idempotency state machine, outcome JSON v2 shape, recovery patterns, shared gotchas for both phase groups of `jfrog-project-setup` |
+| `oidc-integration.md` | OIDC provider config, identity mappings, CI claim recipes |
 
 #### API gaps (REST-only operations)
 
@@ -205,10 +206,9 @@ Agent receives user request
     ├─ Match task to "When to read reference files" index
     │   │
     │   ├─ Entity disambiguation? → jfrog-entity-index.md → domain file
-    │   ├─ Artifactory operation? → artifactory-operations.md
+    │   ├─ Artifactory operation? → artifactory-operations.md (mandatory)
     │   ├─ AQL query?            → artifactory-aql-syntax.md
     │   ├─ Platform admin?       → platform-admin-operations.md
-    │   ├─ OneModel GraphQL?     → onemodel-graphql.md (+ onemodel-query-examples.md / onemodel-common-patterns.md)
     │   ├─ API gap?              → artifactory-api-gaps.md / platform-admin-api-gaps.md
     │   ├─ Login needed?         → jfrog-login-flow.md
     │   ├─ Bulk/parallel?        → general-parallel-execution.md

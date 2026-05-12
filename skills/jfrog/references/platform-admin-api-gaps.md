@@ -130,17 +130,9 @@ jf api /xray/api/v1/system/version
 
 ## OIDC configuration
 
-### List OIDC providers
-```bash
-jf api /access/api/v1/oidc
-```
-
-### Create OIDC configuration
-```bash
-jf api /access/api/v1/oidc \
-  -X POST -H "Content-Type: application/json" \
-  -d '{"name": "my-oidc", "issuer_url": "https://...", "provider_type": "generic"}'
-```
+See `references/oidc-integration.md` for full provider CRUD, identity
+mappings, per-CI claim recipes (GitHub Actions, GitLab CI, generic), and the
+`jf exchange-oidc-token` workflow.
 
 ## SCIM (user provisioning)
 

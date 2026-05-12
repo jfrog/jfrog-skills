@@ -1,0 +1,49 @@
+{
+  "template_version": "1.0",
+  "blueprint": "team-default",
+  "project": {
+    "key": "team-x",
+    "display_name": "Team X",
+    "description": "Default 'Team = Project' starting point. One team, one workspace, one virtual repository URL for developers. Replace placeholders before applying.",
+    "quota_gb": 50,
+    "admin_privileges": {
+      "manage_members": true,
+      "manage_resources": true,
+      "index_resources": true
+    }
+  },
+  "admins": {
+    "users": [],
+    "groups": ["team-x-leads"]
+  },
+  "roles": [
+    { "name": "Developer", "type": "PREDEFINED" },
+    { "name": "Release Manager", "type": "PREDEFINED" }
+  ],
+  "members": [
+    { "group": "team-x-devs", "roles": ["Developer"] },
+    { "group": "team-x-leads", "roles": ["Release Manager"] }
+  ],
+  "stages": ["DEV", "PROD", "External"],
+  "repositories": [
+    { "tech": "maven", "maturity": "dev",      "locator": "local"  },
+    { "tech": "maven", "maturity": "prod",     "locator": "local"  },
+    { "tech": "maven", "maturity": "external", "locator": "remote",
+      "url": "https://repo.maven.apache.org/maven2/" },
+    { "tech": "maven", "maturity": "all",      "locator": "virtual",
+      "aggregates": ["prod", "dev", "external"],
+      "resolution_order": ["prod", "dev", "external"] },
+
+    { "tech": "npm", "maturity": "dev",      "locator": "local"  },
+    { "tech": "npm", "maturity": "prod",     "locator": "local"  },
+    { "tech": "npm", "maturity": "external", "locator": "remote",
+      "url": "https://registry.npmjs.org/" },
+    { "tech": "npm", "maturity": "all",      "locator": "virtual",
+      "aggregates": ["prod", "dev", "external"],
+      "resolution_order": ["prod", "dev", "external"] }
+  ],
+  "external_stage_rbac": {
+    "Developer":       ["READ_REPOSITORY", "ANNOTATE_REPOSITORY", "DEPLOY_CACHE_REPOSITORY"],
+    "Release Manager": ["READ_REPOSITORY"]
+  }
+}
