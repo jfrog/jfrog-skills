@@ -13,7 +13,8 @@ and fallback diagram.
 ## Contents
 
 - `schema.json` — JSON Schema (draft-07) every template must
-  satisfy, used by the validate scripts in both workflow skills.
+  satisfy, used by the validate scripts in both phase groups of
+  the `jfrog-project-setup` skill.
 - `team-default.json` — single team, one workspace; OIDC optional;
   predefined roles. Smallest archetype.
 - `delegated-admin.json` — heavy delegation to application owners;

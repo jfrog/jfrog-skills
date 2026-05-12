@@ -1,10 +1,10 @@
 # JFrog Projects best practices
 
 One consolidated doctrine document for JFrog Projects, used by both
-the [`jfrog-project-creation`](../../jfrog-project-creation/SKILL.md)
-and
-[`jfrog-project-repo-structure`](../../jfrog-project-repo-structure/SKILL.md)
-workflow skills.
+phase groups of the
+[`jfrog-project-setup`](../../jfrog-project-setup/SKILL.md) workflow
+skill (Phase 1+2 creation and Phase 3+4 repository structure +
+sharing).
 
 Read this file when designing a new project, choosing an identity
 strategy, picking an archetype, configuring repos and stages, or

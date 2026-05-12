@@ -6,8 +6,7 @@ This repository ships AI agent skills for the JFrog Platform:
 
 - **`jfrog`** (required): The base skill covering CLI setup, artifact operations, security queries, AQL, and GraphQL. All other skills depend on it.
 - **`jfrog-package-safety-and-download`**: A workflow skill for package safety checks and curation-aware downloads. Requires `jfrog`.
-- **`jfrog-project-creation`**: A workflow skill that creates a new JFrog Project end-to-end (entity, custom and predefined roles, group and user members, OIDC provider, identity mappings). Fetches a starting template from the org's Artifactory templates repo (falls back to bundled blueprints when no templates repo is configured), customises it in-memory through a guided conversation, and applies it idempotently via a script that reads the JSON over stdin. Requires `jfrog`.
-- **`jfrog-project-repo-structure`**: A workflow skill that configures the repository structure of an existing project (SDLC stages, four-part repository naming, virtual aggregators with explicit resolution order, External-stage RBAC, and cross-project sharing via direct push or Smart Remote pull). Same fetch + in-memory customise + stdin-pipe pattern as `jfrog-project-creation`. Requires `jfrog`.
+- **`jfrog-project-setup`**: A workflow skill that sets up a JFrog Project end-to-end. Covers two phase groups behind one entry point and routes between them by user intent: Phase 1+2 — project entity (key, quota, admins), custom and predefined roles, group and user members, OIDC provider and identity mappings; Phase 3+4 — SDLC stages, four-part repository naming, per-technology local + remote + virtual repositories with explicit virtual-aggregator resolution order, External-stage RBAC, and cross-project sharing (push: producer marks a repo Shared; pull: consumer creates a Smart Remote). Fetches a starting template from the org's Artifactory templates repo (falls back to bundled blueprints when no templates repo is configured), customises it in-memory through a guided conversation, and applies it idempotently via scripts that read the JSON over stdin. Requires `jfrog`.
 
 Install them in your AI coding agent and interact with JFrog through natural language. The `jfrog` skill must always be installed — workflow skills build on top of it.
 
@@ -24,8 +23,7 @@ From remote repository:
 npx skills add git@github.com:jfrog/jfrog-skills.git -g \
   --skill jfrog \
   --skill jfrog-package-safety-and-download \
-  --skill jfrog-project-creation \
-  --skill jfrog-project-repo-structure
+  --skill jfrog-project-setup
 ```
 
 From a local clone:
@@ -34,8 +32,7 @@ From a local clone:
 npx skills add . -g \
   --skill jfrog \
   --skill jfrog-package-safety-and-download \
-  --skill jfrog-project-creation \
-  --skill jfrog-project-repo-structure
+  --skill jfrog-project-setup
 ```
 
 The `-g` flag installs into the global scope (recommended). Drop it to install into the current project only. Run `npx skills --help` for more usage information.

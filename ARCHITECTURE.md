@@ -14,22 +14,18 @@ flowchart TD
 
     subgraph workflows ["Workflow Skills"]
         PS["jfrog-package-safety-and-download"]
-        PC["jfrog-project-creation"]
-        PR["jfrog-project-repo-structure"]
+        PSet["jfrog-project-setup<br/>(Phase 1+2 + Phase 3+4)"]
         Future["...future workflow skills"]
     end
 
     JF -->|"routes to"| PS
-    JF -->|"routes to"| PC
-    JF -->|"routes to"| PR
+    JF -->|"routes to"| PSet
     JF -.->|"future"| Future
     PS -.->|"prereq"| JF
-    PC -.->|"prereq"| JF
-    PR -.->|"prereq"| JF
-    PC -.->|"same template fetched by"| PR
+    PSet -.->|"prereq"| JF
 ```
 
-**Project skills template flow.** Both project workflow skills fetch a starting JSON template from the same source — the org's Artifactory templates repo (defaults to `project-templates-generic-local`), falling back to the bundled blueprints under [`skills/jfrog/assets/project-templates/`](skills/jfrog/assets/project-templates/) when no templates repo is configured. The agent customises the template in memory through a guided conversation and pipes the result to a deterministic apply script via stdin. **The agent never writes any file to disk;** see [`skills/jfrog/references/project-templates-artifactory-repo.md`](skills/jfrog/references/project-templates-artifactory-repo.md) for the full discovery and fetch contract.
+**Project skill template flow.** The `jfrog-project-setup` skill fetches a starting JSON template from the org's Artifactory templates repo (defaults to `project-templates-generic-local`), falling back to the bundled blueprints under [`skills/jfrog/assets/project-templates/`](skills/jfrog/assets/project-templates/) when no templates repo is configured. The agent customises the template in memory through a guided conversation and pipes the result to a deterministic apply script via stdin. **The agent never writes any file to disk;** see [`skills/jfrog/references/project-templates-artifactory-repo.md`](skills/jfrog/references/project-templates-artifactory-repo.md) for the full discovery and fetch contract. The skill internally routes by user intent between two phase groups (Phase 1+2 — project entity + identity and access; Phase 3+4 — repositories + cross-project sharing) and supports running both back-to-back in one conversation, since both share the same template format, conversation contract, and verification contract.
 
 **Base skill (`jfrog`)** — the single foundational skill. Covers platform concepts, CLI setup and authentication, REST/GraphQL API patterns, and intent routing to workflow skills. Every other skill declares it as a prerequisite.
 
@@ -109,9 +105,9 @@ These files tell the agent *how* to perform specific operations.
 | `artifactory-aql-syntax.md` | AQL domains, criteria, query construction |
 | `projects-api.md` | Access API for JFrog Projects (via `jf api`) |
 | `projects-best-practices.md` | Project doctrine: scope, key conventions, RBAC strategy, customer archetypes, four-part repo naming, SDLC stages, virtual aggregator ordering, External-stage pattern, push vs pull sharing |
-| `project-templates-artifactory-repo.md` | How the project workflow skills discover and fetch project templates from the org's Artifactory templates repo (with bundled fallback) |
-| `project-skills-conversation-contract.md` | Shared preview / pipe-to-apply / re-apply / `--audit` patterns used by both project workflow skills' flows |
-| `projects-verification-contract.md` | Shared idempotency state machine, outcome JSON v2 shape, recovery patterns, shared gotchas for both project workflow skills |
+| `project-templates-artifactory-repo.md` | How the `jfrog-project-setup` skill discovers and fetches project templates from the org's Artifactory templates repo (with bundled fallback) |
+| `project-skills-conversation-contract.md` | Shared preview / pipe-to-apply / re-apply / `--audit` patterns used by both phase groups of `jfrog-project-setup` |
+| `projects-verification-contract.md` | Shared idempotency state machine, outcome JSON v2 shape, recovery patterns, shared gotchas for both phase groups of `jfrog-project-setup` |
 | `oidc-integration.md` | OIDC provider config, identity mappings, CI claim recipes |
 
 #### API gaps (REST-only operations)

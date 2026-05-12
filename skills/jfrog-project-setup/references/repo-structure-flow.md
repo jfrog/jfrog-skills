@@ -1,15 +1,17 @@
 # Repository structure — conversational flow
 
-The walkthrough the `jfrog-project-repo-structure` skill follows from
-"user wants to set up repos for project X" to "outcome JSON reported
-back". v2: no local writes, template fetched from Artifactory, JSON
+The walkthrough the `jfrog-project-setup` skill follows for its
+Phase 3+4 phase group, from "user wants to set up repos for project
+X" to "outcome JSON reported back". v2: no local writes, template
+fetched from Artifactory, JSON
 piped to the apply script via stdin.
 
 Stages 5 (preview), 6 (pipe + report), the re-apply loop, the
 `--audit` opt-in, and the "what this flow does not do" rules are
-shared with `jfrog-project-creation` and live in
+shared with the Phase 1+2 (`creation-flow.md`) phase group and live
+in
 [`../../jfrog/references/project-skills-conversation-contract.md`](../../jfrog/references/project-skills-conversation-contract.md).
-This file covers only the skill-specific stages (1-4) plus the
+This file covers only the Phase 3+4 stages (1-4) plus the
 Sharing patterns subsection.
 
 ## Six-stage shape
@@ -30,15 +32,16 @@ flowchart LR
    rules*. Capture the resolved `--server-id`.
 2. Resolve the templates repo per
    `../../jfrog/references/project-templates-artifactory-repo.md`.
-   Use the same chain as `jfrog-project-creation`.
+   Use the same chain as the Phase 1+2 flow.
 3. Verify the project exists:
 
    ```http
    GET /access/api/v1/projects/<project_key>
    ```
 
-   On 404, route the user back to `jfrog-project-creation`. The
-   repo-structure skill never creates the project entity itself.
+   On 404, route the user back to the Phase 1+2 (`creation-flow.md`)
+   phase group. The Phase 3+4 flow never creates the project entity
+   itself.
 4. Fetch the existing repository list for the project so the
    conversation has the current state:
 
@@ -49,7 +52,7 @@ flowchart LR
 ## Stage 2 — Fetch the project's template
 
 Tell the user which template source the agent will use. Three-tier
-fetch chain (same as `jfrog-project-creation`):
+fetch chain (same as the Phase 1+2 flow):
 
 ```http
 GET /artifactory/<repo>/<project_key>.json

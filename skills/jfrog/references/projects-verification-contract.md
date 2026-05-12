@@ -1,9 +1,9 @@
 # Project skills — verification and idempotency contract
 
-Shared by both `jfrog-project-creation` and
-`jfrog-project-repo-structure`. What the apply scripts guarantee,
-what the agent should check after a run, and how to recover from
-partial failures.
+Used by `jfrog-project-setup` across both phase groups (Phase 1+2
+creation and Phase 3+4 repo-structure). What the apply scripts
+guarantee, what the agent should check after a run, and how to
+recover from partial failures.
 
 v2 invariants:
 
@@ -197,9 +197,9 @@ final JSON to the templates repo manually.
 
 ## Shared gotchas
 
-These apply to both `jfrog-project-creation` and
-`jfrog-project-repo-structure`; the workflow SKILL.mds carry only
-their skill-specific gotchas and point here for the rest.
+These apply across both phase groups of `jfrog-project-setup`; the
+workflow SKILL.md carries only the phase-specific gotchas and
+points here for the rest.
 
 - **Cross-call shell PIDs differ.** Save and echo temp file paths
   per the base SKILL.md *Preserving command output* pattern when

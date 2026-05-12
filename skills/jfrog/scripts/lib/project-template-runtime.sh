@@ -8,10 +8,10 @@
 # outcome accumulators, audit upload, outcome JSON v2 emission) shared
 # across these four scripts:
 #
-#   - jfrog-project-creation/scripts/jfrog-project-create-from-template.sh
-#   - jfrog-project-creation/scripts/jfrog-project-validate-template.sh
-#   - jfrog-project-repo-structure/scripts/jfrog-project-apply-repo-structure.sh
-#   - jfrog-project-repo-structure/scripts/jfrog-project-validate-repo-structure.sh
+#   - jfrog-project-setup/scripts/jfrog-project-create-from-template.sh
+#   - jfrog-project-setup/scripts/jfrog-project-validate-template.sh
+#   - jfrog-project-setup/scripts/jfrog-project-apply-repo-structure.sh
+#   - jfrog-project-setup/scripts/jfrog-project-validate-repo-structure.sh
 #
 # The per-script endpoint-reference comment blocks at the top of each
 # caller intentionally remain there: SME hallucination-mitigation guidance

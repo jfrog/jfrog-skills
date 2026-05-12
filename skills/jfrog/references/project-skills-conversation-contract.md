@@ -1,12 +1,11 @@
 # Project skills — conversation contract
 
-Shared by [`jfrog-project-creation`](../../jfrog-project-creation/SKILL.md)
-and
-[`jfrog-project-repo-structure`](../../jfrog-project-repo-structure/SKILL.md).
-The per-skill flow docs (`creation-flow.md`,
-`repo-structure-flow.md`) cover the *skill-specific* stages
+Used by [`jfrog-project-setup`](../../jfrog-project-setup/SKILL.md)
+across both phase groups (Phase 1+2 creation and Phase 3+4
+repo-structure). The per-phase flow docs (`creation-flow.md`,
+`repo-structure-flow.md`) cover the *phase-specific* stages
 (2-4); the patterns documented below are identical between the
-two skills and are referenced from each flow's final stages.
+two phase groups and are referenced from each flow's final stages.
 
 For the per-resource state machine, outcome JSON shape, recovery
 patterns, `--audit` contract, and shared gotchas, see
@@ -94,8 +93,9 @@ through the platform:
 /artifactory/<templates-repo>/applied/<project_key>-<iso8601>.json
 ```
 
-For the repo-structure skill the suffix is `-repos-<iso8601>.json`
-to avoid colliding with creation-side audit records.
+For the Phase 3+4 (repo-structure) script the suffix is
+`-repos-<iso8601>.json` to avoid colliding with Phase 1+2
+(creation) audit records.
 
 No local file write is involved. Audit upload failures are
 warnings, not errors. See

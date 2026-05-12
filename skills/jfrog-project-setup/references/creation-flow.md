@@ -1,15 +1,17 @@
 # Project creation — conversational flow
 
-The walkthrough the `jfrog-project-creation` skill follows from "user
-wants a new project" to "outcome JSON reported back". v2: no local
-writes, templates fetched from Artifactory with a bundled fallback,
+The walkthrough the `jfrog-project-setup` skill follows for its
+Phase 1+2 phase group, from "user wants a new project" to "outcome
+JSON reported back". v2: no local writes, templates fetched from
+Artifactory with a bundled fallback,
 JSON piped to the apply script via stdin.
 
 Stages 5 (preview), 6 (pipe + report), the re-apply loop, the
 `--audit` opt-in, and the "what this flow does not do" rules are
-shared with `jfrog-project-repo-structure` and live in
+shared with the Phase 3+4 (`repo-structure-flow.md`) phase group
+and live in
 [`../../jfrog/references/project-skills-conversation-contract.md`](../../jfrog/references/project-skills-conversation-contract.md).
-This file covers only the skill-specific stages (1-4).
+This file covers only the Phase 1+2 stages (1-4).
 
 ## Six-stage shape
 

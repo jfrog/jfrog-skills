@@ -2,8 +2,8 @@
 
 Where the AI fetches project JSON templates from, and how it falls back
 when the org has not curated any. Treat this file as the single source
-of truth for the discovery and fetch contract; the project-creation and
-repo-structure skills reference it rather than restating it.
+of truth for the discovery and fetch contract; both phase groups of
+the `jfrog-project-setup` skill reference it rather than restating it.
 
 ## Why this exists
 
@@ -134,7 +134,7 @@ do this for them. The recommended seed steps:
      "key": "project-templates-generic-local",
      "rclass": "local",
      "packageType": "generic",
-     "description": "JFrog Project templates consumed by the jfrog-project-creation skill"
+     "description": "JFrog Project templates consumed by the jfrog-project-setup skill"
    }
    ```
 

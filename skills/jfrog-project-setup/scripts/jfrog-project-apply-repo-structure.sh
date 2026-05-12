@@ -115,7 +115,7 @@ verify_project() {
   if [[ "$API_STATUS" != "200" ]]; then
     record_resource project "$PROJECT_KEY" errored \
       "$(jq -nc --arg s "$API_STATUS" '{http_status: ($s|tonumber), error: "project_not_found"}')"
-    record_error "Project $PROJECT_KEY not found (HTTP $API_STATUS). Run jfrog-project-creation first."
+    record_error "Project $PROJECT_KEY not found (HTTP $API_STATUS). Run the Phase 1+2 flow (creation-flow.md) first."
     return 1
   fi
   record_resource project "$PROJECT_KEY" already_exists '{"http_status": 200, "note": "verified"}'
