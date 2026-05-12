@@ -99,7 +99,8 @@ The stages map to the `<maturity>` slot in the 4-part repo name:
 
 ### 3.3 4-part naming convention
 
-The doctrine pattern, enforced by the validate script:
+The doctrine pattern, enforced by the apply script under
+`--strict-naming` and warned about otherwise:
 
 ```
 <project_key>-<tech>-<maturity>-<locator>
@@ -256,8 +257,7 @@ aggregator to include it.
 **Regardless of method**, consumers must hold read-only roles on
 the producer's assets. The apply script refuses any sharing entry
 that would grant cross-project write — outcome: `errored` with
-`error: cross_project_write_forbidden`. Validate also flags this
-ahead of apply.
+`error: cross_project_write_forbidden`.
 
 Why: cross-project write would let consumer pipelines push into the
 producer's stage and bypass the producer's gates.
@@ -291,9 +291,10 @@ Render the customised JSON inline (preview can omit project-entity
 sections and focus on `stages`, `repositories`,
 `external_stage_rbac`, `sharing` plus a one-line project-key
 reminder). Get user approval, pipe to
-`scripts/jfrog-project-apply-repo-structure.sh` (validate first via
-`scripts/jfrog-project-validate-repo-structure.sh --strict-naming`
-if uncertain), capture the outcome JSON, run post-apply checks.
+`scripts/jfrog-project-apply-repo-structure.sh` (add
+`--strict-naming` if you want the apply to refuse legacy repo names
+that violate the four-part convention), capture the outcome JSON,
+run post-apply checks.
 Full pattern, plus the re-apply-after-failure loop, the `--audit`
 flag (suffix is `-repos-<iso8601>.json`), and the "what this flow
 does not do" rules: see

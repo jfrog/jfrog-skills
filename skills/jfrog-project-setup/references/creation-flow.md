@@ -39,16 +39,19 @@ flowchart LR
      `../../jfrog/assets/project-templates/` if neither resolves.
 3. Tell the user which source resolved. One-liner the agent says back:
    "Using templates from `<repo>`" or "No org templates repo
-   configured; using the bundled `team-default` / `delegated-admin`
-   blueprints as the starting set."
+   configured; using the bundled `team-default` blueprint as the
+   starting point."
 
 ## Stage 2 — Fetch a starting template
 
-Ask which archetype best matches before fetching:
+The bundled fallback is a single archetype:
 
 - `team-default` — single team, one workspace, OIDC optional.
-- `delegated-admin` — heavy delegation to application owners;
-  groups-only membership; OIDC required.
+
+Orgs that want a different shape (delegated admin, budget-ID-as-key,
+enterprise governance) are expected to author that variant in their
+Artifactory templates repo; the agent fetches it via the tier chain
+below and falls back to `team-default` only when nothing resolves.
 
 If the user names the project key first (e.g. `fin-1042`), the agent
 tries the **per-project tier** before asking for an archetype:
@@ -123,10 +126,9 @@ Same in-memory customise pattern.
 ## Stages 5-6, audit, recovery
 
 Render the customised JSON inline, get user approval, pipe to
-`scripts/jfrog-project-create-from-template.sh` (validate first via
-`scripts/jfrog-project-validate-template.sh` if uncertain), capture
-the outcome JSON, run post-apply checks. Full pattern (preview,
-pipe-to-apply, capture outcome, run post-apply checks, summarise),
+`scripts/jfrog-project-create-from-template.sh`, capture the outcome
+JSON, run post-apply checks. Full pattern (preview, pipe-to-apply,
+capture outcome, run post-apply checks, summarise),
 plus the re-apply-after-failure loop, the `--audit` flag, and the
 "what this flow does not do" rules: see
 [`../../jfrog/references/project-skills-conversation-contract.md`](../../jfrog/references/project-skills-conversation-contract.md).

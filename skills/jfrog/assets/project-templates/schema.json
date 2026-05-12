@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://jfrog.com/skills/project-templates/schema.json",
   "title": "JFrog Project Template",
-  "description": "Declarative description of a JFrog Project covering Phase 1 (entity), Phase 2 (identity & access), and reserved slots for Phase 3 (repository structure) and Phase 4 (sharing). Consumed by jfrog-project-create-from-template.sh and jfrog-project-validate-template.sh.",
+  "description": "Declarative description of a JFrog Project covering Phase 1 (entity), Phase 2 (identity & access), and reserved slots for Phase 3 (repository structure) and Phase 4 (sharing). Consumed by jfrog-project-create-from-template.sh and jfrog-project-apply-repo-structure.sh, and usable out-of-band with `ajv` for offline linting of org-authored templates.",
   "type": "object",
   "additionalProperties": false,
   "required": ["template_version", "project"],
@@ -15,7 +15,7 @@
     "blueprint": {
       "type": "string",
       "description": "Optional reference to the blueprint this template was customized from (informational only).",
-      "enum": ["team-default", "delegated-admin", "custom"]
+      "enum": ["team-default", "custom"]
     },
     "project": {
       "type": "object",

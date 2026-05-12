@@ -6,19 +6,22 @@
 # prologue (argument parsing, prerequisite checks, workspace setup,
 # template ingestion + basic validation) and helpers (HTTP wrappers,
 # outcome accumulators, audit upload, outcome JSON v2 emission) shared
-# across these four scripts:
+# across the two apply scripts:
 #
 #   - jfrog-project-setup/scripts/jfrog-project-create-from-template.sh
-#   - jfrog-project-setup/scripts/jfrog-project-validate-template.sh
 #   - jfrog-project-setup/scripts/jfrog-project-apply-repo-structure.sh
-#   - jfrog-project-setup/scripts/jfrog-project-validate-repo-structure.sh
 #
 # The per-script endpoint-reference comment blocks at the top of each
 # caller intentionally remain there: SME hallucination-mitigation guidance
 # says every script that mutates the platform should list every endpoint
 # it touches in one place, and a runtime library cannot carry these
-# meaningfully (the validate scripts use no endpoints, and the two apply
-# scripts touch disjoint surface areas).
+# meaningfully (the two apply scripts touch disjoint surface areas).
+#
+# Offline schema validation for org-authored templates is available
+# out-of-band via `ajv` against
+# skills/jfrog/assets/project-templates/schema.json; the workflow no
+# longer ships a dedicated validate script — the apply scripts'
+# GET-before-PUT/POST loop is the canonical error surface.
 #
 # Sourcing pattern (place at the top of every caller):
 #
@@ -26,7 +29,7 @@
 #   source "$SCRIPT_DIR/../../jfrog/scripts/lib/project-template-runtime.sh"
 #
 # Globals set by parse_common_args:
-#   SERVER_ID, TEMPLATE_URL, DRY_RUN, AUDIT, CHECK_PLATFORM, STRICT_NAMING
+#   SERVER_ID, TEMPLATE_URL, DRY_RUN, AUDIT, STRICT_NAMING
 #   SERVER_FLAG[]   (passed to every `jf api` call)
 #
 # Globals set by setup_workspace:
@@ -45,7 +48,7 @@
 # ---------------------------------------------------------------------------
 # Argument parsing
 #
-# Accepts all flags used by any of the four scripts; each caller initialises
+# Accepts all flags used by either apply script; each caller initialises
 # only the flags it cares about. Unknown flags fail with a clear message.
 # Callers that want extras can define print_help() (used by -h/--help) and
 # can pre-parse their own flag(s) by stripping them from "$@" before
@@ -57,7 +60,6 @@ parse_common_args() {
   TEMPLATE_URL="${TEMPLATE_URL:-}"
   DRY_RUN="${DRY_RUN:-0}"
   AUDIT="${AUDIT:-0}"
-  CHECK_PLATFORM="${CHECK_PLATFORM:-0}"
   STRICT_NAMING="${STRICT_NAMING:-0}"
 
   while [[ $# -gt 0 ]]; do
@@ -68,7 +70,6 @@ parse_common_args() {
       --template-url=*) TEMPLATE_URL="${1#--template-url=}"; shift ;;
       --dry-run) DRY_RUN=1; shift ;;
       --audit) AUDIT=1; shift ;;
-      --check-platform) CHECK_PLATFORM=1; shift ;;
       --strict-naming) STRICT_NAMING=1; shift ;;
       -h|--help)
         if declare -f print_help >/dev/null 2>&1; then
@@ -166,10 +167,11 @@ ingest_template() {
   fi
 }
 
-# Validate the two mandatory top-level fields used by every apply script.
+# Check the two mandatory top-level fields used by every apply script.
 # Sets TPL_VERSION and PROJECT_KEY on success; exits 1 with a stderr
-# message on the first failure. Apply scripts should call this; validate
-# scripts that want to record these as recoverable errors should not.
+# message on the first failure. The apply scripts call this immediately
+# after `ingest_template` so that bad templates are rejected before any
+# platform mutation is attempted.
 validate_template_basics() {
   TPL_VERSION=$(jq -r '.template_version // empty' "$TEMPLATE_PATH")
   if [[ -z "$TPL_VERSION" ]]; then
@@ -238,9 +240,9 @@ api_call() {
 }
 
 # ---------------------------------------------------------------------------
-# Outcome accumulators (apply-script flavour)
+# Outcome accumulators
 #
-# Validate scripts that need a different record shape (e.g. with a `code`
+# Future callers that need a different record shape (e.g. with a `code`
 # field) should define their own record_error/record_warning before
 # sourcing or override after sourcing.
 # ---------------------------------------------------------------------------

@@ -86,11 +86,11 @@ GET /artifactory/{repo_key}/{archetype}.json
 Accept: application/json
 ```
 
-Where `{archetype}` is one of `team-default` or `delegated-admin`.
-Handles orgs that copied the bundled blueprints into Artifactory
-unchanged and let users pick which archetype fits. Orgs needing a
-different archetype (e.g. budget-ID-as-key) author it directly in
-the templates repo.
+Where `{archetype}` is `team-default` (the bundled blueprint name).
+Handles orgs that copied the bundled blueprint into Artifactory
+unchanged. Orgs needing a different archetype (delegated-admin,
+budget-ID-as-key, enterprise governance) author it directly in the
+templates repo under their own filename.
 
 ### Listing what is available
 
@@ -108,14 +108,13 @@ Filter to `folder: false` and `uri` ending in `.json`.
 ## Bundled fallback
 
 If no Artifactory templates repo is resolved, or every tier above 404s,
-the agent uses the two bundled blueprints shipped at
+the agent uses the bundled blueprint shipped at
 `<base_skill_path>/assets/project-templates/`:
 
 - `team-default.json`
-- `delegated-admin.json`
 
-These are **read-only patterns**. The agent never edits them on disk and
-never writes a customised copy back to the skill repo. They are present
+This is a **read-only pattern**. The agent never edits it on disk and
+never writes a customised copy back to the skill repo. It is present
 in the skill purely so the flow works for orgs that have not yet stood
 up a templates repo.
 
@@ -138,12 +137,13 @@ do this for them. The recommended seed steps:
    }
    ```
 
-2. **Upload starter templates.** The bundled blueprints are the
-   canonical starting set. Upload them as-is and edit afterwards:
+2. **Upload starter templates.** The bundled blueprint is the
+   canonical starting point. Upload it as-is and edit afterwards,
+   or author your own archetypes (delegated-admin,
+   budget-ID-as-key, etc.) directly:
 
    ```sh
-   jf rt u team-default.json    project-templates-generic-local/team-default.json
-   jf rt u delegated-admin.json project-templates-generic-local/delegated-admin.json
+   jf rt u team-default.json project-templates-generic-local/team-default.json
    ```
 
    Or via the REST API:

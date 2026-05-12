@@ -296,7 +296,7 @@ All scripts are non-interactive and emit structured v2 outcome JSON
 on stdout. They source the shared runtime library at
 `../jfrog/scripts/lib/project-template-runtime.sh`.
 
-### Phase 1+2 scripts
+### Phase 1+2 script
 
 - `scripts/jfrog-project-create-from-template.sh [--server-id <id>] [--template-url <url>] [--dry-run] [--audit]`
   — apply the project, roles, members, and OIDC sections
@@ -308,28 +308,23 @@ on stdout. They source the shared runtime library at
   success. The `stages`, `repositories`, `external_stage_rbac`,
   and `sharing` sections are ignored — they belong to the Phase
   3+4 script.
-- `scripts/jfrog-project-validate-template.sh [--server-id <id>] [--template-url <url>] [--check-platform]`
-  — schema validation plus optional dry-run lookups for referenced
-  groups, users, and OIDC providers. Same stdin / `--template-url`
-  input shape.
 
-### Phase 3+4 scripts
+### Phase 3+4 script
 
 - `scripts/jfrog-project-apply-repo-structure.sh [--server-id <id>] [--template-url <url>] [--dry-run] [--strict-naming] [--audit]`
   — apply the `stages`, `repositories`, `external_stage_rbac`, and
   `sharing` sections idempotently. Reads the template from stdin or
   fetches via `--template-url`. The project-entity sections
   (project, admins, members, oidc) are ignored — they belong to
-  the Phase 1+2 script.
-- `scripts/jfrog-project-validate-repo-structure.sh [--server-id <id>] [--template-url <url>] [--check-platform] [--strict-naming]`
-  — schema validation, 4-part-naming check, virtual-aggregator
-  consistency check; `--check-platform` delegates to apply
-  `--dry-run` for read-only platform lookups.
+  the Phase 1+2 script. `--strict-naming` rejects any repo name
+  that violates the four-part convention.
 
-All four scripts source their input from stdin or from Artifactory;
-they never read from a local file path. Run the matching `validate`
-script before `apply` when the user is uncertain. Re-running any
-`apply` after a partial failure is safe.
+Both scripts source their input from stdin or from Artifactory;
+neither reads from a local file path. Each apply does GET-before-write
+per resource, so re-running after a partial failure is safe. Offline
+schema validation is available out-of-band via `ajv` against
+`../jfrog/assets/project-templates/schema.json` when the user wants
+to lint a template without touching the platform.
 
 ## Gotchas
 
@@ -353,9 +348,10 @@ script before `apply` when the user is uncertain. Re-running any
 ### Phase 3+4
 
 - **The four-part naming convention is doctrine, not a platform
-  constraint.** The platform accepts any repo name; the validate
-  script flags violations. Use `--strict-naming` to fail apply
-  when any repo name in the template violates the pattern.
+  constraint.** The platform accepts any repo name. The apply
+  script warns about violations and emits a `convention_violation`
+  diagnostic for each. Use `--strict-naming` to fail apply when any
+  repo name in the template violates the pattern.
 - **Virtual aggregator order matters.** Resolution walks the list
   left-to-right; first hit wins. Doctrine order:
   `prod -> dev -> external -> smart-remotes`. The apply script

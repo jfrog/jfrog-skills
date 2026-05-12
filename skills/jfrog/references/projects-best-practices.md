@@ -1,103 +1,60 @@
 # JFrog Projects best practices
 
-One consolidated doctrine document for JFrog Projects, used by both
-phase groups of the
+Doctrine for the
 [`jfrog-project-setup`](../../jfrog-project-setup/SKILL.md) workflow
 skill (Phase 1+2 creation and Phase 3+4 repository structure +
-sharing).
-
-Read this file when designing a new project, choosing an identity
-strategy, picking an archetype, configuring repos and stages, or
-deciding how two projects should share artifacts.
-
-Endpoint shapes: [`projects-api.md`](projects-api.md),
-[`artifactory-operations.md`](artifactory-operations.md),
-[`oidc-integration.md`](oidc-integration.md). Templates repo and
-fetch chain:
-[`project-templates-artifactory-repo.md`](project-templates-artifactory-repo.md).
-State machine and outcome JSON:
+sharing). Endpoint shapes live in
+[`projects-api.md`](projects-api.md) and
+[`oidc-integration.md`](oidc-integration.md); the per-resource state
+machine lives in
 [`projects-verification-contract.md`](projects-verification-contract.md).
-
-Sources:
-[Projects Best Practices](https://docs.jfrog.com/projects/docs/projects-best-practices),
-[Projects Setup Best Practices](https://docs.jfrog.com/projects/docs/projects-setup-best-practices),
-[Repository naming convention](https://docs.jfrog.com/projects/docs/projects-repository-naming-convention),
-[Sharing repositories between projects](https://docs.jfrog.com/projects/docs/sharing-repositories-between-projects),
-[OpenID Connect Integration](https://docs.jfrog.com/administration/docs/openid-connect-integration).
 
 ## Why projects exist
 
-Projects are the **enterprise-scale management unit**. They bundle
-repositories, builds, release bundles, members, roles, and
-environments under one logical entity (team, application, GitHub
-org) so platform teams can delegate authority and apply governance
-without becoming a bottleneck.
-
-Use a project when a team needs isolated resources and lifecycle,
-when day-to-day setup must be delegated without platform-wide
-rights, when cost / storage / vulnerability scope must be
-reportable per business unit, or when a naming prefix is needed
-for search, filter, and audit.
-
-Do not create a project for ad-hoc shared infrastructure (golden
-images, public mirrors). Those belong in a dedicated "shared
-services" project or as platform-level resources.
+Projects bundle repositories, builds, release bundles, members,
+roles, and environments under one logical entity (team,
+application, GitHub org) so platform teams can delegate authority
+without becoming a bottleneck. Create one when a team needs
+isolated resources, delegated day-to-day setup, or per-business-unit
+reporting. Do **not** create one for ad-hoc shared infrastructure
+(golden images, public mirrors) — those belong in a "shared
+services" project or at platform level.
 
 ## Defining the project entity
 
 ### Project scope
 
-The default recommendation is **"Team = Project"**: one project per
-single team's workspace. Developers get a single virtual repository
-URL for all package management; permission management happens once
-per team.
+Default: **Team = Project** (one project per team's workspace; one
+virtual repo URL per tech; permission management once per team).
+Alternatives that work in practice:
 
-Alternative scopes that work in practice:
+- **Application = Project** — when the application has a stable
+  funding/budget identity.
+- **Budget ID = Project** — survives team restructuring.
+- **External org = Project** — mirrors GitHub/GitLab org structure.
 
-- **Application = Project** — one project per business application.
-  Useful when the application has a stable funding/budget identity.
-- **Budget ID = Project** — one project per internal budget
-  identifier. Survives team restructuring because budget IDs
-  outlive teams.
-- **External org = Project** — mirror an external GitHub or GitLab
-  org as a project to match source-control structure.
-
-Avoid "one project per repo" (too granular, defeats RBAC) and "one
-project for everyone" (defeats isolation, the global-permission
-anti-pattern).
+Avoid "one project per repo" (too granular) and "one project for
+everyone" (defeats isolation).
 
 ### Project key
 
-The project key is the single most important entity decision
-because it is **immutable** and is used as a **prefix** on every
-repository created inside the project. Bad keys haunt the platform.
+The project key is **immutable** and is used as a prefix on every
+repository created inside the project. Constraints (also enforced by
+the apply script):
 
-Constraints:
+- 2–32 characters, lowercase alphanumeric and hyphens.
+- Must start with a letter; no leading or trailing hyphen.
 
-- 2–32 characters.
-- Lowercase alphanumeric and hyphens only.
-- Must start with a letter (no leading digit).
-- No leading or trailing hyphen.
-
-Conventions (pick one and stick with it):
-
-- **Team key**: short, mnemonic, stable across reorgs (`payments`,
-  `cloud`, `web`).
-- **Budget ID**: opaque but stable (`fin-1042`, `ent-7501`).
-- **App ID from internal app catalog**: useful when an
-  authoritative ID already exists (`app-04217`).
-
-If the proposed key violates the rules, surface the violation and
-ask for a corrected key — never silently mangle it.
+Pick a stable identifier (team name, budget ID, app catalog ID) and
+stick with it. If the proposed key violates the rules, surface the
+violation and ask for a corrected key — never silently mangle it.
 
 ### Storage quota
 
-Default is **Unlimited**. Set a quota at creation time even when
-generous, so a single team cannot exhaust shared storage. JFrog
-warns at 75% and errors at 100% (deployments may be blocked
-depending on platform version); quota measures total virtual size
-of assigned repositories. Set in GB; editable later via the project
-Update endpoint.
+Default is Unlimited. Set a quota at creation time so a single team
+cannot exhaust shared storage — JFrog warns at 75% and errors at
+100% (deployments may be blocked). Quota is measured against total
+virtual size, set in GB, and editable later.
 
 ### Admin privileges
 
@@ -115,13 +72,6 @@ Three flags on `admin_privileges`:
 Newer Artifactory versions (7.146.0+) split create/update/delete
 permissions on remote vs. local vs. virtual repositories — check
 the current platform version before locking a privilege model.
-
-### Project Admins
-
-Assign **groups** to the Project Admin role, not individual users.
-Group-based admin survives staff churn and aligns with the IdP.
-Platform Administrators are tagged `Admin` automatically and do not
-need explicit Project Admin assignment.
 
 ## Identity and access strategy
 
@@ -147,17 +97,13 @@ per-repo permissions.
 
 ### Group-first membership
 
-Always model project membership as **groups with roles**, not as
-users with roles:
-
-- Maps cleanly to IdP groups synced via SAML/SCIM/LDAP.
-- Survives team rotation without manual grant/revoke per user.
-- Reduces audit surface area.
-
-The [`projects-api.md`](projects-api.md)
-`PUT /projects/<key>/users/<u>` and `PUT /projects/<key>/groups/<g>`
-endpoints both exist; the user variant is a last resort for service
-accounts that cannot belong to a group.
+Always model project membership — including the Project Admin role
+— as **groups with roles**, not as users with roles. Group-based
+membership maps cleanly to IdP groups synced via SAML/SCIM/LDAP,
+survives team rotation, and reduces audit surface area. The
+`PUT /projects/<key>/users/<u>` endpoint exists as a last resort for
+service accounts that cannot belong to a group. Platform Admins are
+tagged `Admin` automatically and need no explicit project-level role.
 
 ### Predefined roles
 
@@ -177,52 +123,27 @@ reports must fetch roles **per project** — see
 
 ### OIDC for CI authentication
 
-Authenticate CI pipelines with OpenID Connect. Static API keys and
-refresh tokens stored in CI secrets are an anti-pattern. OIDC
-issues short-lived tokens scoped via **identity mappings** that
-bind incoming claims (e.g. GitHub `repository`, `ref`, `workflow`)
-to a project role or group scope.
+Authenticate CI pipelines with OIDC; static API keys and refresh
+tokens stored in CI secrets are an anti-pattern. The split that
+matters for project setup: **provider creation is platform-wide**
+(one provider serves many projects), but **identity mappings are
+provider-scoped and their token-spec scope can be project-specific**
+(`applied-permissions/groups:team-x-devs`). See
+[`oidc-integration.md`](oidc-integration.md) for endpoints and
+per-CI claim recipes.
 
-Provider creation is platform-wide; identity mappings are
-provider-scoped but their token-spec scope can be project-specific
-(`applied-permissions/groups:team-x-devs`). One platform OIDC
-provider typically serves many projects. See
-[`oidc-integration.md`](oidc-integration.md) for the endpoint table
-and per-CI claim recipes.
+## Archetypes
 
-## Customer archetypes
-
-Two archetypes from the public best-practices doc ship as blueprint
-files in `skills/jfrog/assets/project-templates/`. Pick one as the
-starting point for any new project; orgs that need a different
-shape (e.g. budget-ID-as-key for finance-driven naming) author it
-directly in their Artifactory templates repo.
-
-### `team-default` — single team, default settings
-
-For a single product team owning one application or service; no
-mandate to standardize across hundreds of teams; wants the quickest
-path to a working project.
-
-- Project key matches the team name.
-- Quota at a generous default (50 GB).
-- All three `admin_privileges` flags on.
-- Project Admins are the team's lead group.
-- Predefined Developer + Release Manager roles only; one group per
-  role.
-- OIDC optional.
-
-### `delegated-admin` — heavy delegation, application-team-driven
-
-For small platform teams supporting thousands of applications
-self-service; application owners manage their own users and repos;
-IdP-managed groups carry all membership.
-
-- All three `admin_privileges` flags on.
-- Project Admins are the application's owner group.
-- Predefined Developer + Release Manager + Security Manager.
-- Groups-only membership (`members[].user` empty by design).
-- OIDC required, mapped per source repository.
+One archetype ships as a bundled blueprint at
+`skills/jfrog/assets/project-templates/team-default.json` (single
+product team, generous default quota, predefined Developer + Release
+Manager roles, OIDC optional). Orgs that need a different shape —
+delegated-admin for self-service application teams, budget-ID-as-key
+for finance-driven naming, enterprise governance with explicit
+custom roles — author the variant directly in their Artifactory
+templates repo. The agent fetches via the three-tier chain in
+[`project-templates-artifactory-repo.md`](project-templates-artifactory-repo.md)
+and falls back to the bundled blueprint only when nothing resolves.
 
 ## Repository structure
 
@@ -306,38 +227,30 @@ for each mismatch, with a suggested 4-part name.
 
 ### Per-tech repository blueprint
 
-For each declared technology, the standard set is one **local** per
-stage, exactly one **remote** on the External stage with the
-canonical upstream URL preconfigured (Maven Central, npm registry,
-PyPI, etc.), and one **virtual** that aggregates all of the above
-with explicit resolution order. Developers point their package
-manager at the virtual and never touch locals or remotes directly.
-
-Always proxy upstream; never let developers point to ad-hoc remotes. The doctrine is the *shape*, not a fixed count.
+For each declared technology: one **local** per stage; exactly one
+**remote** on the External stage with the canonical upstream URL
+preconfigured (Maven Central, npm registry, PyPI, etc.); one
+**virtual** that aggregates them with explicit resolution order.
+Developers point their package manager at the virtual and never
+touch locals or remotes directly. Always proxy upstream; never let
+developers point to ad-hoc remotes.
 
 ### Virtual aggregator with explicit resolution order
 
-The virtual repository is the single resolution endpoint developers
-touch. The recommended order is:
+The virtual is the single resolution endpoint developers touch. The
+recommended order is:
 
 ```
 prod  →  dev  →  external  →  smart-remotes  (if any)
 ```
 
-Rationale:
-
-- `prod` first so released artifacts shadow in-progress versions if
-  a version collision happens.
-- `dev` second so day-to-day work resolves locally.
-- `external` last among internal repos so an internal artifact
-  always wins over the same coordinate from a public source
-  (supply-chain defence).
-- Smart-remote consumers (cross-project sharing, below) trail at
-  the end.
-
-The apply script never relies on the insertion order of the
-`repositories[]` field on the virtual config — it always rewrites
-the field with the explicit order from the template.
+`prod` first so released artifacts shadow in-progress versions on
+collision; `dev` second so day-to-day work resolves locally;
+`external` last among internal repos so an internal artifact always
+wins over the same coordinate from a public source (supply-chain
+defence); smart-remote consumers trail at the end. The apply script
+rewrites `repositories[]` with this explicit order rather than
+relying on insertion order.
 
 ### External-stage RBAC pattern
 
@@ -436,11 +349,6 @@ Entity and access:
   drift and manual onboarding cost.
 - **Permission targets on individual repos inside a project.** Use
   roles bound to environments instead.
-- **Static API keys for CI.** Use OIDC.
-- **Storage quota left Unlimited in production.** Set a quota at
-  creation time; raise it later if needed.
-- **Reusing one project's role payload as representative of
-  another's.** Custom-role definitions differ — fetch per project.
 
 Repository structure:
 
@@ -450,14 +358,10 @@ Repository structure:
   third-party packages or get write on internal stages.
 - **Implicit virtual ordering.** Insertion order is fragile across
   re-deploys; always set `repositories[]` explicitly.
-- **Naming-prefix-only convention enforcement.** Rely on the
-  `project=<key>` query parameter for project membership, not on
-  the prefix. The 4-part rule is for *human* readability and
-  tooling hooks, not platform-side enforcement.
 - **Renaming an existing repo to fit the convention.** Renames
   break every consumer. Use `name_override` in the template to
   mark a legacy name as accepted-as-is, or migrate via
-  dual-publish, never via in-place rename.
+  dual-publish.
 
 Cross-project sharing:
 
@@ -468,17 +372,10 @@ Cross-project sharing:
 - **Sharing an `external-remote` repo.** That repo is already a
   proxy; re-sharing creates a chain that breaks credential trust.
   Share the producer's `prod-local` instead.
-- **Sharing a `dev-local` for external consumption.** Dev
-  artifacts are not stable. Share `prod-local` only.
 
 ## Further reading
 
-[`projects-api.md`](projects-api.md) (endpoints),
-[`oidc-integration.md`](oidc-integration.md) (OIDC recipes),
-[`artifactory-operations.md`](artifactory-operations.md) (repo
-CRUD), [`platform-access-entities.md`](platform-access-entities.md)
-(entity model and agent rules),
+[`projects-api.md`](projects-api.md) and
+[`oidc-integration.md`](oidc-integration.md) for endpoint shapes;
 [`project-templates-artifactory-repo.md`](project-templates-artifactory-repo.md)
-(templates discovery),
-[`projects-verification-contract.md`](projects-verification-contract.md)
-(state machine and outcome JSON).
+for the templates-repo discovery chain.

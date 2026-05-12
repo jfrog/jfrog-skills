@@ -31,14 +31,7 @@ the creation preview shows the full template.
 
 When the user approves:
 
-1. **Validate offline first** (optional but recommended):
-
-   ```bash
-   echo "$CUSTOMISED_JSON" \
-     | bash <skill_path>/scripts/<validate-script>.sh
-   ```
-
-2. **Apply**:
+1. **Apply**:
 
    ```bash
    echo "$CUSTOMISED_JSON" \
@@ -47,15 +40,18 @@ When the user approves:
    ```
 
    Construct the command in a single Shell call so the JSON does
-   not have to live in a temp file.
+   not have to live in a temp file. The apply script does
+   GET-before-PUT/POST per resource; bad templates surface as
+   `errored` entries in the outcome JSON, not as silent partial
+   writes.
 
-3. **Capture the outcome JSON** printed on stdout. Re-read the
+2. **Capture the outcome JSON** printed on stdout. Re-read the
    captured value instead of re-running the script.
-4. **Run post-apply checks** per the *Post-apply checks*
+3. **Run post-apply checks** per the *Post-apply checks*
    subsection in the skill's `SKILL.md`. For the per-resource
    state machine and recovery patterns, see
    [`projects-verification-contract.md`](projects-verification-contract.md).
-5. **Summarise to the user**: per-resource status from the outcome
+4. **Summarise to the user**: per-resource status from the outcome
    JSON (`created`, `updated`, `already_exists`, `skipped` with
    reason, or `errored`).
 

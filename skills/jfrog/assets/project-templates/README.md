@@ -13,14 +13,13 @@ and fallback diagram.
 ## Contents
 
 - `schema.json` — JSON Schema (draft-07) every template must
-  satisfy, used by the validate scripts in both phase groups of
-  the `jfrog-project-setup` skill.
-- `team-default.json` — single team, one workspace; OIDC optional;
-  predefined roles. Smallest archetype.
-- `delegated-admin.json` — heavy delegation to application owners;
-  groups-only membership; OIDC required.
+  satisfy. Read by the `jfrog-project-setup` apply scripts and
+  usable out-of-band with `ajv` for offline linting of
+  org-authored templates.
+- `team-default.json` — single team, one workspace, OIDC optional,
+  predefined roles. The bundled archetype.
 
 The agent never edits these files on disk and never writes a
-customised copy back to this directory. Orgs that want to customise
-the archetypes should copy them into their Artifactory templates
-repo and edit the copies there.
+customised copy back to this directory. Orgs that want a different
+shape (delegated admin, budget-ID-as-key, enterprise governance)
+author the variant directly in their Artifactory templates repo.
