@@ -58,8 +58,7 @@ Show the verification code prominently, then the clickable link:
 
 > ## Verification code: `<last 4 chars of SESSION_UUID>`
 >
-> Open this link to log in, then enter the code when prompted:
-> [Log in to mycompany.jfrog.io](login URL)
+> Open the login link from above, then enter the code.
 >
 > Let me know when you're done.
 
