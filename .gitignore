@@ -17,3 +17,8 @@ evaluation/artifact_index.json
 evaluation/version_manifest.json
 evaluation/scripts/.generated-system-prompt.txt
 .wep/
+
+# Local E2E harness state (see e2e/README.md)
+e2e/.venv2/
+e2e/.env
+e2e/results/

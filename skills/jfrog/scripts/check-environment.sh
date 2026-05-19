@@ -143,18 +143,55 @@ EOF
   return 1
 }
 
+# Detect the calling harness from environment signals. Output is one of:
+# claude, cursor, gemini, goose, copilot, codex, unknown — or empty
+# string when no agent signal is present (direct CLI/CI invocation).
+# Naming matches the JFrog CLI's DetectExecutionContext() vocabulary.
+detect_harness() {
+  if [[ -n "${CLAUDECODE:-}" || -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
+    echo "claude"
+  elif [[ -n "${CURSOR_AGENT:-}" || -n "${CURSOR_CLI:-}" || -n "${CURSOR_TRACE_ID:-}" ]]; then
+    echo "cursor"
+  elif [[ -n "${GEMINI_CLI:-}" ]]; then
+    echo "gemini"
+  elif [[ -n "${GOOSE_TERMINAL:-}" ]]; then
+    echo "goose"
+  elif [[ -n "${COPILOT_CLI:-}" ]]; then
+    echo "copilot"
+  elif [[ -n "${CODEX_CI:-}" || -n "${CODEX_THREAD_ID:-}" || -n "${CODEX_SANDBOX:-}" ]]; then
+    echo "codex"
+  elif [[ -n "${AGENT:-}" || -n "$MODEL_SLUG" ]]; then
+    # Agent invoked us but we can't name it.
+    echo "unknown"
+  fi
+  # No match → print nothing; emitter omits the parens block entirely.
+}
+
 # Emit skill-level env vars to stdout (for eval by the caller)
 emit_skill_env() {
-  local skill_version cli_version ua
+  local skill_version cli_version ua harness
   # Parse version from SKILL.md YAML frontmatter (metadata.version)
   skill_version="$(awk '/^---$/{n++; next} n==1 && /^[[:space:]]*version:/{gsub(/["'"'"']/, "", $2); print $2; exit}' "$SKILL_ROOT/SKILL.md" 2>/dev/null | tr -d '[:space:]')"
   skill_version="${skill_version:-unknown}"
   cli_version=$(jq -r '.cli_version // "unknown"' "$CACHE_FILE" 2>/dev/null || echo "unknown")
-  ua=""
-  if [[ -n "$MODEL_SLUG" ]]; then
-    ua="model/${MODEL_SLUG} "
+  harness=$(detect_harness)
+  # Build the parens block: semicolon-separated key=value pairs.
+  local meta=""
+  if [[ -n "$harness" ]]; then
+    meta="tool=${harness}"
   fi
-  ua="${ua}jfrog-skills/${skill_version} jfrog-cli-go/${cli_version}"
+  if [[ -n "$MODEL_SLUG" ]]; then
+    if [[ -n "$meta" ]]; then
+      meta="${meta}; model=${MODEL_SLUG}"
+    else
+      meta="model=${MODEL_SLUG}"
+    fi
+  fi
+  ua="jfrog-skills/${skill_version}"
+  if [[ -n "$meta" ]]; then
+    ua="${ua} (${meta})"
+  fi
+  ua="${ua} jfrog-cli-go/${cli_version}"
   printf '%s\n' "$ua"
 }
 

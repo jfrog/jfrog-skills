@@ -17,7 +17,7 @@ compatibility: >-
   Requires jq on PATH.
 metadata:
   role: base
-  version: "0.8.0"
+  version: "0.9.0"
 ---
 
 # JFrog Skill
@@ -63,7 +63,7 @@ and **remember its stdout** as `<UA>` for the rest of the session:
 
 ```bash
 bash <skill_path>/scripts/check-environment.sh <model-slug>
-# stdout (one line): model/<model-slug> jfrog-skills/<version> jfrog-cli-go/<cli-version>
+# stdout (one line): jfrog-skills/<version> [(tool=<harness>; model=<model-slug>)] jfrog-cli-go/<cli-version>
 # stderr: JSON state (cached 24h at ${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/jfrog-skill-state.json)
 ```
 
