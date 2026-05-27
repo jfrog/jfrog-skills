@@ -1,7 +1,7 @@
 ---
 name: jfrog
 description: >-
-  Interact with the JFrog Platform via the JFrog CLI and REST/GraphQL APIs.
+  Interact with the JFrog Platform via the JFrog CLI, JFrog MCP server and REST/GraphQL APIs.
   Use this skill when the user wants to manage Artifactory repositories,
   upload or download artifacts, manage builds, configure permissions,
   manage users and groups, work with access tokens, configure JFrog CLI
@@ -17,18 +17,35 @@ compatibility: >-
   Requires jq on PATH.
 metadata:
   role: base
-  version: "0.10.0"
+  version: "0.11.0"
 ---
 
 # JFrog Skill
 
 The foundational skill for all JFrog agent interactions. Covers JFrog Platform concepts, `jf` CLI setup and authentication, and intent routing to workflow skills.
 
-Interact with the JFrog Platform through the JFrog CLI (`jf`) and, where the
-CLI falls short, through REST APIs and GraphQL. In code examples below,
+Interact with the JFrog Platform through three tool tiers — see
+[Tool selection strategy](#tool-selection-strategy). In code examples below,
 `<skill_path>` refers to this skill's directory and is resolved automatically
 by the agent. If the agent does not resolve it, determine the path by locating
 this SKILL.md file and using its parent directory.
+
+## Tool selection strategy
+
+Try the tiers in order; move to the next only when the current does not
+cover the operation or fails:
+
+1. **JFrog MCP tools** (preferred): `CallMcpTool` against the JFrog MCP
+   server. Discover available tools from the server's tool list; never
+   guess tool names.
+2. **`jf` CLI subcommands** (fallback): dedicated commands such as
+   `jf rt upload`, `jf rt dl`, `jf build-publish`.
+3. **`jf api`** (last resort): REST/GraphQL endpoints with no dedicated
+   subcommand. Validate the path first — see rule 6 in
+   [Cautious execution](#cautious-execution).
+
+MCP and the CLI may use different token scopes. If one tier returns 403,
+try the alternate tier before reporting the operation blocked.
 
 ## Prerequisites
 
@@ -38,7 +55,7 @@ The following tools must be available on `PATH`:
 |------|---------|
 | `jq` | JSON parsing of CLI and API output |
 
-All HTTP traffic to JFrog Platform APIs goes through the `jf` CLI itself
+All JFrog HTTP traffic from Tiers 2 and 3 goes through the `jf` CLI itself
 (`jf api`, see [Invoking platform APIs with `jf api`](#invoking-platform-apis-with-jf-api) below) —
 no standalone `curl` is required for any JFrog interaction.
 
@@ -58,8 +75,10 @@ thing to check — re-run with the appropriate escalation above.
 
 ## Environment check
 
-Before your first JFrog operation in a session, run the environment check
-and **remember its stdout** as `<UA>` for the rest of the session:
+MCP (Tier 1) operations do not require this check and can proceed immediately.
+Before your first Tier 2 or Tier 3 (`jf`) operation in a session, run the
+environment check and **remember its stdout** as `<UA>` for the rest of the
+session:
 
 ```bash
 bash <skill_path>/scripts/check-environment.sh <model-slug>
@@ -92,14 +111,16 @@ subagent, pass `<UA>` in its prompt; subagents do not re-run the script.
 
 | Exit | Meaning |
 |------|---------|
-| 0 | Cache fresh — proceed |
-| 1 | Cache refreshed — proceed |
-| 2 | `jf` not installed — **STOP**, ask the user to install |
-| 3 | `jf` below minimum version — **STOP**, ask the user to upgrade |
+| 0 | Cache fresh — CLI ready (Tiers 2 and 3 available), proceed |
+| 1 | Cache refreshed — CLI ready (Tiers 2 and 3 available), proceed |
+| 2 | `jf` not installed — Tiers 2 and 3 unavailable; only MCP (Tier 1) remains |
+| 3 | `jf` below minimum version — Tiers 2 and 3 unavailable; only MCP (Tier 1) remains |
 
-On exit 2 or 3, do not fall back to `jf rt curl`, raw `curl`, or other
-workarounds — see `references/jfrog-cli-install-upgrade.md`. Re-run with
-`--force` only when the user explicitly asks to refresh or install/upgrade.
+Exit 2 or 3 is not a fatal error. Attempt to install or upgrade the CLI
+(see `references/jfrog-cli-install-upgrade.md`). If installation succeeds,
+re-run the environment check. If installation is not possible (no permissions,
+restricted environment), proceed with MCP (Tier 1) only. Both `jf` CLI commands
+(Tier 2) and `jf api` (Tier 3) require a working `jf` installation.
 
 ### JSON parsing (`jq`)
 
@@ -123,8 +144,8 @@ command output* below.
 
 ## Cautious execution
 
-Do not run commands speculatively. Before executing any JFrog CLI command or
-API call:
+Do not run commands speculatively. Before executing any JFrog CLI command,
+MCP tool call, or API call:
 
 1. Confirm the operation is needed to fulfill the user's request.
    If the request is ambiguous or could refer to multiple systems (e.g.
@@ -134,7 +155,8 @@ API call:
 2. Resolve the target server using the **Server selection rules** below —
    there must be no ambiguity about which server is used
 3. For mutating operations (create, update, delete, upload), confirm with the
-   user unless the intent is clearly implied
+   user unless the intent is clearly implied. This applies to all tiers
+   (MCP tools, CLI commands, and `jf api` with POST/PUT/DELETE).
 4. Prefer read operations first to understand current state before making changes
 5. **Never invent preparatory mutations.** If the requested operation fails
    because a precondition is not met (artifact missing from the specified repo,
@@ -145,12 +167,26 @@ API call:
    can have cascading effects the user has not considered — virtual repository
    resolution changes, storage quota consumption, replication triggers, Xray
    re-indexing, or permission propagation.
+6. **Never guess tool names or API paths.** For MCP tools, confirm the tool
+   exists in the server's tool list. For `jf api` paths, validate against
+   `<skill_path>/references/` (or
+   [JFrog OpenAPI specifications](https://docs.jfrog.com/integrations/docs/openapi-specifications)
+   if you have web access). On a 404, stop and report — never retry with a guessed
+   alternative path.
 
 ## Server selection rules (mandatory)
 
 **Single-server invariant.** Every `jf` call MUST pass `--server-id <SID>`
 (default resolved below); for one user request, all `jf` calls use **exactly
 one** server-id. A wrong answer from the wrong server is worse than a stop-and-ask.
+
+**JFrog MCP and CLI use independent auth.** MCP tools authenticate through
+the MCP server session (not `jf config`); CLI commands authenticate through
+`jf config`. If you switch the CLI target server via `jf config use`, the
+MCP connection still points to its original server. Do not mix MCP and CLI
+calls targeting different servers in the same session. If the user asks to
+switch servers, warn that MCP tools will continue to target the original
+server until the MCP connection is re-established.
 
 **MUST NOT** retry on a second configured server after 401/403/404, empty, or
 partial results; **MUST NOT** infer multi-server intent from "my"/"our" or
@@ -161,7 +197,7 @@ and `<b>`") — inferred intent is not an override.
 ### Resolve the default once per session
 
 Before your first `jf` call, resolve the default server-id and **remember it**
-as `<SID>` for the rest of the session — same pattern as `<UA>`:
+as `<SID>` for the rest of the session, same pattern as `<UA>`:
 
 ```bash
 jf config show 2>/dev/null \
@@ -179,7 +215,8 @@ Pass `--server-id <SID>` to every subsequent `jf` call. The flag goes
 When launching a subagent, pass `<SID>` in its prompt — subagents do not
 re-resolve. Examples elsewhere in this skill and in `references/*.md` omit
 `--server-id` for readability; the rule is global, same as
-`JFROG_CLI_USER_AGENT`.
+`JFROG_CLI_USER_AGENT`. To add a new server, read
+`references/jfrog-login-flow.md`.
 
 ### On any error, stop — never switch
 
@@ -207,7 +244,7 @@ below.
 
 - **Repository types, artifacts, builds, properties, or permission targets (concepts)**: read `references/artifactory-entities.md` (~220 lines)
 - **Stored packages, package versions, version locations, or the metadata layer over Artifactory (concepts)**: read `references/stored-packages-entities.md` (~165 lines)
-- **Repo, file, build, permission, user/group, or replication operations**: read `references/artifactory-operations.md` (for **listing builds** use AQL with `limit`/`offset` — see § *Listing build names*; for **full build detail** use `GET /api/build/<name>/<number>?project=` — see § *Retrieving full build info*)
+- **Repo, file, build, permission, user/group, or replication operations**: if the JFrog MCP server exposes a tool for the operation, prefer it. For CLI/API fallback, read `references/artifactory-operations.md` (for **listing builds** use AQL with `limit`/`offset` — see § *Listing build names*; for **full build detail** use `GET /api/build/<name>/<number>?project=` — see § *Retrieving full build info*)
 - **AQL queries**: read `references/artifactory-aql-syntax.md` (~585 lines)
 - **Artifactory REST beyond the CLI, structured JSON templates (replacing interactive wizards), or any Artifactory API gap**: read `references/artifactory-api-gaps.md` (~220 lines)
 
@@ -224,8 +261,8 @@ below.
 
 ### Catalog
 
-- **Public or custom catalog, package metadata, vulnerability advisories, licenses, OpenSSF, or MCP services (concepts)**: read `references/catalog-entities.md` (~190 lines)
-- **CVE details, vulnerability lookup by CVE ID, or severity/affected-packages/fix-versions for a specific CVE**: go directly to `references/onemodel-query-examples.md` § *Public security domain* for the `searchVulnerabilities` query shape — this is self-contained; do not load the `jfrog-package-safety-and-download` skill for pure CVE lookups
+- **Public or custom catalog, package metadata, vulnerability advisories, licenses, OpenSSF, or MCP services (concepts)**: if the JFrog MCP server exposes a catalog tool, prefer it for single-package lookups. For deeper queries, read `references/catalog-entities.md` (~190 lines)
+- **CVE details, vulnerability lookup by CVE ID, or severity/affected-packages/fix-versions for a specific CVE**: prefer an MCP vulnerability-lookup tool if the JFrog MCP server exposes one. Otherwise read `references/onemodel-query-examples.md` § *Public security domain* for the `searchVulnerabilities` query shape — this is self-contained; do not load the `jfrog-package-safety-and-download` skill for pure CVE lookups
 
 ### OneModel (GraphQL)
 
@@ -251,16 +288,6 @@ below.
 - **Large or parallel data gathering, list-vs-detail APIs, cache hygiene**: read `references/general-bulk-operations-and-agent-patterns.md`
 - **Standalone HTML report with JFrog-aligned styling**: read `references/jfrog-brand-html-report.md`
 - **Reusable gotchas from past tasks**: read or extend `references/general-use-case-hints.md`
-
-## Server management
-
-Server configuration is always read live from `jf config` (never cached).
-
-- **List servers**: `jf config show` (local operation, no network needed)
-- **Use a specific server**: pass `--server-id <id>` to any command
-- **Switch default**: `jf config use <server-id>`
-- **Add a new server**: read `references/jfrog-login-flow.md` for the full
-  login procedure (web login or manual token setup)
 
 ## Command discovery
 
@@ -303,10 +330,9 @@ Top-level other: `access-token-create` (`atc`), `login`, `how`, `stats`,
 
 ## Invoking platform APIs with `jf api`
 
-When the CLI lacks a dedicated subcommand, use `jf api` — the unified entry
-point for every JFrog Platform REST and GraphQL endpoint, auto-authenticated
-against the resolved server. **Do not use `jf rt curl` or `jf xr curl`** —
-they are superseded by `jf api`.
+`jf api` is the Tier 3 entry point for JFrog Platform REST and GraphQL
+endpoints, auto-authenticated against the resolved server. **Do not use
+`jf rt curl` or `jf xr curl`**; they are superseded by `jf api`.
 
 ### Product-prefix table
 
@@ -330,7 +356,7 @@ returns 404.
 
 ```bash
 jf api /artifactory/api/repositories
-jf api /artifactory/api/system/version --server-id <id>
+jf api --server-id <SID> /artifactory/api/system/version
 
 # AQL (POST with text/plain body)
 jf api /artifactory/api/search/aql \
@@ -380,10 +406,15 @@ this repo GET, see **Any API gap** under [When to read reference files](#when-to
 
 ## Gotchas
 
-- `jf api` requires the **product prefix** in the path (`/artifactory/...`, `/xray/...`, `/access/...`, `/evidence/...`,
-  `/lifecycle/...`, `/apptrust/...`, `/distribution/...`, `/onemodel/...`,
-  `/mc/...`). Omitting the prefix returns 404. See the
-  [product-prefix table](#product-prefix-table) above.
+### MCP tools
+
+- MCP tools return structured data in the tool result. Read response fields
+  directly; do not pipe MCP output through shell commands or `jq`.
+
+### CLI and `jf api`
+
+- `jf api` requires the **product prefix** in the path. Omitting it returns
+  404. See the [product-prefix table](#product-prefix-table) for the full list.
 - `jf api` writes the body (success or error JSON) to **stdout** and
   `[Info] Http Status: NNN` to **stderr** on every call; non-2xx also exits
   1 and adds `[Warn] jf api: <method> <url> returned NNN`. Pipe stdout to

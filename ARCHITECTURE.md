@@ -41,16 +41,16 @@ The base skill is the largest and most complex component. Its structure is desig
 | Section | Purpose |
 |---------|---------|
 | **Prerequisites** | Required tools (`jq`); per-runtime network and filesystem permission table (Cursor / Claude Code / Other) — replaces the old standalone "Network permissions" section |
-| **Environment check** | Cached CLI detection via `scripts/check-environment.sh <model-slug>`; script prints the user-agent value on stdout following RFC 7231 product/comment grammar — `jfrog-skills/<v> [(tool=<harness>; model=<slug>; ...)] jfrog-cli-go/<v>` — where the parens carry semicolon-separated `key=value` annotations (harness auto-detected from env signals like `CLAUDECODE` / `CURSOR_AGENT` / `GEMINI_CLI`, naming aligned with the JFrog CLI's `DetectExecutionContext()`; whole parens block omitted when there's nothing to annotate) for the agent to remember and `export JFROG_CLI_USER_AGENT='<value>'` once at the top of every bash invocation that runs `jf` (covers any number of `jf` calls in that invocation; works in runtimes that do not persist shell state across tool invocations); exit-code contract |
+| **Tool selection strategy** | Three-tier routing: JFrog MCP tools (preferred), `jf` CLI commands (fallback), `jf api` (last resort). Defines when to move to the next tier and how to handle cross-tier permission errors |
+| **Environment check** | Cached CLI detection via `scripts/check-environment.sh <model-slug>`; script prints the user-agent value on stdout following RFC 7231 product/comment grammar — `jfrog-skills/<v> [(tool=<harness>; model=<slug>; ...)] jfrog-cli-go/<v>` — where the parens carry semicolon-separated `key=value` annotations (harness auto-detected from env signals like `CLAUDECODE` / `CURSOR_AGENT` / `GEMINI_CLI`, naming aligned with the JFrog CLI's `DetectExecutionContext()`; whole parens block omitted when there's nothing to annotate) for the agent to remember and `export JFROG_CLI_USER_AGENT='<value>'` once at the top of every bash invocation that runs `jf` (covers any number of `jf` calls in that invocation; works in runtimes that do not persist shell state across tool invocations); exit-code contract (MCP Tier 1 can proceed without this check; exit 2/3 means CLI tiers are unavailable) |
 | **`~/.jfrog/skills-cache/` — allowed files only** | Restricts the cache to two artifacts; routes everything else to `/tmp` |
-| **Cautious execution** | Confirm-before-mutate, ask-on-ambiguity, never invent preparatory mutations |
-| **Server selection rules (mandatory)** | Single-server resolution; `awk` one-liner for the default server; no silent fallback; standard error-response template |
-| **When to read reference files** | Domain-organized routing index that maps task categories to specific reference files so the agent loads only what it needs |
-| **Server management** | Live `jf config` reads, `--server-id` targeting, switching defaults |
+| **Cautious execution** | Confirm-before-mutate (all tiers), ask-on-ambiguity, never invent preparatory mutations, never guess tool names or API paths (anti-hallucination rule) |
+| **Server selection rules (mandatory)** | Single-server resolution; `awk` one-liner for the default server; no silent fallback; MCP/CLI auth independence warning; standard error-response template |
+| **When to read reference files** | Domain-organized routing index that maps task categories to specific reference files; includes JFrog MCP tool suggestions before CLI/API fallback guidance |
 | **Command discovery** | CLI namespace table, `--help` patterns, sunset notices |
-| **Invoking platform APIs with `jf api`** | Single unified API entry point covering Artifactory, Xray, Access, Evidence, AppTrust, Distribution, Lifecycle, Curation, and OneModel GraphQL |
+| **Invoking platform APIs with `jf api`** | Tier 3 entry point for JFrog Platform REST and GraphQL endpoints, auto-authenticated against the resolved server |
 | **Structured inputs** | Template workaround via REST GET instead of interactive wizards |
-| **Gotchas** | Non-interactive CLI, `jf api` product prefixes and exit-code semantics, build scope, auth errors, NDJSON |
+| **Gotchas** | MCP structured-data handling; non-interactive CLI; `jf api` product prefixes and exit-code semantics; build scope; auth errors; NDJSON |
 | **Batch and parallel execution** | Three-tier parallelism model |
 | **Preserving command output** | Temp-file patterns to avoid duplicate network calls |
 
@@ -156,13 +156,14 @@ Agents must **not** store HTTP responses, GraphQL results, or other scratch file
 
 ---
 
-## REST API invocation — unified through `jf api`
+## Tool selection: JFrog MCP, CLI, `jf api`
 
-The base skill routes **all** JFrog HTTP API traffic through the single
-`jf api` command. This replaces the previous three-tier model (`jf rt curl`
-/ `jf xr curl` / plain `curl` + credential extraction) and gives the agent
-one authentication mechanism, one invocation pattern, and one exit-code
-contract across every JFrog product.
+The base skill uses a three-tier tool selection strategy. **JFrog MCP** tools
+are the preferred tier when available. When a JFrog MCP tool does not exist
+for the operation or fails, the agent falls back to dedicated `jf` CLI
+subcommands. When neither covers the operation, `jf api` is the last resort. `jf api` replaces the previous `jf rt curl` / `jf xr curl` /
+plain `curl` model and gives the agent one authentication mechanism, one
+invocation pattern, and one exit-code contract across every JFrog product.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -200,7 +201,10 @@ Agent receives user request
     │
     ├─ Read SKILL.md (always — entry point)
     │
-    ├─ Run check-environment.sh (first operation only)
+    ├─ Try JFrog MCP tool (Tier 1 — no env check needed)
+    │   └─ If a JFrog MCP tool exists and succeeds → done
+    │
+    ├─ Run check-environment.sh (first CLI/API operation only)
     │
     ├─ Match task to "When to read reference files" index
     │   │
@@ -208,13 +212,13 @@ Agent receives user request
     │   ├─ Artifactory operation? → artifactory-operations.md
     │   ├─ AQL query?            → artifactory-aql-syntax.md
     │   ├─ Platform admin?       → platform-admin-operations.md
-    │   ├─ OneModel GraphQL?     → onemodel-graphql.md (+ onemodel-query-examples.md / onemodel-common-patterns.md)
+    │   ├─ OneModel GraphQL?     → onemodel-graphql.md (+ ...)
     │   ├─ API gap?              → artifactory-api-gaps.md / platform-admin-api-gaps.md
     │   ├─ Login needed?         → jfrog-login-flow.md
     │   ├─ Bulk/parallel?        → general-parallel-execution.md
     │   └─ ... (2-3 files max per operation)
     │
-    └─ Execute operation
+    └─ Execute via CLI (Tier 2) or jf api (Tier 3)
 ```
 
 This keeps the agent's context window focused. Most operations require reading SKILL.md plus 1–3 reference files.
