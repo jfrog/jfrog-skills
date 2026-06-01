@@ -28,7 +28,14 @@ description: >-
   mapping applications or microservices into JFrog, onboarding a
   team or app, per-tech repos, SDLC stages, cross-project sharing,
   producer/consumer repositories, or starting out with JFrog at
-  organisation scale.
+  organisation scale. Also use when the user wants to replicate an
+  existing project shape into a new project, onboard the next team
+  using the same shape as another, copy and edit an existing
+  template, bulk-onboard from a curated template, instantiate a new
+  project from a base template, or run one-command project
+  provisioning against the org's templates repo -- route those to the
+  forkable `examples/onboard-from-base.sh` (see *Scaling beyond the
+  first project* below).
 metadata:
   role: workflow
 ---
@@ -269,6 +276,12 @@ more than 2-3 in a single conversation turn.
   stages, repositories, External-stage RBAC, virtual aggregator
   resolution; includes the push vs pull sharing decision tree and
   the read-only-consumer rule in its *Sharing patterns* section.
+- `examples/README.md` — read when the user signals replication
+  intent (onboard another project with an existing project's
+  shape). Documents the forkable `examples/onboard-from-base.sh`
+  envelope: substitution model, worked example, common variations
+  (review-then-apply, seed the templates repo, dry-run, skip
+  Phase 3+4), and fork checklist.
 - `../jfrog/references/project-skills-conversation-contract.md` —
   Stage 5 (preview), Stage 6 (pipe + report), `--audit`, re-apply
   loop, "what these flows do not do" (shared across both phase
@@ -325,6 +338,33 @@ per resource, so re-running after a partial failure is safe. Offline
 schema validation is available out-of-band via `ajv` against
 `../jfrog/assets/project-templates/schema.json` when the user wants
 to lint a template without touching the platform.
+
+## Scaling beyond the first project
+
+The interactive Phase 1+2 / Phase 3+4 conversations are sized for the
+first project of a given shape. For project N+1 of the same shape
+(onboarding the next team, the next budget ID, the next application),
+the customer reuses an already-curated template by running the
+forkable envelope at
+[`examples/onboard-from-base.sh`](examples/onboard-from-base.sh).
+
+When the user signals replication intent — phrases like "onboard the
+next team like fin-1042", "do this again for fin-1043", "replicate
+the shape", "copy the template" — the agent:
+
+1. Points the user at the envelope and its README at
+   [`examples/README.md`](examples/README.md).
+2. Walks through the flag interface (`--base-url`, `--key`,
+   `--display`, `--source-repo`) and the substitution model
+   (word-boundary rewrite of the old project key, plus targeted
+   overrides for `display_name` and OIDC source repo).
+3. Does **not** invoke the envelope. The script is customer-owned;
+   the customer (or their CI) runs it.
+
+The example never edits the bundled blueprints and writes nothing to
+local disk by itself — with `--render-only` the customer captures
+stdout; otherwise the rendered JSON travels only through stdin into
+the apply scripts.
 
 ## Gotchas
 

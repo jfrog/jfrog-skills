@@ -132,3 +132,49 @@ capture outcome, run post-apply checks, summarise),
 plus the re-apply-after-failure loop, the `--audit` flag, and the
 "what this flow does not do" rules: see
 [`../../jfrog/references/project-skills-conversation-contract.md`](../../jfrog/references/project-skills-conversation-contract.md).
+
+## Stage 7 — Scaling beyond the first project
+
+Out-of-conversation step. The agent does **not** run this stage; it
+points the user at the example and walks the flag interface.
+
+When a user signals replication intent — phrases like "onboard the
+next team like fin-1042", "do this again for fin-1043", "replicate
+the shape", "copy the template", "bulk onboard from this template" —
+the answer is the forkable envelope at
+[`../examples/onboard-from-base.sh`](../examples/onboard-from-base.sh)
+(documented in
+[`../examples/README.md`](../examples/README.md)), not a re-run of
+Stages 1-6.
+
+What to walk through with the user:
+
+1. **The "house template" idea.** Once a project shape has been
+   curated and applied through Stages 1-6, the customer reviews the
+   final template and commits it to their Artifactory templates repo
+   under either the per-project key
+   (`<project_key>.json`, picked up by tier 1 of the fetch chain),
+   the org default (`default.json`, tier 2), or an org-curated
+   archetype name (tier 3). That template becomes the canonical
+   shape for subsequent projects of the same kind.
+2. **The flag interface.** Required: `--base-url` (Artifactory path
+   to the curated template) **or** `--from-stdin`; `--key` (new
+   project key, immutable, must satisfy the project-key regex);
+   `--display` (new display name). Optional: `--source-repo`
+   (required when the base has an `oidc.identity_mappings[]` array;
+   substituted into every `claims.repository`); `--server-id`;
+   `--render-only` / `--dry-run` / `--skip-phase-3-4`; `--audit`.
+3. **The substitution model.** Word-boundary rewrite of every
+   string in the document where the old `project.key` appears as a
+   whole word (covers the key itself, group names by convention,
+   the OIDC provider name, OIDC scope strings), plus targeted
+   overrides for `project.display_name` and the OIDC source repo.
+4. **The recommended customer setup.** Fork the example into their
+   own onboarding repo; wire it into CI (typical shape: GitHub
+   Actions `workflow_dispatch` with `key`, `display`, and
+   `source-repo` inputs); review the rendered template in a PR
+   before merging; rely on the apply scripts' idempotency to make
+   re-runs safe.
+
+This is the only stage in the flow where the agent's job is purely
+advisory. The user (or their CI) runs the envelope.
