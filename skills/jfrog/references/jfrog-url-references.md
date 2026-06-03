@@ -33,6 +33,13 @@
 - Administration: https://docs.jfrog.com/administration/docs
 - Environments (Administration): https://docs.jfrog.com/administration/docs/environments
 
+## Reference architecture (planning)
+
+- JFrog Platform Reference Architecture (home): https://jfrog.com/reference-architecture/
+- Reference Architecture — LLM full dump: https://jfrog.com/reference-architecture/llms-full.txt
+- Reference Architecture — LLM entry: https://jfrog.com/reference-architecture/llms.txt
+- Reference Architecture — sitemap: https://jfrog.com/reference-architecture/sitemap.xml
+
 ## Brand and legal
 
 - JFrog Brand Guidelines: https://jfrog.com/brand-guidelines/

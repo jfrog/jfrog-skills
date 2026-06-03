@@ -6,6 +6,7 @@ This repository ships AI agent skills for the JFrog Platform:
 
 - **`jfrog`** (required): The base skill covering CLI setup, artifact operations, security queries, AQL, and GraphQL. All other skills depend on it.
 - **`jfrog-package-safety-and-download`**: A workflow skill for package safety checks and curation-aware downloads. Requires `jfrog`.
+- **`jfrog-reference-architecture`**: A workflow skill for topology, sizing, deployment patterns, and use-case selection using the [JFrog Platform Reference Architecture](https://jfrog.com/reference-architecture/) (live `WebFetch`, primarily [llms-full.txt](https://jfrog.com/reference-architecture/llms-full.txt)). Requires `jfrog` for vocabulary only; no CLI needed for planning.
 
 Install them in your AI coding agent and interact with JFrog through natural language. The `jfrog` skill must always be installed — workflow skills build on top of it.
 
@@ -19,13 +20,13 @@ Install them in your AI coding agent and interact with JFrog through natural lan
 From remote repository:
 
 ```bash
-npx skills add git@github.com:jfrog/jfrog-skills.git -g --skill jfrog --skill jfrog-package-safety-and-download
+npx skills add git@github.com:jfrog/jfrog-skills.git -g --skill jfrog --skill jfrog-package-safety-and-download --skill jfrog-reference-architecture
 ```
 
 From a local clone:
 
 ```bash
-npx skills add . -g --skill jfrog --skill jfrog-package-safety-and-download
+npx skills add . -g --skill jfrog --skill jfrog-package-safety-and-download --skill jfrog-reference-architecture
 ```
 
 The `-g` flag installs into the global scope (recommended). Drop it to install into the current project only. Run `npx skills --help` for more usage information.
@@ -148,6 +149,24 @@ Try asking:
 ### Administer your JFrog Platform
 
 CLI setup, multi-instance management, access tokens.
+
+### Plan topology, sizing, and deployment
+
+Uses the [JFrog reference architecture](https://jfrog.com/reference-architecture/) site (live fetch). Install `jfrog-reference-architecture`.
+
+Try asking:
+
+> What sizing should I set for Artifactory given our peak traffic?
+
+> Should we use JFrog SaaS or self-managed for a single-site production setup?
+
+> We need disaster recovery across two regions — which documented use case fits?
+
+> List all documented reference-architecture use cases for multi-site
+
+> How should I deploy Artifactory on EKS with the official Helm chart?
+
+> Active-active vs active-passive — which pattern matches our needs?
 
 ### Execute Multi-Step Workflows
 

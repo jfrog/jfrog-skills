@@ -239,6 +239,7 @@ below.
 
 - **Disambiguating a JFrog entity, understanding entity types, or planning operations that span multiple products**: read `references/jfrog-entity-index.md`, then follow pointers to the relevant domain file
 - **Looking up documentation URLs**: read `references/jfrog-url-references.md`
+- **Platform topology, sizing (RPM / t-shirt templates), deployment architecture, multi-site use cases, SaaS vs self-managed, HA, air-gapped, or disaster recovery planning**: if the user has the `jfrog-reference-architecture` workflow skill installed, use it — it fetches live content from [JFrog Platform Reference Architecture](https://jfrog.com/reference-architecture/) (primarily `llms-full.txt`). Do not embed sizing tables or use-case catalogs in this base skill
 
 ### Artifactory
 

@@ -4,6 +4,7 @@
 *~
 .idea/
 .vscode/
+.cursor/
 node_modules/
 output/
 tests/data/
