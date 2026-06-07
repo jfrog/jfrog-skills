@@ -218,6 +218,24 @@ into the Phase 3+4 walkthrough on the same project. The template
 extends; the agent re-customises the same JSON object across the
 two flows.
 
+### Preview contract (both phase groups)
+
+Every preview reply — whether in a single-turn or a multi-turn
+continuation — **must** follow this format:
+
+1. Render the full customised template JSON in a fenced `json` code
+   block.
+2. **Name the apply script** by its exact filename immediately
+   before or after the code block:
+   - Phase 1+2: `jfrog-project-create-from-template.sh`
+   - Phase 3+4: `jfrog-project-apply-repo-structure.sh`
+3. Ask for explicit user approval before piping anything. Acceptable
+   phrasing: *"Shall I apply this?"*, *"Approve to proceed."*,
+   *"Confirm to pipe to the script."*
+
+**Do not** merge the preview and the apply in one reply. Always
+wait for user approval.
+
 ### Post-apply checks (Phase 1+2)
 
 After `jfrog-project-create-from-template.sh` returns, run these
