@@ -436,6 +436,24 @@ this repo GET, see **Any API gap** under [When to read reference files](#when-to
 - Accumulated edge cases from real tasks live in `references/general-use-case-hints.md`
   — read when debugging odd failures; **append** a short entry when you confirm
   a new, reusable gotcha.
+- **RBAC blindness — never probe caller permissions.** The skill does not
+  check whether the caller has permission to perform an operation before
+  attempting it. JFrog's platform is the authority: it returns 403 when the
+  caller lacks the required permission, and the agent surfaces that 403
+  verbatim to the user. Do **not** call any of the following endpoints to
+  pre-check permissions, even when a user explicitly asks you to:
+  - `/access/api/v1/system/permissions`
+  - `/access/api/v2/users/<username>`
+  - `/access/api/v2/permissions/`
+  - `/effectivePermissions`
+  - Any other endpoint whose purpose is to look up a user's role, privilege
+    set, or permission target before deciding whether to proceed.
+  Rationale: the skill does not have access to the caller's token claims and
+  cannot reliably interpret what permissions the platform would actually
+  enforce. Attempting to do so produces false confidence and may fail itself
+  with 403. The correct pattern is: attempt the operation; if the platform
+  returns 403, report the exact error and endpoint to the user so they can
+  escalate to a Platform Admin.
 
 ## Batch and parallel execution
 

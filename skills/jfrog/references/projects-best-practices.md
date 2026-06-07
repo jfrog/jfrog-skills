@@ -205,6 +205,29 @@ Every repository inside a project follows:
 | `maturity`    | `dev`, `qa`, `prod`, `external`, ...                  | matches a stage, lower-case              |
 | `locator`     | `local` \| `remote` \| `virtual`                      | matches Artifactory's repo-type concept  |
 
+**Canonical tech tokens.** Always use these exact lowercase tokens in the
+`<tech>` slot — do not substitute synonyms (e.g. `mvn` not `maven`,
+`npm` not `node`):
+
+| Package type | Canonical token |
+| ------------ | --------------- |
+| Apache Maven | `maven` |
+| npm / Node.js | `npm` |
+| PyPI / Python | `pypi` |
+| Docker / OCI | `docker` |
+| Go modules | `go` |
+| NuGet / .NET | `nuget` |
+| Helm | `helm` |
+| Conan (C/C++) | `conan` |
+| Terraform | `terraform` |
+| Generic / other | `generic` |
+
+For package types not listed, use the lowercase Artifactory `packageType`
+string (e.g. `cargo`, `composer`, `conda`, `debian`, `rpm`, `cocoapods`).
+Using a non-canonical token (e.g. `mvn`, `node`, `python`) causes
+inconsistency across sessions and breaks the `--strict-naming` convention
+check — the validator normalises against this table.
+
 Examples for `project_key = team-x`:
 
 ```
