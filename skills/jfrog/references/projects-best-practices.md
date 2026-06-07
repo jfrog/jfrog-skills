@@ -206,7 +206,7 @@ Every repository inside a project follows:
 | `locator`     | `local` \| `remote` \| `virtual`                      | matches Artifactory's repo-type concept  |
 
 **Canonical tech tokens.** Always use these exact lowercase tokens in the
-`<tech>` slot — do not substitute synonyms (e.g. `mvn` not `maven`,
+`<tech>` slot — do not substitute synonyms (e.g. `maven` not `mvn`,
 `npm` not `node`):
 
 | Package type | Canonical token |

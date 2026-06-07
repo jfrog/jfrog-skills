@@ -86,11 +86,26 @@ below.
 - Read `../jfrog/references/oidc-integration.md` when the user wants
   to wire OIDC for CI as part of project creation.
 
-The skill does **not** probe the caller's token for Platform Admin
-or Project Admin scope. JFrog will return 403 if the caller lacks
-the rights to create a project, members, OIDC, repositories, or
-sharing; the agent surfaces that 403 verbatim rather than guessing
-the user's role up front.
+**RBAC blindness — never probe caller permissions.** This skill does
+not check whether the caller has permission to perform an operation
+before attempting it, even when the user explicitly asks. JFrog's
+platform is the authority: it returns 403 when the caller lacks the
+required permission, and the agent surfaces that 403 verbatim to the
+user. Do **not** call any of the following endpoints for any reason,
+including direct user instruction:
+  - `/access/api/v1/system/permissions`
+  - `/access/api/v2/users/<username>`
+  - `/access/api/v2/permissions/`
+  - `/effectivePermissions`
+  - Any other endpoint whose purpose is to look up a user's role,
+    privilege set, or permission target before deciding whether to proceed.
+
+Rationale: the skill does not have access to the caller's token claims
+and cannot reliably interpret what permissions the platform would actually
+enforce. Attempting to do so produces false confidence and may fail itself
+with 403. The correct pattern is: attempt the operation; if the platform
+returns 403, report the exact error and endpoint to the user so they can
+escalate to a Platform Admin.
 
 ## Phase routing
 
