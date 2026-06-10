@@ -44,16 +44,13 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
-      # Default checkout — provides this workflow's script and plugins.json.
       - uses: actions/checkout@v4
 
-      # The tagged upstream content we'll vendor.
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.VERSION }}
           path: upstream
 
-      # The plugin repo — default branch.
       - uses: actions/checkout@v4
         with:
           repository: jfrog/${{ matrix.name }}

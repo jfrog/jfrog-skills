@@ -26,7 +26,7 @@ def fail(msg: str) -> None:
     sys.exit(1)
 
 
-def cmd_matrix() -> None:
+def create_matrix() -> None:
     """Emit a GitHub Actions matrix from .github/plugins.json.
 
     Writes `matrix=<compact-json>` to $GITHUB_OUTPUT (the per-step output
@@ -55,7 +55,7 @@ def cmd_matrix() -> None:
     print(json.dumps(matrix, indent=2))
 
 
-def cmd_copy() -> None:
+def copy_skills_folder() -> None:
     """Copy this repo's `skills/` into a plugin checkout at DEST_PREFIX.
 
     Removes any existing destination first so the result matches upstream
@@ -91,9 +91,9 @@ def main() -> None:
     command = sys.argv[1] if len(sys.argv) == 2 else ""
 
     if command == "matrix":
-        cmd_matrix()
+        create_matrix()
     elif command == "copy":
-        cmd_copy()
+        copy_skills_folder()
     else:
         fail(USAGE)
 

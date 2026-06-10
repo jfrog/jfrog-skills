@@ -154,10 +154,7 @@ jobs:
 
               console.log(`Tag ${tag} created at ${mergedPr.data.merge_commit_sha}`);
 
-              // Trigger the Sync Plugins workflow with the new tag. The tag
-              // push itself does NOT fire other workflows (GHA blocks events
-              // created by GITHUB_TOKEN), but workflow_dispatch IS allowed
-              // via GITHUB_TOKEN — so we call it explicitly.
+              // Trigger the Sync Plugins workflow with the new tag.
               console.log(`Dispatching Sync Plugins for ${tag}...`);
               await github.rest.actions.createWorkflowDispatch({
                 owner, repo,
