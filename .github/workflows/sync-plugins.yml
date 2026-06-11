@@ -11,7 +11,6 @@ name: Sync Plugins
 on:
   push:
     tags: ['v*']
-    branches: ['AX-1651-ci-cd-plugins']  # TEMP: pre-merge testing, remove before merge
   workflow_dispatch:
     inputs:
       version:
@@ -22,12 +21,9 @@ on:
 permissions:
   contents: read
 
-# TEMP: hardcoded to v0.5.0 for pre-merge testing — plugins are currently at v0.11.0,
-# so syncing v0.5.0 exercises additions, modifications, AND deletions (~12 files,
-# +434/-355) plus the patch-version bump. Revert to the line below before merging:
-#   VERSION: ${{ github.event.inputs.version || github.ref_name }}
+# For tag pushes, github.ref_name is the tag. For manual dispatch, use the input.
 env:
-  VERSION: v0.5.0
+  VERSION: ${{ github.event.inputs.version || github.ref_name }}
 
 jobs:
   prepare:
