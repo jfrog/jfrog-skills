@@ -22,12 +22,12 @@ on:
 permissions:
   contents: read
 
-# TEMP: hardcoded to v0.10.0 for pre-merge testing — plugins are currently at v0.11.0,
-# so syncing v0.10.0 will produce a visible diff in the PRs. Revert to the line below
-# before merging:
+# TEMP: hardcoded to v0.5.0 for pre-merge testing — plugins are currently at v0.11.0,
+# so syncing v0.5.0 exercises additions, modifications, AND deletions (~12 files,
+# +434/-355) plus the patch-version bump. Revert to the line below before merging:
 #   VERSION: ${{ github.event.inputs.version || github.ref_name }}
 env:
-  VERSION: v0.10.0
+  VERSION: v0.5.0
 
 jobs:
   prepare:
@@ -64,6 +64,7 @@ jobs:
       - name: Copy skills into plugin
         env:
           DEST_PREFIX: ${{ matrix.dest_prefix }}
+          VERSION_BUMPS: ${{ toJson(matrix.version_bumps) }}
         run: python3 .github/scripts/jfrog-sync-plugins.py copy
 
       - uses: peter-evans/create-pull-request@v7

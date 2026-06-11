@@ -1,7 +1,26 @@
 {
   "plugins": [
-    { "name": "claude-plugin", "dest_prefix": "" },
-    { "name": "cursor-plugin", "dest_prefix": "plugins/jfrog" },
-    { "name": "vscode-plugin", "dest_prefix": "plugin" }
+    {
+      "name": "claude-plugin",
+      "dest_prefix": "",
+      "version_bumps": [
+        { "file": ".claude-plugin/plugin.json", "path": "version" }
+      ]
+    },
+    {
+      "name": "cursor-plugin",
+      "dest_prefix": "plugins/jfrog",
+      "version_bumps": [
+        { "file": ".cursor-plugin/marketplace.json", "path": "metadata.version" },
+        { "file": "plugins/jfrog/.cursor-plugin/plugin.json", "path": "version" }
+      ]
+    },
+    {
+      "name": "vscode-plugin",
+      "dest_prefix": "plugin",
+      "version_bumps": [
+        { "file": "marketplace.json", "path": "plugins.0.version" }
+      ]
+    }
   ]
 }
