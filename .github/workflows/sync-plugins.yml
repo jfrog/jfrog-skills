@@ -1,0 +1,75 @@
+name: Sync Plugins
+
+# When a v* tag is pushed, open a PR in every plugin
+# listed in .github/plugins.json. Each PR vendors this repo's skills/
+# at the tag into the plugin repo.
+#
+# Required repo secret:
+#   PLUGIN_SYNC_TOKEN  PAT with Contents:write + Pull requests:write on every
+#                      jfrog/<plugin-name> repo in plugins.json.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to sync (e.g. v0.11.0).'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# For tag pushes, github.ref_name is the tag. For manual dispatch, use the input.
+env:
+  VERSION: ${{ github.event.inputs.version || github.ref_name }}
+
+jobs:
+  prepare:
+    name: Build plugin matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: matrix
+        run: python3 .github/scripts/jfrog-sync-plugins.py matrix
+
+  sync:
+    name: Sync ${{ matrix.name }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.VERSION }}
+          path: upstream
+
+      - uses: actions/checkout@v4
+        with:
+          repository: jfrog/${{ matrix.name }}
+          token: ${{ secrets.PLUGIN_SYNC_TOKEN }}
+          path: plugin
+
+      - name: Copy skills into plugin
+        env:
+          DEST_PREFIX: ${{ matrix.dest_prefix }}
+          VERSION_BUMPS: ${{ toJson(matrix.version_bumps) }}
+        run: python3 .github/scripts/jfrog-sync-plugins.py copy
+
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          path: plugin
+          token: ${{ secrets.PLUGIN_SYNC_TOKEN }}
+          branch: chore/sync-skills-${{ env.VERSION }}
+          delete-branch: true
+          commit-message: 'chore: sync skills to ${{ env.VERSION }}'
+          title: 'chore: sync skills to ${{ env.VERSION }}'
+          body: |
+            Vendored from `${{ env.VERSION }}` of jfrog/jfrog-skills.

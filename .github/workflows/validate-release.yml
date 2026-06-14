@@ -11,6 +11,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write  # required to trigger the Sync Plugins workflow after tagging
 
 jobs:
   validate:
@@ -152,4 +153,14 @@ jobs:
               });
 
               console.log(`Tag ${tag} created at ${mergedPr.data.merge_commit_sha}`);
+
+              // Trigger the Sync Plugins workflow with the new tag.
+              console.log(`Dispatching Sync Plugins for ${tag}...`);
+              await github.rest.actions.createWorkflowDispatch({
+                owner, repo,
+                workflow_id: 'sync-plugins.yml',
+                ref: 'main',
+                inputs: { version: tag }
+              });
+              console.log(`Dispatched.`);
             }

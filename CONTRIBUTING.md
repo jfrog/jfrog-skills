@@ -56,6 +56,23 @@ Examples:
 
 This project uses `0.x` versioning while in beta. The `1.0` release will be tagged once skills graduate from beta after sufficient validation and customer feedback.
 
+## Downstream Plugin Sync
+
+When a `v*` tag is pushed, the `Sync Plugins` workflow (`.github/workflows/sync-plugins.yml`) opens a PR in every plugin listed in `.github/plugins.json`. Each PR vendors this repo's `skills/` at the tagged ref into the plugin repo. The plugin teams review and merge those PRs manually.
+
+To add or remove a plugin, edit `.github/plugins.json`. Each entry has:
+
+- `name` — repo name under the `jfrog/` GitHub org
+- `dest_prefix` — prefix inside the plugin repo where `skills/` should land. Empty string means repo root.
+
+Example: `{ "name": "cursor-plugin", "dest_prefix": "plugins/jfrog" }` copies this repo's `skills/` to `jfrog/cursor-plugin` at `plugins/jfrog/skills/`.
+
+To re-trigger a sync for an existing tag, run the workflow manually from the Actions tab and pass the tag as the `version` input.
+
+### Required setup
+
+- Repo secret `PLUGIN_SYNC_TOKEN`: a fine-grained PAT (or classic PAT with `repo` scope) with `Contents: write` and `Pull requests: write` on every plugin listed in `plugins.json`.
+
 ## Contributor License Agreement
 
 Contributions to this project require signing the [JFrog CLA](https://jfrog.com/cla/) before your first pull request can be merged.
