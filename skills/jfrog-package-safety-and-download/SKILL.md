@@ -20,17 +20,6 @@ metadata:
 - Read `../jfrog/SKILL.md` for JFrog Platform concepts, domain model, CLI setup, and API patterns.
 - **OneModel shapes drift by server version.** Before inventing GraphQL fields or `where` filters, read `../jfrog/references/onemodel-graphql.md` (schema fetch workflow) and `../jfrog/references/onemodel-query-examples.md` (**Public packages**, **Stored packages**). Regenerate or verify queries against `GET "$JFROG_URL/onemodel/api/v1/supergraph/schema"` when examples fail validation.
 
-## Workflow
-
-# Package safety check and download workflow
-
-When to read this file:
-
-- User asks to **check if a package is safe** and/or **download** it.
-- User asks to **download a package** from Artifactory.
-- User mentions checking a package for **curation** approval.
-- User wants to know if a package is **allowed** or **approved** for use.
-
 ## Workflow overview
 
 ```mermaid
