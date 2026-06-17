@@ -212,5 +212,6 @@ jf api '/artifactory/api/storage/<repo>/<slug>/<version>' --server-id "<SID>"
 
   > Publishing `<slug>` to `<repo>` on `<SID>` failed: `<cli-error>`.
 
-  On 401/403/404, follow the *On any `jf` error, stop* rule in *Gotchas*
-  (`../SKILL.md`): do not retry against a different configured server.
+  On 401/403/404, follow the stop-on-error rule from the base `jfrog` skill
+  (see *Prerequisites* in `../SKILL.md`): stop and do not retry against a
+  different configured server.

@@ -35,31 +35,25 @@ Pick the row matching the user's intent and read that reference file.
 
 ## Prerequisites
 
-- **JFrog CLI required.** This skill drives the `jf` CLI. Confirm `jf` is
-  available before the first `jf` call via the base `jfrog` skill's
-  [Environment check](../jfrog/SKILL.md#environment-check). If it is missing,
-  install it (per that skill) and re-check.
+- **Read the base `jfrog` skill first.** [`../jfrog/SKILL.md`](../jfrog/SKILL.md)
+  owns the shared guards this skill depends on, so this skill does **not** repeat
+  them — follow them there:
+  - The [environment check](../jfrog/SKILL.md#environment-check) — confirm `jf`
+    is installed before the first `jf` call, and install it if missing.
+  - The [server selection rules](../jfrog/SKILL.md#server-selection-rules-mandatory)
+    — resolve the default `<SID>` once and reuse it, pass `--server-id <SID>`
+    after the subcommand on every `jf` call, and use one server per request.
+  - The stop-on-error rule — on any `jf` failure, stop and never switch servers.
+
+  One addition specific to this skill: never `cat` or parse
+  `~/.jfrog/jfrog-cli.conf.v6` (it can hold access tokens); list servers only
+  with `jf config show`, which redacts secrets.
 - **Agent Guard registry.** Catalog discovery and repo provisioning run through
   `npx --yes @jfrog/agent-guard`. Substitute `<REGISTRY_URL>` from
   `JFROG_AGENT_GUARD_REPO` if set, else use
-  `https://releases.jfrog.io/artifactory/api/npm/coding-agents-npm/`.
-- **Resolve the server once (`<SID>`), then reuse it for the whole session.**
-  Resolve in this order, and **do not re-ask on later requests** once you have an
-  `<SID>`:
-  1. If `JFROG_URL` (or `JF_URL`) is set, that is the target. Match its host to a
-     server id from `jf config show` and use it **without asking**. Agent Guard
-     reads the same env vars directly.
-  2. Otherwise follow the base `jfrog` skill's
-     [Server selection rules](../jfrog/SKILL.md#server-selection-rules-mandatory):
-     use the configured default, and ask only when there are multiple servers and
-     no default.
-
-  List servers only with `jf config show`, which redacts secrets. **Never `cat`
-  or parse `~/.jfrog/jfrog-cli.conf.v6` directly** (it can hold access tokens), and
-  do not read it through any other tool or script. Pass `--server-id <SID>` after the
-  subcommand on every `jf` call (e.g. `jf skills list --server-id <SID>`), and
-  pass the same id to Agent Guard as `--server "<SID>"`.
-
+  `https://releases.jfrog.io/artifactory/api/npm/coding-agents-npm/`. Pass the
+  resolved `<SID>` to Agent Guard as `--server "<SID>"`; when `JFROG_URL` /
+  `JF_URL` is set, Agent Guard reads it directly.
 - **Resolve the project (`<PROJECT>`) only when needed.** It is required for
   `--list-skills` (browse/name-search), `--list-skill-versions`, and
   `--provision-skills-repository` (auto-creating a publish repo when the user
@@ -83,18 +77,14 @@ flowchart TD
 
 ## Gotchas
 
-Cross-cutting rules only. Flow-specific rules live in the reference files above.
+Catalog-specific rules only. The shared `jf` guards — single server per request,
+stop-on-error, and cautious mutation — live in the base
+[`jfrog` skill](../jfrog/SKILL.md); follow those too. Flow-specific rules live in
+the reference files above.
 
-- **Single server**: pass the same `--server-id <SID>` to every `jf` call in a
-  flow, and never switch servers mid-flow.
-- **On any `jf` error, stop**: if a call returns 401/403/404, a network error, or
-  a timeout, stop with no further `jf` calls and report it. Never switch servers,
-  and do not retry against another configured server unless the user explicitly
-  names one.
 - **Confirm before mutating**: install and list are read-mostly. Remove, registry
-  delete, and publish mutate state. Confirm with the user first, prefer a read to
-  check current state, and never invent preparatory mutations (creating repos,
-  deleting versions) the user did not ask for.
+  delete, and publish mutate state — confirm with the user first and prefer a
+  read to check current state.
 - **Session pickup**: installs, updates, and removals usually take effect only at
   the next agent session start, so tell the user to restart.
 - **Don't leak the plumbing**: present skills/versions/repos to the user, never
