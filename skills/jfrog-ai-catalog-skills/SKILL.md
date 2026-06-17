@@ -52,8 +52,9 @@ Pick the row matching the user's intent and read that reference file.
   `npx --yes @jfrog/agent-guard`. Substitute `<REGISTRY_URL>` from
   `JFROG_AGENT_GUARD_REPO` if set, else use
   `https://releases.jfrog.io/artifactory/api/npm/coding-agents-npm/`. Pass the
-  resolved `<SID>` to Agent Guard as `--server "<SID>"`; when `JFROG_URL` /
-  `JF_URL` is set, Agent Guard reads it directly.
+  same `<SID>` to Agent Guard as `--server "<SID>"` so it targets the same server
+  as your `jf` calls. Agent Guard also reads `JFROG_URL` / `JF_URL` directly when
+  set, so make sure the `<SID>` you resolved points at that same host.
 - **Resolve the project (`<PROJECT>`) only when needed.** It is required for
   `--list-skills` (browse/name-search), `--list-skill-versions`, and
   `--provision-skills-repository` (auto-creating a publish repo when the user
@@ -71,7 +72,7 @@ flowchart TD
     C --> D
     D -->|List all / versions| E[npx @jfrog/agent-guard --list-skills]
     D -->|Install / update| F[Resolve slug + version, then jf skills install/update]
-    D -->|List installed / remove| G[jf skills list / rm]
+    D -->|List installed / remove| G[jf skills list / rm -rf install dir]
     D -->|Publish| H[Resolve/provision repo, validate bundle, jf skills publish]
 ```
 
@@ -82,9 +83,9 @@ stop-on-error, and cautious mutation — live in the base
 [`jfrog` skill](../jfrog/SKILL.md); follow those too. Flow-specific rules live in
 the reference files above.
 
-- **Confirm before mutating**: install and list are read-mostly. Remove, registry
-  delete, and publish mutate state — confirm with the user first and prefer a
-  read to check current state.
+- **Which operations mutate**: install and list are read-mostly; remove, registry
+  delete, and publish mutate state — the base skill's cautious-mutation rule
+  applies to those three.
 - **Session pickup**: installs, updates, and removals usually take effect only at
   the next agent session start, so tell the user to restart.
 - **Don't leak the plumbing**: present skills/versions/repos to the user, never

@@ -43,8 +43,11 @@ skill, see *Update an installed skill* in `installing-skills.md`.
 exists:
 
 ```bash
-test -d "<install-dir>/<slug>" || echo "Not installed, nothing to remove"
-rm -rf "<install-dir>/<slug>"
+if [ -d "<install-dir>/<slug>" ]; then
+  rm -rf "<install-dir>/<slug>"
+else
+  echo "Not installed, nothing to remove"
+fi
 ```
 
 Confirm with the user before deleting.

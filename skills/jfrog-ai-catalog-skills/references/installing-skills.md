@@ -124,12 +124,11 @@ Interpret the `status` field in the response:
   > `<slug>@<version>` is **blocked by the Xray policy `<policy-name>`** and
   > cannot be installed. Contact your JFrog administrator to review or resolve
   > the policy.
-- **Any other status, or a non-zero `jf api` exit.** Treat as an operational
-  failure (auth, endpoint disabled). `jf api` writes the body to stdout and
-  signals a non-2xx response through its **exit code** plus a
-  `[Warn] ... returned NNN` line on **stderr** (capture it with
-  `2>/tmp/err-$$.log`). This is the deliberate **free-form** case: report the
-  CLI error verbatim (no template), but still strip the `Trace ID`.
+- **Any other status, or a non-zero `jf api` exit** (`jf api` signals a non-2xx
+  response via its exit code plus a stderr `[Warn] … returned NNN` line — see the
+  base `jfrog` skill's *CLI and `jf api`* gotchas). Treat as an operational
+  failure (auth, endpoint disabled): the deliberate **free-form** case — report
+  the CLI error verbatim (no template), but still strip the `Trace ID`.
 
 ## Verify the install landed
 
