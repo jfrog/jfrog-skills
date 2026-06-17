@@ -14,7 +14,6 @@ description: >-
   Artifactory / the AI Catalog.
 metadata:
   role: workflow
-  version: "0.5.0"
 ---
 
 # JFrog AI Catalog Skills
@@ -23,7 +22,7 @@ Discover, install, and manage agent skills from the JFrog AI Catalog
 (Artifactory skills repositories), and publish your own skills back to it, all
 through the JFrog CLI (`jf skills`) and the JFrog Agent Guard.
 
-## When to use this skill
+## Choose a reference file
 
 Pick the row matching the user's intent and read that reference file.
 
