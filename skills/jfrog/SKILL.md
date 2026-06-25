@@ -13,6 +13,10 @@ description: >-
   Also use when the user mentions jf, jfrog, artifactory, xray, distribution,
   evidence, apptrust, onemodel, graphql, workers, mission control, curation,
   advanced security, exposures, or any JFrog product name.
+  Do NOT use this skill to install, add, remove, list, or manage MCP servers
+  (e.g. "install an MCP", "what MCPs can I install", "list my MCPs", "which MCP
+  servers can I use", "what's in my approved MCP catalog") — MCP server
+  management is handled by the JFrog Agent Guard workflow, not this skill.
 compatibility: >-
   Requires jq on PATH.
 metadata:
@@ -29,6 +33,10 @@ Interact with the JFrog Platform through three tool tiers — see
 `<skill_path>` refers to this skill's directory and is resolved automatically
 by the agent. If the agent does not resolve it, determine the path by locating
 this SKILL.md file and using its parent directory.
+
+> **Out of scope: MCP server management.** Installing, listing, removing, or
+> configuring MCP servers (via JFrog Agent Guard / `@jfrog/agent-guard`) is a
+> separate workflow, not this skill.
 
 ## Tool selection strategy
 
