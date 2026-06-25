@@ -6,6 +6,7 @@ This repository ships AI agent skills for the JFrog Platform:
 
 - **`jfrog`** (required): The base skill covering CLI setup, artifact operations, security queries, AQL, and GraphQL. All other skills depend on it.
 - **`jfrog-package-safety-and-download`**: A workflow skill for package safety checks and curation-aware downloads. Requires `jfrog`.
+- **`jfrog-ai-catalog-skills`**: A workflow skill to discover, install, update, and publish agent skills in the JFrog AI Catalog. Requires `jfrog`.
 
 Install them in your AI coding agent and interact with JFrog through natural language. The `jfrog` skill must always be installed — workflow skills build on top of it.
 
@@ -19,13 +20,13 @@ Install them in your AI coding agent and interact with JFrog through natural lan
 From remote repository:
 
 ```bash
-npx skills add git@github.com:jfrog/jfrog-skills.git -g --skill jfrog --skill jfrog-package-safety-and-download
+npx skills add git@github.com:jfrog/jfrog-skills.git -g --skill jfrog --skill jfrog-package-safety-and-download --skill jfrog-ai-catalog-skills
 ```
 
 From a local clone:
 
 ```bash
-npx skills add . -g --skill jfrog --skill jfrog-package-safety-and-download
+npx skills add . -g --skill jfrog --skill jfrog-package-safety-and-download --skill jfrog-ai-catalog-skills
 ```
 
 The `-g` flag installs into the global scope (recommended). Drop it to install into the current project only. Run `npx skills --help` for more usage information.
@@ -148,6 +149,24 @@ Try asking:
 ### Administer your JFrog Platform
 
 CLI setup, multi-instance management, access tokens.
+
+### Discover and Install AI Catalog Skills
+
+Browse, install, update, and publish agent skills hosted in the JFrog AI Catalog.
+
+Try asking:
+
+> What skills are available in my JFrog AI Catalog project *project-name*?
+
+> Install the *skill-name* skill from my JFrog AI Catalog project *project-name*
+
+> What skills do I have installed from the JFrog AI Catalog?
+
+> Show me the versions of *skill-name* in my JFrog AI Catalog project *project-name*
+
+> Update the *skill-name* skill from the JFrog AI Catalog to the latest version
+
+> Publish the skill at *path* to my JFrog AI Catalog project *project-name*
 
 ### Execute Multi-Step Workflows
 
