@@ -3,20 +3,11 @@
 *.swo
 *~
 .idea/
+*.iml
 .vscode/
 node_modules/
 output/
 tests/data/
-
-# WEP credentials and run artifacts
-evaluation/.credentials.local.json
-evaluation/.azure-sp.env
-evaluation/runs/
-evaluation/resolved_definitions/
-evaluation/artifact_index.json
-evaluation/version_manifest.json
-evaluation/scripts/.generated-system-prompt.txt
-.wep/
 
 # Local E2E harness state (see e2e/README.md)
 e2e/.venv2/

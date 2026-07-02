@@ -20,6 +20,18 @@ Any command or script added to this repository must start with `jfrog` (e.g., `j
 
 All skills live directly under `skills/<name>/` -- flat structure, never nested into subdirectories like `skills/base/` or `skills/workflows/`. Layering (base vs workflow) is expressed through SKILL.md metadata and prerequisites, not through directory hierarchy.
 
+## Local Development
+
+Symlink `skills/` into your global agent scope so edits apply immediately:
+
+```bash
+make skills-install    # link skills/ → ~/.agents/skills and ~/.claude/skills
+make skills-status     # verify link state
+make skills-remove     # unlink before enabling the Claude plugin beta (avoids duplicates)
+```
+
+Skills are discovered automatically from `skills/*/SKILL.md` — no per-skill configuration.
+
 ## Base vs Workflow Skills
 
 - **`jfrog`** is the base skill. It provides foundational JFrog knowledge, CLI setup instructions, and routes to workflow skills via internal references.
