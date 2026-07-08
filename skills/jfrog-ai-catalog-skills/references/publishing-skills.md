@@ -137,6 +137,8 @@ template and do not run `jf skills publish` until the user agrees:
 
   > Publishing skill `<slug>` uploads it to repository `<repo>` on server `<SID>`. Do you want to publish it?
 
+Never combine this final confirmation step with the previous signing step into one prompt.
+
 If the user says no or names a different repo/name, use that instead and confirm
 again. Only proceed to *Publish* after an explicit "yes".
 
