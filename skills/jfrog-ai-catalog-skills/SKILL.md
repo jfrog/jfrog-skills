@@ -56,18 +56,15 @@ Pick the row matching the user's intent and read that reference file.
   same `<SID>` to Agent Guard as `--server "<SID>"` so it targets the same server
   as your `jf` calls. Agent Guard also reads `JFROG_URL` / `JF_URL` directly when
   set, so make sure the `<SID>` you resolved points at that same host.
-- **Resolve the project (`<PROJECT>`) only when needed, and always to a key.**
-  `<PROJECT>` must be the JFrog **project key**, not the display name. It is
-  required for `--list-skills`, `--list-skill-versions`, and
-  `--provision-skills-repository`. Take the value from `JF_PROJECT` or the user,
-  then resolve it to a key against the projects list (see *List all projects* in
-  the base `jfrog` skill's [`references/projects-api.md`](../jfrog/references/projects-api.md)):
-  ```bash
-  jf api '/access/api/v1/projects' --server-id "<SID>" \
-    | jq -r '.[] | select(.project_key=="<value>" or .display_name=="<value>") | .project_key'
-  ```
-  Use the printed key. If it prints nothing, ask the user for the key. Never
-  assume `default`, never invent one. Install, update, remove, and publishing to
+- **Resolve the project (`<PROJECT>`) only when needed.**
+  It is required for `--list-skills`, `--list-skill-versions`, and
+  `--provision-skills-repository`. Take it from `JF_PROJECT` or the user.
+  There is no non-admin way to look up or validate project keys (the
+  `/access/api/v1/projects` list endpoint needs admin), so you cannot
+  silently correct a display name to a key. If the value looks like a
+  display name (spaces, mixed case) rather than a short slug, ask the
+  user to confirm the project **key** specifically. Never assume
+  `default`, never invent one. Install, update, remove, and publishing to
   an explicit `--repo` are keyed by skill **name** and/or **repo**, not a
   project.
 
