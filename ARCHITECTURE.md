@@ -14,12 +14,18 @@ flowchart TD
 
     subgraph workflows ["Workflow Skills"]
         PS["jfrog-package-safety-and-download"]
+        RA["jfrog-reference-architecture"]
+        SPM["jfrog-setup-package-managers"]
         Future["...future workflow skills"]
     end
 
     JF -->|"routes to"| PS
+    JF -->|"routes to"| RA
+    JF -->|"routes to"| SPM
     JF -.->|"future"| Future
     PS -.->|"prereq"| JF
+    RA -.->|"prereq"| JF
+    SPM -.->|"prereq"| JF
 ```
 
 **Base skill (`jfrog`)** — the single foundational skill. Covers platform concepts, CLI setup and authentication, REST/GraphQL API patterns, and intent routing to workflow skills. Every other skill declares it as a prerequisite.
@@ -27,6 +33,20 @@ flowchart TD
 **Workflow skills** — domain-specific skills that handle a focused category of operations. Each declares `jfrog` as a prerequisite so the agent loads foundational context first.
 
 **Adding a new skill:** create `skills/jfrog-<name>/SKILL.md` with `metadata.role: workflow` and a `Prerequisites` section pointing to `../jfrog/SKILL.md`. Update the base skill's routing section to reference the new workflow.
+
+### Workflow skill: `jfrog-reference-architecture`
+
+Planning skill for topology, sizing (RPM / t-shirt templates), deployment patterns, and documented use cases. It does **not** duplicate reference-architecture content in the repo.
+
+**Content access:** agents `WebFetch` [llms-full.txt](https://jfrog.com/reference-architecture/llms-full.txt) at session start (~120 KB today), parse sections by `URL:` headers, and cite those HTML links. Fallbacks: [llms.txt](https://jfrog.com/reference-architecture/llms.txt), [sitemap.xml](https://jfrog.com/reference-architecture/sitemap.xml), per-page `index.md`. Size governance and the fetch ladder live in `skills/jfrog-reference-architecture/references/doc-access.md`.
+
+**Deployment policy:** prefer Kubernetes and the [jfrog-platform](https://github.com/jfrog/charts/tree/master/stable/jfrog-platform) Helm chart even for Artifactory-only installs.
+
+No `jf` CLI is required for planning-only questions.
+
+### Workflow skill: `jfrog-setup-package-managers`
+
+Binds local package managers (npm, pip, maven, gradle, go, docker, helm, nuget, …) to Artifactory repositories via `jf setup`, then records the decision in the workspace binding file `.jfrog/local/package-resolution.json`. It does not discover repos on its own — it uses the repo keys resolved by the Package Resolution session hook. Reference details live in `skills/jfrog-setup-package-managers/references/`.
 
 ---
 

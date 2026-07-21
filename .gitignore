@@ -10,6 +10,7 @@ output/
 tests/data/
 
 # Local E2E harness state (see e2e/README.md)
-e2e/.venv2/
+e2e/.venv/
 e2e/.env
-e2e/results/
+e2e/.output/
+e2e/.pytest_cache/
