@@ -9,6 +9,13 @@ node_modules/
 output/
 tests/data/
 
+# Python bytecode, written next to any script that gets imported: the skill
+# validation and dashboard scripts, the e2e helpers, and the pytest suites under
+# tests/. pytest drops its own .gitignore inside .pytest_cache; Python leaves
+# nothing beside __pycache__, so it has to be listed here.
+__pycache__/
+*.py[cod]
+
 # Local E2E harness state (see e2e/README.md)
 e2e/.venv/
 e2e/.env

@@ -31,6 +31,7 @@ pruning, the file cannot.
         "npm":   "npm-virtual",
         "pypi":  "pypi-virtual",
         "maven": "libs-release",
+        "gradle":"gradle-virtual",
         "go":    "go-virtual",
         "docker":"docker-virtual",
         "helm":  "helm-virtual",
@@ -53,20 +54,22 @@ only `repositories`. The map key **is** the `serverId`.
 | Field | Meaning |
 |---|---|
 | `schemaVersion` | Always `1` for this schema. |
-| `servers.<serverId>.repositories.<pkgType>` | Resolver's chosen repo key for this package type, on this server. **Missing key = `unresolved`** for that PM. |
+| `servers.<serverId>.repositories.<pkgType>` | Resolver's chosen repo key for this package type, on this server. **Missing key = `unresolved`** for that package manager. |
 | `servers.<serverId>.cached_at` | ISO-8601 timestamp of the last refresh. TTL from `packageResolution.cacheTtlDays` in agents-conf.json (default 7). |
 | `servers.<serverId>.agentsConfigMtimeMs` | Invalidates cache when `~/.jfrog/agents-conf.json` changes. |
 | `servers.<serverId>.source` | `verified` = keys from agents-conf.json checked via `GET /api/repositories/{key}`; `agents-config` = trusted without HTTP (`verifyRepos: false`). |
 
-Package type keys used in the file are `npm`, `pypi`, `maven`, `go`,
+Package type keys used in the file are `npm`, `pypi`, `maven`, `gradle`, `go`,
 `docker`, `helm`, `nuget`. Note `pypi` (not `pip`) — same convention the
-JFrog API uses. The PM names accepted by `jf setup` (`pip`, `poetry`,
-`gradle`, `pnpm`, `yarn`, `podman`, `dotnet`, `pipenv`, `twine`) collapse
-onto these package-type keys.
+JFrog API uses. The package-manager names accepted by `jf setup` (`pip`, `uv`,
+`pnpm`, `podman`, `dotnet`, `pipenv`, `twine`, and optionally `yarn` / `poetry`
+when the user asks) collapse onto these package-type keys — **`gradle` maps to
+`gradle`**, not `maven`.
 
-## Three result classes per PM
 
-When you look up a PM in this file, you get one of:
+## Three result classes per package manager
+
+When you look up a package manager in this file, you get one of:
 
 | Class | Detect | What the resolver did | HTTP-verified? |
 |---|---|---|---|
@@ -100,7 +103,7 @@ If `$CACHE` does not exist, or the SID branch is missing, the hook has
 not yet resolved on this machine for this server — fall back to reading
 the injected "Resolved URLs for this session" table in agent context
 (parse the URL to recover `repoKey`), and if that is also absent, treat
-every PM as `unresolved` and prompt the user (Step 2).
+every package manager as `unresolved` and prompt the user (Step 2).
 
 The resolver refreshes stale entries on session start (TTL + agents-conf.json mtime).
 This skill never invalidates the cache — if `jf setup` fails on a repo key, ask the user.

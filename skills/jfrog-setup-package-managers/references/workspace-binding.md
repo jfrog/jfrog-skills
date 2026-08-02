@@ -4,7 +4,7 @@ This skill records workspace repo bindings in a file the session-start hook
 reads to override org defaults from `~/.jfrog/skills-cache/package-resolution.json`.
 
 The file is the **decisions** record, not a credential store. Tokens live
-in `jf config` and in PM-native files written by `jf setup` itself.
+in `jf config` and in package-manager-native files written by `jf setup` itself.
 
 ## Location
 
@@ -24,6 +24,7 @@ different Artifactory repos.
     "npm": "<repository-key>",
     "pypi": "<repository-key>",
     "maven": "<repository-key>",
+    "gradle": "<repository-key>",
     "go": "<repository-key>",
     "docker": "<repository-key>",
     "helm": "<repository-key>",
@@ -36,13 +37,19 @@ different Artifactory repos.
 |---|---|---|
 | `repositories` | yes | Map keyed by **package type** — same keys as `servers.<serverId>.repositories` in the global resolver cache. Omit package types you do not override. |
 
-### PM name → package type (when merging after `jf setup`)
+### Package-manager name → package type (when merging after `jf setup`)
 
-| `jf setup` PM | `repositories` key |
+Aligned with Agent Package Resolution (`PACKAGE_TYPES` / eager families).
+`gradle` is its **own** Artifactory package type — never fold it under `maven`.
+
+| `jf setup` package manager | `repositories` key |
 |---|---|
-| `npm`, `yarn`, `pnpm` | `npm` |
-| `pip`, `pipenv`, `poetry`, `twine` | `pypi` |
-| `maven`, `gradle` | `maven` |
+| `npm`, `pnpm` | `npm` |
+| `yarn` | `npm` (CLI may still accept `jf setup yarn`; APR zero-touch does **not** auto-setup yarn — only bind on explicit user request) |
+| `pip`, `pipenv`, `uv`, `twine` | `pypi` |
+| `poetry` | `pypi` (CLI may accept it; APR zero-touch does **not** auto-setup poetry — bind only on explicit user request) |
+| `maven` | `maven` |
+| `gradle` | `gradle` |
 | `go` | `go` |
 | `docker`, `podman` | `docker` |
 | `helm` | `helm` |
@@ -52,8 +59,8 @@ different Artifactory repos.
 
 ### 1. Load
 
-Before setup, **read** the file (if it exists). For each PM in the
-to-bind set, map the PM to a package type and compare
+Before setup, **read** the file (if it exists). For each package manager in the
+to-bind set, map it to a package type and compare
 `repositories.<type>` against what the resolver chose in Step 2:
 
 | Case | Action |
@@ -67,7 +74,7 @@ to-bind set, map the PM to a package type and compare
 After each successful `jf setup`:
 
 1. Read the current file (treat ENOENT as `{ "repositories": {} }`).
-2. Set `repositories[<pkgType>] = <repoKey>` using the PM → type table above.
+2. Set `repositories[<pkgType>] = <repoKey>` using the package-manager → type table above.
 3. Atomically write `{ "repositories": { ... } }` — preserve other package
    types already in the map.
 
@@ -76,7 +83,7 @@ JSON must use 2-space indent.
 ### 3. Never write
 
 - Credentials (`accessToken`, passwords, …).
-- PM-native config paths — those are owned by `jf setup`.
+- Package-manager-native config paths — those are owned by `jf setup`.
 
 ## Integration contract
 
