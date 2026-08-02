@@ -2,14 +2,18 @@
 name: jfrog-setup-package-managers
 description: >-
   Use this skill when the user asks to set up, configure, bind, or connect a
-  package manager (npm, pip, maven, gradle, go, docker, helm, …) to JFrog
-  Artifactory via `jf setup` and `.jfrog/local/package-resolution.json`; when a
-  workspace manifest exists with no matching binding entry; or when a session
-  hook reports PM config missing. Skip when the binding already has the same
-  repo key — the session hook reapplies each start. Never pick a repo by
-  discovery; use resolver output only (unless the user explicitly names or
-  asks to browse repos). On unresolved or failed setup, ask for a repo key
-  with the failure verbatim — never switch servers.
+  package manager (npm, pip, uv, pipenv, maven, gradle, go, docker, helm, ...)
+  to JFrog Artifactory via `jf setup` and
+  `.jfrog/local/package-resolution.json`; when a workspace manifest exists with
+  no matching binding entry; or when a session hook reports package-manager
+  config missing. Prefer uv for `uv.lock` / `[tool.uv]` — do not substitute pip
+  for uv when those signals exist; still bind pip when its own manifest (e.g.
+  `requirements.txt`) selects it. Yarn and Poetry are not part of Agent Package
+  Resolution zero-touch — bind only on explicit user request. Skip when the
+  binding already has the same repo key. Never pick a repo by discovery; use
+  resolver output only (unless the user names or asks to browse repos). On
+  unresolved or failed setup, ask with the failure verbatim — never switch
+  servers.
 metadata:
   role: workflow
 ---
@@ -18,7 +22,7 @@ metadata:
 
 Apply the session hook's repo pick via [`jf setup`](references/jf-setup-command.md),
 then record it in [`.jfrog/local/package-resolution.json`](references/workspace-binding.md).
-`jf setup` writes PM-native config (`.npmrc`, `pip.conf`, …); the binding
+`jf setup` writes package-manager-native config (`.npmrc`, `pip.conf`, `uv.toml`, …); the binding
 lets the hook re-apply on later sessions.
 
 ## Scope (this skill vs session hook)
@@ -29,14 +33,14 @@ renderer is available on demand via `modules/package-resolution/scripts/print-po
 notice embeds the exact command), so the policy can be loaded after setup.
 
 **This skill:** reads that output, runs `jf setup`, and persists the workspace
-binding at `.jfrog/local/package-resolution.json` when PM config is still missing.
+binding at `.jfrog/local/package-resolution.json` when package-manager config is still missing.
 
 **Honor the injected policy's governed scope.** The session policy lists the
-package managers it governs. Do **not** *proactively* onboard a PM the policy
+package managers it governs. Do **not** *proactively* onboard a package manager the policy
 doesn't govern (e.g. a stray `Dockerfile` when only `pypi`/`npm` are governed) —
 those are intentionally out of scope. An **explicit user request** to set up any
-PM still works (Step 1's user-mention signal and Step 2's AskQuestion for an
-unlisted PM apply as usual).
+package manager still works (Step 1's user-mention signal and Step 2's AskQuestion for an
+unlisted package manager apply as usual).
 
 ## Prerequisites
 
@@ -51,21 +55,23 @@ unlisted PM apply as usual).
 
 - **Always pass `--repo` and `--server-id`** — omitting `--repo` fails when
   multiple repos match. See [`jf-setup-command.md`](references/jf-setup-command.md).
-- **`jf setup` overwrites PM config** without backup — skip PMs whose binding
+- **`jf setup` overwrites package-manager config** without backup — skip package managers whose binding
   already matches (Step 1, signal 2).
 - **Docker / Podman — prefix or stop.** `jf setup docker` writes creds only;
   bare `docker pull <img>` hits Docker Hub. Complete setup, then pull via
   `<host>/<repoKey>/<img>`.
 - **Binding holds decisions, not credentials** — never write tokens into
   `.jfrog/local/package-resolution.json`.
+- **`gradle` ≠ `maven`.** Bind under `repositories.gradle`, never `repositories.maven`.
+- **Yarn / Poetry** — not APR zero-touch; bind only on explicit user ask (Step 1).
 
 ## References
 
 | File | When to read |
 |------|--------------|
-| [`references/jf-setup-command.md`](references/jf-setup-command.md) | CLI flags, supported PMs, exit-code contract, `jf setup --help` |
+| [`references/jf-setup-command.md`](references/jf-setup-command.md) | CLI flags, supported package managers, exit-code contract, `jf setup --help` |
 | [`references/global-cache-file.md`](references/global-cache-file.md) | Global cache shape, resolution classes, jq one-liners |
-| [`references/workspace-binding.md`](references/workspace-binding.md) | Workspace binding schema, PM → type map, merge semantics |
+| [`references/workspace-binding.md`](references/workspace-binding.md) | Workspace binding schema, package-manager → type map, merge semantics |
 
 ## Step 0 — Read the base skill, then ensure `jf` is ready
 
@@ -87,37 +93,49 @@ unlisted PM apply as usual).
 
 Combine four signals, in order; intersect with `jf setup --help` supported list:
 
-1. **Explicit user mention.** Map aliases: python → `pip`/`poetry`; java →
-   `maven`/`gradle`; node → `npm`/`yarn`/`pnpm` by lockfile.
-2. **Workspace binding** — read `.jfrog/local/package-resolution.json`. Drop PMs
-   already bound to the same key unless recovering from 401/403 (re-run same
-   key). PM → type table: [`workspace-binding.md`](references/workspace-binding.md).
-3. **Workspace manifests** when still ambiguous:
+1. **Explicit user mention.** Map aliases: python → `pip`/`uv`/`pipenv` (and
+   `poetry` only if the user named Poetry); java → `maven`/`gradle`; node →
+   `npm`/`pnpm` by lockfile (`yarn` only if the user named Yarn).
+2. **Workspace binding** — read `.jfrog/local/package-resolution.json`. Drop
+   package managers already bound to the same key unless recovering from 401/403
+   (re-run same key). Package-manager → type table:
+   [`workspace-binding.md`](references/workspace-binding.md).
+3. **Workspace manifests** when still ambiguous (several package managers of one
+   type may apply — e.g. `requirements.txt` **and** `uv.lock`):
 
-   | Manifest file | Package manager |
+   | Manifest / signal | Package manager |
    |---|---|
-   | `package.json`, `pnpm-lock.yaml`, `yarn.lock` | `npm` (+ `yarn`/`pnpm` if lockfiles present) |
-   | `requirements.txt`, `Pipfile` | `pip` (`pipenv` for `Pipfile`) |
-   | `pyproject.toml` | `poetry` if `[tool.poetry]`; else `pip` |
+   | `package.json`, `pnpm-lock.yaml` | `npm` (+ `pnpm` if `pnpm-lock.yaml` present) |
+   | `yarn.lock` (alone) | `npm` — do **not** auto-select `yarn` |
+   | `requirements.txt` | `pip` |
+   | `Pipfile` | `pipenv` |
+   | `uv.lock` | `uv` — suppresses bare `pyproject.toml` → `pip`; keep `requirements.txt` + `uv.lock` as multi-PM |
+   | `pyproject.toml` | `[tool.uv]` → `uv`; `[tool.poetry]` → `poetry` only on explicit user ask, else **not applicable** (do not select `pip`); bare PEP 621 with **no** `uv.lock` → `pip` |
    | `pom.xml` | `maven` |
-   | `build.gradle`, `build.gradle.kts` | `gradle` |
+   | `build.gradle`, `build.gradle.kts` | `gradle` (bind under type **`gradle`**) |
    | `go.mod` | `go` |
    | `Dockerfile`, `compose.yaml`, `docker-compose.yml` | `docker` / `podman` |
    | `*.csproj`, `NuGet.Config` | `nuget` / `dotnet` |
    | `Chart.yaml` | `helm` |
 
-4. **`jf setup --help`** — filter candidates; never hardcode the PM list. See
-   [`jf-setup-command.md`](references/jf-setup-command.md). Unsupported PM →
-   report gap, skip.
+   **Binary gate (client tools only):** missing client on `PATH` → skip as not
+   applicable; do **not** substitute another package manager or report setup
+   success. **Exempt `maven` / `gradle`** (config-only). Details:
+   [`jf-setup-command.md`](references/jf-setup-command.md).
+
+4. **`jf setup --help`** — filter candidates; never hardcode the list. See
+   [`jf-setup-command.md`](references/jf-setup-command.md). Unsupported → report
+   gap, skip.
 
 ## Step 2 — Get the resolved repo
 
-For each `<pm>`, recover `<repoKey>` and `<serverId>` from the first source
+For each `<package-manager>`, recover `<repoKey>` and `<serverId>` from the first source
 available:
 
 1. **"Resolved URLs for this session"** table (default). Parse `<repoKey>`
    from URL; `<serverId>` from host.
-2. **Workspace binding** — if table was trimmed. `repositories.<type>`.
+2. **Workspace binding** — if table was trimmed. `repositories.<type>`
+   (`gradle` → `repositories.gradle`, not `maven`).
 3. **Global cache** — last resort only; never overrides (1) or (2). See
    [`global-cache-file.md`](references/global-cache-file.md).
 
@@ -126,26 +144,28 @@ Cache disagreeing with (1)/(2) is not a reason to change the repo.
 **Don't choose a repo yourself:** no listing, enumerating, probing, or iterating
 `--server-id` to pick one, and don't second-guess the resolver — use resolver
 output only. If the user explicitly asks to browse repos, list them via
-`jf api "/artifactory/api/repositories?type=virtual&packageType=<pm>"` (filter by
-repo type — prefer `virtual` — and package type), then let the user choose; the
+`jf api "/artifactory/api/repositories?type=virtual&packageType=<pkgType>"`
+(Artifactory **package type** from the binding map — `gradle` not `maven`;
+`uv` / `pip` / `pipenv` / `poetry` → `pypi`), then let the user choose; the
 agent still never makes the choice on its own.
 
 ### Unresolved repo key
 
-Ask via AskQuestion:
+Ask via AskQuestion (include the resolver/setup failure text verbatim):
 
-> No default repo for `<pm>` on `<SID>`.
+> No default repo for `<package-manager>` on `<SID>`.
+> Failure: `<verbatim failure>`
 > Which Artifactory repository should I use? (repo key, or `abort`.)
 
-Cap at **2 answers per PM**, then abort. User may override repo only, never server.
+Cap at **2 answers per package manager**, then abort. User may override repo only, never server.
 
 ## Step 3 — Confirm, run `jf setup`, persist binding
 
-1. Present the plan, one row per PM:
+1. Present the plan, one row per package manager:
 
    ```text
-   <pm>  → <repoKey> on <SID>               (source: resolver)
-   <pm>  → <repoKey> on <SID>               (source: user-supplied)
+   <package-manager>  → <repoKey> on <SID>               (source: resolver)
+   <package-manager>  → <repoKey> on <SID>               (source: user-supplied)
    ```
 
 2. Show binding diffs when the repo key changes.
@@ -153,10 +173,10 @@ Cap at **2 answers per PM**, then abort. User may override repo only, never serv
 3. **Confirm** via AskQuestion (`apply` / `change repos` / `abort`) unless the
    user explicitly requested silent/non-interactive setup — then run directly.
 
-4. Sequentially, one PM at a time:
+4. Sequentially, one package manager at a time:
 
    ```bash
-   jf setup <pm> --server-id <SID> --repo <repoKey> [--project <key>]
+   jf setup <package-manager> --server-id <SID> --repo <repoKey> [--project <key>]
    ```
 
 5. **Exit code `0` = success** — merge binding (step 6). On non-zero, **stop**,
@@ -169,7 +189,8 @@ Cap at **2 answers per PM**, then abort. User may override repo only, never serv
    { "repositories": { "<pkgType>": "<repoKey>" } }
    ```
 
-   Map PM → type via the reference table. Merge atomically.
+   Map package manager → type via the reference table (`gradle` → `gradle`).
+   Merge atomically.
 
 ## Step 4 — Load the routing policy
 

@@ -49,6 +49,17 @@ if ! command -v jf &>/dev/null; then
   exit 1
 fi
 
+# `jf api` was added in JFrog CLI 2.100.0 and every request below depends on it.
+# Check it explicitly: on an older CLI the ping fails with an unknown-command
+# error that carries no HTTP status, which would otherwise be reported as an
+# unreachable server and send the user looking at the network instead of the CLI.
+if ! jf api --help >/dev/null 2>&1; then
+  echo "ERROR: this jf ($(jf --version 2>/dev/null || echo 'version unknown')) does not support 'jf api'," >&2
+  echo "which this login flow requires (JFrog CLI 2.100.0 or later)." >&2
+  echo "Upgrade the JFrog CLI, then retry. See references/jfrog-cli-install-upgrade.md." >&2
+  exit 1
+fi
+
 if ! command -v uuidgen &>/dev/null; then
   echo "ERROR: uuidgen is not installed" >&2
   exit 1
