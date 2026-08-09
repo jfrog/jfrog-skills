@@ -83,7 +83,9 @@ To re-trigger a sync for an existing tag, run the workflow manually from the Act
 
 ### Required setup
 
-- Repo secret `PLUGIN_SYNC_TOKEN`: a fine-grained PAT (or classic PAT with `repo` scope) with `Contents: write` and `Pull requests: write` on every plugin listed in `plugins.json`.
+- GitHub App **jfrog-agentic-release-bot** auth: `vars.PUBLIC_REPO_APP_ID` +
+  `secrets.PUBLIC_REPO_APP_PRIVATE_KEY`. The App needs `Contents: write` and
+  `Pull requests: write` on every plugin listed in `plugins.json`.
 
 ## Contributor License Agreement
 
