@@ -20,6 +20,18 @@ on:
         description: 'Version tag to sync (e.g. v0.11.0).'
         required: true
         type: string
+      plugin:
+        description: 'Plugin to sync. "all" syncs every entry in plugins.json.'
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - claude-plugin
+          - cursor-plugin
+          - vscode-plugin
+          - codex-plugin
+          - opencode-jfrog-plugin
 
 permissions:
   contents: read
@@ -37,6 +49,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: matrix
+        env:
+          # Tag pushes have no inputs → all. Manual runs pass the choice input.
+          PLUGIN: ${{ github.event.inputs.plugin || 'all' }}
         run: python3 .github/scripts/jfrog-sync-plugins.py matrix
 
   sync:
