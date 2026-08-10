@@ -144,9 +144,11 @@ EOF
 }
 
 # Detect the calling harness from environment signals. Output is one of:
-# claude, cursor, gemini, goose, copilot, codex, unknown — or empty
+# claude, cursor, gemini, goose, copilot, codex, opencode, unknown — or empty
 # string when no agent signal is present (direct CLI/CI invocation).
 # Naming matches the JFrog CLI's DetectExecutionContext() vocabulary.
+# Devin Desktop is not detected here — see harness-common.md (agent identity
+# + VSCODE_IPC_HOOK). The TERM_PROGRAM=vscode editor hint is also table-only.
 detect_harness() {
   if [[ -n "${CLAUDECODE:-}" || -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
     echo "claude"
@@ -160,6 +162,8 @@ detect_harness() {
     echo "copilot"
   elif [[ -n "${CODEX_CI:-}" || -n "${CODEX_THREAD_ID:-}" || -n "${CODEX_SANDBOX:-}" ]]; then
     echo "codex"
+  elif [[ -n "${OPENCODE:-}" ]]; then
+    echo "opencode"
   elif [[ -n "${AGENT:-}" || -n "$MODEL_SLUG" ]]; then
     # Agent invoked us but we can't name it.
     echo "unknown"

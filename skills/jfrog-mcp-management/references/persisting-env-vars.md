@@ -1,10 +1,20 @@
 # Persisting environment variables
 
-Read this for **shell-based harnesses (Claude Code, Cursor)** when a Step 3
-input needs to be exported so its value reference (`${VAR}` for Claude Code,
-`${env:VAR}` for Cursor) resolves — i.e. any secret, or a non-secret you chose
-to keep out of the config as a reference. (VS Code does not use shell env for
-this — it prompts for `inputs` values and stores them itself; skip this file.)
+Read this for **shell-based harnesses** when a Step 3 input needs to be exported
+so its value takes effect. How each harness picks up the exported variable:
+
+- **Claude Code** — a `${VAR}` reference in the config.
+- **Cursor** — a `${env:VAR}` reference in the config.
+- **Devin Desktop** — a `${env:VAR}` reference in the config.
+- **Codex** — a variable name listed in the `env_vars` allow-list; Codex forwards
+  that named variable's value from the launching shell to the server (e.g. an env
+  var like `Authorization`).
+- **OpenCode** — a `{env:VAR}` reference in the config `environment` (OpenCode
+  also forwards its ambient environment to local MCP servers).
+
+This applies to any secret, or a non-secret you chose to keep out of the config as
+a reference. (VS Code does not use shell env for this — it prompts for `inputs`
+values and stores them itself; skip this file.)
 
 These references resolve from the shell that launched the agent, so the variable
 has to be exported in that shell and persisted across relaunches. Don't rely on
@@ -70,5 +80,6 @@ in play before writing to it:
   secret values into a config file. For secret values, instruct the user to add
   the line themselves (e.g. via `read -rs VAR_NAME && export VAR_NAME` for the
   current session) — you never see or type the value.
-- After exporting, the user must **relaunch the agent** so `${VAR}`
-  references resolve.
+- After exporting, the user must **relaunch the agent** so the exported value
+  takes effect — the harness picks it up on next launch (resolving `${VAR}` /
+  `${env:VAR}`, or forwarding the `env_vars`-listed variable on Codex).

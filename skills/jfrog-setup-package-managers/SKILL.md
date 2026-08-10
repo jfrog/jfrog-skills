@@ -3,17 +3,12 @@ name: jfrog-setup-package-managers
 description: >-
   Use this skill when the user asks to set up, configure, bind, or connect a
   package manager (npm, pip, uv, pipenv, maven, gradle, go, docker, helm, ...)
-  to JFrog Artifactory via `jf setup` and
-  `.jfrog/local/package-resolution.json`; when a workspace manifest exists with
-  no matching binding entry; or when a session hook reports package-manager
-  config missing. Prefer uv for `uv.lock` / `[tool.uv]` — do not substitute pip
-  for uv when those signals exist; still bind pip when its own manifest (e.g.
-  `requirements.txt`) selects it. Yarn and Poetry are not part of Agent Package
-  Resolution zero-touch — bind only on explicit user request. Skip when the
-  binding already has the same repo key. Never pick a repo by discovery; use
-  resolver output only (unless the user names or asks to browse repos). On
-  unresolved or failed setup, ask with the failure verbatim — never switch
-  servers.
+  to JFrog Artifactory via `jf setup` and `.jfrog/local/package-resolution.json`;
+  when a workspace manifest exists with no matching binding entry; or when a
+  session hook reports package-manager config missing. Skip when the binding
+  already has the same repo key. Never pick a repo by discovery; use resolver
+  output only (unless the user names or asks to browse repos). On unresolved
+  or failed setup, ask with the failure verbatim — never switch servers.
 metadata:
   role: workflow
 ---
