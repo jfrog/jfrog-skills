@@ -4,9 +4,12 @@ name: Sync Plugins
 # listed in .github/plugins.json. Each PR vendors this repo's skills/
 # at the tag into the plugin repo.
 #
-# Required repo secret:
-#   PLUGIN_SYNC_TOKEN  PAT with Contents:write + Pull requests:write on every
-#                      jfrog/<plugin-name> repo in plugins.json.
+# Auth: jfrog-agentic-release-bot GitHub App → short-lived installation token.
+#   vars.PUBLIC_REPO_APP_ID + secrets.PUBLIC_REPO_APP_PRIVATE_KEY
+#   App needs Contents:write + Pull requests:write on every jfrog/<plugin>
+#   repo in plugins.json. Mint with explicit permission-* inputs.
+#   github-api-url is pinned to api.github.com for consistency with the
+#   GHES agent-hooks sync (harmless when this workflow already runs on github.com).
 
 on:
   push:
@@ -44,6 +47,18 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
+      - name: Generate github.com App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.PUBLIC_REPO_APP_ID }}
+          private-key: ${{ secrets.PUBLIC_REPO_APP_PRIVATE_KEY }}
+          owner: jfrog
+          repositories: ${{ matrix.name }}
+          github-api-url: https://api.github.com
+          permission-contents: write
+          permission-pull-requests: write
+
       - uses: actions/checkout@v4
 
       - uses: actions/checkout@v4
@@ -54,7 +69,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: jfrog/${{ matrix.name }}
-          token: ${{ secrets.PLUGIN_SYNC_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           path: plugin
 
       - name: Copy skills into plugin
@@ -66,7 +81,10 @@ jobs:
       - uses: peter-evans/create-pull-request@v7
         with:
           path: plugin
-          token: ${{ secrets.PLUGIN_SYNC_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
+          # Bot *user* id (276080306), not App id (3378254) — required for attribution.
+          author: jfrog-agentic-release-bot[bot] <276080306+jfrog-agentic-release-bot[bot]@users.noreply.github.com>
+          committer: jfrog-agentic-release-bot[bot] <276080306+jfrog-agentic-release-bot[bot]@users.noreply.github.com>
           branch: chore/sync-skills-${{ env.VERSION }}
           delete-branch: true
           commit-message: 'chore: sync skills to ${{ env.VERSION }}'
