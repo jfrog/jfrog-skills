@@ -76,6 +76,7 @@ jobs:
         env:
           DEST_PREFIX: ${{ matrix.dest_prefix }}
           VERSION_BUMPS: ${{ toJson(matrix.version_bumps) }}
+          PIN_UPDATES: ${{ toJson(matrix.pin_updates) }}
         run: python3 .github/scripts/jfrog-sync-plugins.py copy
 
       - uses: peter-evans/create-pull-request@v7
@@ -87,7 +88,12 @@ jobs:
           committer: jfrog-agentic-release-bot[bot] <276080306+jfrog-agentic-release-bot[bot]@users.noreply.github.com>
           branch: chore/sync-skills-${{ env.VERSION }}
           delete-branch: true
-          commit-message: 'chore: sync skills to ${{ env.VERSION }}'
-          title: 'chore: sync skills to ${{ env.VERSION }}'
+          # [major], [minor], or [patch] must lead the subject: plugin release
+          # workflows match the merge-commit subject for \[(major|minor|patch)\].
+          # The sync script only increments the patch digit (bump_patch_version),
+          # so [patch] matches. Without the marker the release job stays green
+          # but ships nothing.
+          commit-message: '[patch] chore: sync skills to ${{ env.VERSION }}'
+          title: '[patch] chore: sync skills to ${{ env.VERSION }}'
           body: |
             Vendored from `${{ env.VERSION }}` of jfrog/jfrog-skills.
