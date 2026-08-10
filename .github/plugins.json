@@ -19,7 +19,26 @@
       "name": "vscode-plugin",
       "dest_prefix": "plugin",
       "version_bumps": [
-        { "file": "marketplace.json", "path": "plugins.0.version" }
+        { "file": "marketplace.json", "path": "plugins.0.version" },
+        { "file": "plugin/.claude-plugin/plugin.json", "path": "version" }
+      ]
+    },
+    {
+      "name": "codex-plugin",
+      "dest_prefix": "",
+      "version_bumps": [
+        { "file": ".codex-plugin/plugin.json", "path": "version" },
+        { "file": "package.json", "path": "version" }
+      ],
+      "pin_updates": [
+        { "file": "scripts/sync-skills-vendor.json", "path": "pin" }
+      ]
+    },
+    {
+      "name": "opencode-jfrog-plugin",
+      "dest_prefix": "",
+      "pin_updates": [
+        { "file": "sync-skills-vendor.json", "path": "pin" }
       ]
     }
   ]

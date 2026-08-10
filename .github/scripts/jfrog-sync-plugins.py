@@ -49,21 +49,52 @@ def create_matrix() -> None:
     print(json.dumps(matrix, indent=2))
 
 
+def load_json_list(env_name: str) -> list[dict]:
+    """Parse a JSON array from an env var; treat missing/empty/null as []."""
+    raw: str = os.environ.get(env_name, "[]") or "[]"
+    if raw.strip() in ("", "null"):
+        return []
+    data = json.loads(raw)
+    return data if isinstance(data, list) else []
+
+
+def resolve_json_parent(data: dict, dotted_path: str) -> tuple[dict | list, str | int]:
+    """Walk a dotted JSON path; return (parent, leaf_key) for the final field.
+
+    Numeric path segments are treated as list indices, e.g.
+    "plugins.0.version" -> (plugins[0], "version").
+    """
+    keys: list = [int(p) if p.isdigit() else p for p in dotted_path.split(".")]
+    parent: dict | list = data
+    for key in keys[:-1]:
+        parent = parent[key]
+    return parent, keys[-1]
+
+
 def copy_skills_folder() -> None:
-    """Copy skills/ into the plugin at DEST_PREFIX, then bump each configured
-    version file in lock-step — but only if the copy actually produced changes.
+    """Copy skills/ into the plugin at DEST_PREFIX, then update pins and bump
+    each configured version file in lock-step — but only bump versions if the
+    copy (or pin update) actually produced changes.
 
     Required env:
       DEST_PREFIX    Prefix inside the plugin, may be empty.
                      e.g. "plugins/jfrog" -> skills/ lands at plugins/jfrog/skills/.
 
     Optional env:
+      VERSION        Tag being synced (e.g. "v0.22.0"). Required when PIN_UPDATES
+                     is non-empty; written into each pin field as-is.
       VERSION_BUMPS  JSON array of {file, path} entries.
                      Each entry points to a JSON file inside the plugin and a
                      dotted path to the semver field to patch-bump.
+      PIN_UPDATES    JSON array of {file, path} entries.
+                     Each entry points to a vendor-pin JSON file (e.g.
+                     sync-skills-vendor.json) whose field is set to VERSION.
+                     Needed for plugins whose CI re-vendors from the pin.
     """
     dest_prefix: str = os.environ.get("DEST_PREFIX", "").strip("/")
-    bumps: list[dict] = json.loads(os.environ.get("VERSION_BUMPS", "[]") or "[]")
+    bumps: list[dict] = load_json_list("VERSION_BUMPS")
+    pins: list[dict] = load_json_list("PIN_UPDATES")
+    version: str = os.environ.get("VERSION", "").strip()
 
     src: Path = UPSTREAM_DIR / SOURCE
     if not src.exists():
@@ -75,6 +106,12 @@ def copy_skills_folder() -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(src, dest)
     print(f"Copied {src} -> {dest.relative_to(PLUGIN_DIR)}")
+
+    if pins:
+        if not version:
+            fail("VERSION is required when PIN_UPDATES is set")
+        for pin in pins:
+            set_json_value(PLUGIN_DIR / pin["file"], pin["path"], version)
 
     if not bumps:
         return
@@ -97,16 +134,20 @@ def has_changes(repo_dir: Path) -> bool:
     return bool(result.stdout.strip())
 
 
-def bump_patch_version(file_path: Path, dotted_path: str) -> None:
+def set_json_value(file_path: Path, dotted_path: str, value: str) -> None:
     data: dict = json.loads(file_path.read_text())
+    parent, leaf_key = resolve_json_parent(data, dotted_path)
+    previous = parent[leaf_key]
+    parent[leaf_key] = value
+    file_path.write_text(json.dumps(data, indent=2) + "\n")
+    print(f"Set {file_path.relative_to(PLUGIN_DIR)} {dotted_path}: {previous} -> {value}")
 
-    # Convert numeric parts to int indices up front, e.g.
-    # "plugins.0.version" -> ["plugins", 0, "version"].
-    keys: list = [int(p) if p.isdigit() else p for p in dotted_path.split(".")]
-    parent = data
-    for key in keys[:-1]:
-        parent = parent[key]
-    leaf_key = keys[-1]
+
+def bump_patch_version(file_path: Path, dotted_path: str) -> None:
+    # Patch-only: the sync-plugins PR commit/title must lead with [patch] so each
+    # plugin's release workflow ships a release on merge.
+    data: dict = json.loads(file_path.read_text())
+    parent, leaf_key = resolve_json_parent(data, dotted_path)
 
     current: str = parent[leaf_key]
     major, minor, patch = current.split(".")
