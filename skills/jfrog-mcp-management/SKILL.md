@@ -1,14 +1,14 @@
 ---
 name: jfrog-mcp-management
 description: >-
-  Use when you need to install, list, and/or remove MCP servers and tools through the JFrog Agent
-  Guard (npx @jfrog/agent-guard), and browse the JFrog MCP catalog. Use
-  whenever the user wants to add/enable/list/remove/uninstall an MCP server or
-  tool — even without saying "MCP" — and never install one any other way.
+  Use to install, list, or remove MCP servers through the JFrog Agent Guard (npx
+  @jfrog/agent-guard), and browse the JFrog MCP catalog. Use whenever the user
+  wants to add/enable/list/remove/uninstall an MCP server or tool — even without
+  saying "MCP" — and never install one any other way.
 compatibility: >-
   Requires network access to the npm registry and the JFrog platform, and
   ~/.jfrog/ write access for OAuth login and cache cleanup.
-allowed-tools: Bash(claude mcp list) Bash(cursor agent mcp list) Read Edit Write
+allowed-tools: Bash(claude mcp list) Bash(cursor agent mcp list) Bash(codex mcp list) Bash(opencode mcp list) Read Edit Write
 metadata:
   role: workflow
 ---
@@ -25,12 +25,14 @@ resolved automatically by the agent. If the agent does not resolve it, determine
 the path by locating this SKILL.md file and using its parent directory.
 
 **Harness config (resolve once, up front).** Where MCP config lives — the file
-path, the top-level JSON key, the env/secret reference syntax, and how a server
-is enabled/verified/listed — varies per agent (Claude Code, Cursor, VS Code, …).
-Those values are NOT hard-coded in this skill. Read
+path, the top-level key, the config format (JSON or TOML), the env/secret
+reference syntax, and how a server is enabled/verified/listed — varies per agent
+(Claude Code, Codex, Cursor, OpenCode, VS Code, …). Those values are NOT
+hard-coded in this skill. Read
 [references/harness-common.md](references/harness-common.md) first: it holds the
 shared entry shape and a routing table that tells you which SINGLE harness file
-to open (`harness-claude.md`, `harness-cursor.md`, `harness-vscode.md`, …).
+to open (`harness-claude.md`, `harness-codex.md`, `harness-cursor.md`,
+`harness-opencode.md`, `harness-vscode.md`, …).
 **Read common + exactly one harness file — do NOT open the others.** Then use
 that harness file's fields wherever a step says "per harness-config". Adding a
 new agent is a new `harness-<name>.md` file, with no change to this workflow.
@@ -129,14 +131,18 @@ existing Agent Guard MCP entry or jf config; omit `--server` only on the
   [references/harness-common.md](references/harness-common.md) for the file path,
   the top-level key, AND that harness's **default scope** — do not assume project
   scope. Most harnesses default to the project-level file (Claude Code
-  `.mcp.json`, Cursor `.cursor/mcp.json`), but **VS Code defaults to the
-  user-level `mcp.json`** and treats `.vscode/mcp.json` as the opt-in scope.
-  Follow the "Config files" row in the harness file, not a fixed default here.
+  `.mcp.json`, Cursor `.cursor/mcp.json`), but **VS Code, Codex, and OpenCode
+  default to the user-level file** (VS Code `mcp.json`, Codex
+  `~/.codex/config.toml`, OpenCode `~/.config/opencode/opencode.json`) and treat
+  their project file (`.vscode/mcp.json`, trusted `.codex/config.toml`, project
+  `opencode.json`) as the opt-in scope. Follow the "Config files" row in the
+  harness file, not a fixed default here.
   Create the target file if missing, using that harness's top-level key (e.g.
   `{ "mcpServers": {} }`, or `{ "servers": {} }` for VS Code).
 - Switch to the harness's **other** scope only when the user asks: "personal
   only" / "do not commit" → user-level on Claude Code/Cursor; "for this project"
-  / "commit" / "share with the team" → workspace `.vscode/mcp.json` on VS Code.
+  / "commit" / "share with the team" → workspace `.vscode/mcp.json` on VS Code
+  (project `opencode.json` on OpenCode, trusted `.codex/config.toml` on Codex).
   Respect any per-file note in the reference (e.g. Claude Code user scope is
   `~/.claude.json`, NOT `projects.<path>.mcpServers`).
 - Do not ask which scope unless the user brings it up.
@@ -190,8 +196,8 @@ Split Step 2 inputs by `isRequired`:
 Handling: **secrets** (`isSecret=true`) MUST be a value reference, NEVER a raw
 value — never take a secret in chat, echo it, or write it into config.
 **Non-secrets** may be a literal or a reference. For the exact syntax and, on
-shell-based harnesses (Claude Code, Cursor), how the user exports/persists the
-variable, see the harness file and
+shell-based harnesses (Claude Code, Cursor, Codex, Devin Desktop, OpenCode), how the user
+exports/persists the variable, see the harness file and
 [references/persisting-env-vars.md](references/persisting-env-vars.md). (VS Code
 prompts for `inputs` values on first start — no shell export.)
 
@@ -291,8 +297,10 @@ add-on where the agent provides it.
    user scope, under that harness's top-level key) — use the file-read tool or a
    single `jq` invocation, NOT chained `python3 -c "..."` pipes. For each entry
    whose `command` is `npx` and whose `args` include `@jfrog/agent-guard`, show:
-   display name (JSON key), package (`mcp=` in `_JF_ARGS`), server ID (value
-   after `--server`), scope (project / user).
+   display name (the entry key; but where the harness uses a slug key — e.g.
+   Codex — use the package from `mcp=` instead, per that harness's List
+   installed), package (`mcp=` in `_JF_ARGS`), server ID (value after
+   `--server`), scope (project / user).
 2. **If the harness exposes an MCP status command or view** (the harness-config
    "List installed" column — e.g. Claude Code's `claude mcp list`, Cursor/VS
    Code's MCP UI), use it to add live connection status per server. If none

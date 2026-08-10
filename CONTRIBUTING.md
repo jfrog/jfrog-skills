@@ -70,22 +70,31 @@ This project uses `0.x` versioning while in beta. The `1.0` release will be tagg
 
 ## Downstream Plugin Sync
 
-When a `v*` tag is pushed, the `Sync Plugins` workflow (`.github/workflows/sync-plugins.yml`) opens a PR in every plugin listed in `.github/plugins.json`. Each PR vendors this repo's `skills/` at the tagged ref into the plugin repo. The plugin teams review and merge those PRs manually.
+Production releases (`release.yml` → distribute to `github.com/jfrog/jfrog-skills`)
+end with a public `v*` tag. That repo's `Sync Plugins` workflow opens a PR in every
+plugin listed in `.github/plugins.json` (cursor, claude, **vscode**). Each PR vendors
+`skills/` at the tagged ref. Plugin teams review and merge manually.
 
-To add or remove a plugin, edit `.github/plugins.json`. Each entry has:
+This GHE repo keeps a mirror of `.github/plugins.json` for the `/release` skill and
+post-distribute notify. Prefer the interactive **`/release`** skill for production cuts;
+use **`release-testing`** for milestone/test pipeline checks. Slack channel IDs, bot
+names, and other ops routing live in [`.github/RELEASE_PIPELINE.md`](.github/RELEASE_PIPELINE.md)
+(internal; not distributed to the public skills repo).
+
+To add or remove a plugin, update `.github/plugins.json` here **and** on the public
+skills repo. Each entry has:
 
 - `name` — repo name under the `jfrog/` GitHub org
 - `dest_prefix` — prefix inside the plugin repo where `skills/` should land. Empty string means repo root.
 
 Example: `{ "name": "cursor-plugin", "dest_prefix": "plugins/jfrog" }` copies this repo's `skills/` to `jfrog/cursor-plugin` at `plugins/jfrog/skills/`.
 
-To re-trigger a sync for an existing tag, run the workflow manually from the Actions tab and pass the tag as the `version` input.
+To re-trigger a sync for an existing tag, run Sync Plugins on the **public** repo and pass the tag as the `version` input.
 
 ### Required setup
 
-- GitHub App **jfrog-agentic-release-bot** auth: `vars.PUBLIC_REPO_APP_ID` +
-  `secrets.PUBLIC_REPO_APP_PRIVATE_KEY`. The App needs `Contents: write` and
-  `Pull requests: write` on every plugin listed in `plugins.json`.
+- Public repo secret `PLUGIN_SYNC_TOKEN`: PAT with `Contents: write` and `Pull requests: write` on every plugin listed in `plugins.json`.
+- GHE Slack notify secrets/vars: see [`.github/RELEASE_PIPELINE.md`](.github/RELEASE_PIPELINE.md).
 
 ## Contributor License Agreement
 
