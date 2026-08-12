@@ -30,6 +30,9 @@ def fail(msg: str) -> None:
 def create_matrix() -> None:
     """Emit a GitHub Actions matrix from .github/plugins.json.
 
+    Optional env:
+      PLUGIN  Plugin name to include, or "all" (default). Unknown names fail.
+
     Writes `matrix=<compact-json>` to $GITHUB_OUTPUT and prints it to stdout.
 
     Example input (.github/plugins.json):
@@ -39,7 +42,15 @@ def create_matrix() -> None:
         matrix={"include":[{"name":"claude-plugin","dest_prefix":""}]}
     """
     data: dict = json.loads(PLUGINS_FILE.read_text())
-    matrix: dict = {"include": data["plugins"]}
+    plugins: list[dict] = data["plugins"]
+    plugin_filter: str = (os.environ.get("PLUGIN") or "all").strip()
+    if plugin_filter and plugin_filter != "all":
+        known = [p["name"] for p in plugins]
+        plugins = [p for p in plugins if p["name"] == plugin_filter]
+        if not plugins:
+            fail(f"unknown plugin {plugin_filter!r}; known: {', '.join(known)}")
+
+    matrix: dict = {"include": plugins}
 
     output_file: str | None = os.environ.get("GITHUB_OUTPUT")
     if output_file:

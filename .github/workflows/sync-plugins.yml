@@ -17,16 +17,24 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag to sync (e.g. v0.11.0).'
+        description: 'Version to sync (e.g. 0.22.0).'
         required: true
         type: string
+      plugin:
+        description: 'Plugin to sync. "all" syncs every entry in plugins.json.'
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - claude-plugin
+          - cursor-plugin
+          - vscode-plugin
+          - codex-plugin
+          - opencode-jfrog-plugin
 
 permissions:
   contents: read
-
-# For tag pushes, github.ref_name is the tag. For manual dispatch, use the input.
-env:
-  VERSION: ${{ github.event.inputs.version || github.ref_name }}
 
 jobs:
   prepare:
@@ -34,9 +42,43 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      # Manual runs often omit the leading v (0.22.0); tags are always v*.
+      - id: version
+        env:
+          RAW: ${{ github.event.inputs.version || github.ref_name }}
+        run: |
+          set -euo pipefail
+          case "$RAW" in
+            v*) version="$RAW" ;;
+            *)  version="v$RAW" ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Normalized VERSION=$version (from $RAW)"
+
+      - name: Verify version tag exists
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::Tag '$VERSION' does not exist in this repository. Pass an existing release tag (e.g. v0.22.0)."
+            echo "Recent tags:"
+            git tag --list 'v*' --sort=-v:refname | head -20
+            exit 1
+          fi
+          echo "Verified tag $VERSION -> $(git rev-parse "refs/tags/$VERSION")"
+
       - id: matrix
+        env:
+          # Tag pushes have no inputs → all. Manual runs pass the choice input.
+          PLUGIN: ${{ github.event.inputs.plugin || 'all' }}
         run: python3 .github/scripts/jfrog-sync-plugins.py matrix
 
   sync:
@@ -46,10 +88,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - name: Generate github.com App token
         id: app-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ vars.PUBLIC_REPO_APP_ID }}
           private-key: ${{ secrets.PUBLIC_REPO_APP_PRIVATE_KEY }}
@@ -59,14 +103,14 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.VERSION }}
           path: upstream
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: jfrog/${{ matrix.name }}
           token: ${{ steps.app-token.outputs.token }}
@@ -80,7 +124,7 @@ jobs:
           PIN_UPDATES: ${{ toJson(matrix.pin_updates) }}
         run: python3 .github/scripts/jfrog-sync-plugins.py copy
 
-      - uses: peter-evans/create-pull-request@v7
+      - uses: peter-evans/create-pull-request@v8
         with:
           path: plugin
           token: ${{ steps.app-token.outputs.token }}

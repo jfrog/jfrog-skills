@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Resolve PR details
         id: resolve-pr
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const prNumber = parseInt('${{ github.event.inputs.pr-number }}', 10);
@@ -44,7 +44,7 @@ jobs:
             console.log(`PR #${prNumber} by ${pr.user.login}: ${pr.title}`);
             console.log(`Head: ${pr.head.ref} @ ${pr.head.sha}`);
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.resolve-pr.outputs.head_sha }}
 
@@ -104,7 +104,7 @@ jobs:
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     steps:
       - name: Approve and merge
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const prNumber = parseInt('${{ needs.validate.outputs.pr-number }}', 10);
@@ -160,7 +160,7 @@ jobs:
                 owner, repo,
                 workflow_id: 'sync-plugins.yml',
                 ref: 'main',
-                inputs: { version: tag }
+                inputs: { version: tag, plugin: 'all' }
               });
               console.log(`Dispatched.`);
             }
