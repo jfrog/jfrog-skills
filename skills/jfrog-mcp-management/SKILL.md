@@ -5,6 +5,8 @@ description: >-
   @jfrog/agent-guard), and browse the JFrog MCP catalog. Use whenever the user
   wants to add/enable/list/remove/uninstall an MCP server or tool — even without
   saying "MCP" — and never install one any other way.
+  NOT for installing agent skills (use jfrog-ai-catalog-skills) or running JFrog
+  platform operations such as Artifactory/Xray/AppTrust (use the base jfrog skill).
 compatibility: >-
   Requires network access to the npm registry and the JFrog platform, and
   ~/.jfrog/ write access for OAuth login and cache cleanup.

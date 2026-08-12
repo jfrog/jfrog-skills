@@ -52,29 +52,85 @@ Binds local package managers (npm, pip, maven, gradle, go, docker, helm, nuget, 
 
 ## Base skill: `jfrog` — internal architecture
 
-The base skill is the largest and most complex component. Its structure is designed for **progressive disclosure**: the agent reads only the sections and reference files relevant to the current task, avoiding unnecessary context loading.
+The base skill is large. **Reference files** use progressive disclosure (load via
+`INDEX.md` only what the task needs). The **SKILL.md body** is ordered for
+**primacy + recency** so partial readers (first-chunk skimmers) still see
+invariants — not to discourage full reads by capable models.
 
 ### Entry point: SKILL.md
 
-`skills/jfrog/SKILL.md` is the agent's entry point. The sections below appear in source order; the file is deliberately ordered for **chunked-read robustness**, so the safety-critical and routing sections (`Cautious execution`, `Server selection rules`, `When to read reference files`) appear early enough to land in the first chunk an agent reads.
+`skills/jfrog/SKILL.md` is the entry point. Top **At a glance** (invariants +
+contents map) + tail **Before you run `jf` checklist**. Prefer full-file read;
+At a glance is the floor for partial readers. Domain refs → on-demand via
+`references/INDEX.md`.
 
 | Section | Purpose |
 |---------|---------|
+| **At a glance (always-read core)** | Primacy floor for partial readers: UA; `--server-id` after subcommand (network; bootstrap exempt); one server / stop-don't-switch (+ compare if user names); no prep mutations unless asked; never guess paths; **never skip** Cautious execution / Server selection / the Tier A Gotchas floor. Full `cli-gotchas.md` is Tier B — required only on `jf api` / advanced CLI paths |
 | **Prerequisites** | Required tools (`jq`); per-runtime network and filesystem permission table (Cursor / Claude Code / Other) — replaces the old standalone "Network permissions" section |
 | **Tool selection strategy** | Three-tier routing: JFrog MCP tools (preferred), `jf` CLI commands (fallback), `jf api` (last resort). Defines when to move to the next tier and how to handle cross-tier permission errors |
-| **Environment check** | Cached CLI detection via `scripts/check-environment.sh <model-slug>`; script prints the user-agent value on stdout following RFC 7231 product/comment grammar — `jfrog-skills/<v> [(tool=<harness>; model=<slug>; ...)] jfrog-cli-go/<v>` — where the parens carry semicolon-separated `key=value` annotations (harness auto-detected from env signals like `CLAUDECODE` / `CURSOR_AGENT` / `GEMINI_CLI`, naming aligned with the JFrog CLI's `DetectExecutionContext()`; whole parens block omitted when there's nothing to annotate) for the agent to remember and `export JFROG_CLI_USER_AGENT='<value>'` once at the top of every bash invocation that runs `jf` (covers any number of `jf` calls in that invocation; works in runtimes that do not persist shell state across tool invocations); exit-code contract (MCP Tier 1 can proceed without this check; exit 2/3 means CLI tiers are unavailable) |
+| **Environment check** | Cached CLI detection via `scripts/check-environment.sh <model-slug>`; script prints the user-agent value on stdout following RFC 7231 product/comment grammar — `jfrog-skills/<v> (trigger=skill; tool=<harness>; client=<app>; model=<slug>) jfrog-cli-go/<v>` — where the parens carry semicolon-separated `key=value` annotations (`trigger=skill` always on this path; `tool=`/`client=`/`model=` when known; harness from `detect_harness()`, `client` from `TERM_PROGRAM`, naming aligned with the JFrog CLI's `DetectExecutionContext()`) for the agent to remember and `export JFROG_CLI_USER_AGENT='<value>'` (plus `export JFROG_CLI_AI_MODEL='<slug>'`) once at the top of every bash invocation that runs `jf`. APR `jfrog-agent-hooks` eager setup overrides the same grammar with `trigger=hook` when it spawns `jf`. On jf >= 2.120.0 the CLI appends `ai-agent/<harness>` / `ai-client/<app>` / `ai-model/<slug>` itself, so the script omits `tool=`/`client=` to avoid double-encoding; exit-code contract (MCP Tier 1 can proceed without this check; exit 2/3 means CLI tiers are unavailable). Supported harnesses: see **Agent identity table** below. |
 | **`~/.jfrog/skills-cache/` — allowed files only** | Restricts the cache to two artifacts; routes everything else to `/tmp` |
 | **Cautious execution** | Confirm-before-mutate (all tiers), ask-on-ambiguity, never invent preparatory mutations, never guess tool names or API paths (anti-hallucination rule) |
 | **Server selection rules (mandatory)** | Single-server resolution; `awk` one-liner for the default server; no silent fallback; MCP/CLI auth independence warning; standard error-response template |
-| **When to read reference files** | Domain-organized routing index that maps task categories to specific reference files; includes JFrog MCP tool suggestions before CLI/API fallback guidance |
-| **Command discovery** | CLI namespace table, `--help` patterns, sunset notices |
-| **Invoking platform APIs with `jf api`** | Tier 3 entry point for JFrog Platform REST and GraphQL endpoints, auto-authenticated against the resolved server |
-| **Structured inputs** | Template workaround via REST GET instead of interactive wizards |
-| **Gotchas** | MCP structured-data handling; non-interactive CLI; `jf api` product prefixes and exit-code semantics; build scope; auth errors; NDJSON |
-| **Batch and parallel execution** | Three-tier parallelism model |
-| **Preserving command output** | Temp-file patterns to avoid duplicate network calls |
+| **Path-gated base references (Tier B)** | Four files extracted from SKILL.md — `cli-gotchas`, `jf-api`, `preserving-command-output`, `cli-command-discovery` — **MUST full reads before `jf api` / advanced CLI**, not before every CLI/setup; not domain on-demand |
+| **When to read reference files** | Tier A = At-a-glance floor; Tier B = path-gated base refs; Tier C = domain via `references/INDEX.md` (≤2–3). Contract test enforces INDEX ↔ files sync |
+| **Command discovery** | `--help` ladder; Tier B **MUST** `references/cli-command-discovery.md` when needed |
+| **Invoking platform APIs with `jf api`** | Tier 3 pointer; Tier B **MUST** `references/jf-api.md` |
+| **Structured inputs** | REST GET as template instead of interactive wizards |
+| **Gotchas — hard rules (never skip)** | Tier A floor in SKILL.md At-a-glance / Gotchas; full `references/cli-gotchas.md` is Tier B before `jf api` / advanced CLI. Not tips; short bullets do not replace the file on Tier B paths |
+| **Batch and parallel execution** | Three-tier pointer → `references/general-parallel-execution.md` |
+| **Preserving command output** | Short rule in SKILL.md; Tier B **MUST** `references/preserving-command-output.md` |
+| **Before you run `jf` — quick checklist** | Recency = Tier A At-a-glance + Tier B only when next action needs `jf api` / advanced CLI |
+
+Authoring: `instruction-patterns.md` → Primacy / recency; rule: `skill-validation.mdc`.
+
+### Agent identity table
+
+Identity axes on the wire (CLI User-Agent / Call-Home / Visibility):
+
+| Axis | Wire (CLI ≥ 2.120) | Skill/hook parens | Source |
+|------|--------------------|-------------------|--------|
+| Trigger | *(parens only)* | `trigger=skill` / `trigger=hook` | Skills `check-environment.sh` vs APR eager-setup spawn |
+| Agent | `ai-agent/<name>` | `tool=<name>` (older CLI / skill carrier) | Env detectors below, else `AI_AGENT` / `AGENT` |
+| Client | `ai-client/<app>` | `client=<app>` (older CLI / skill carrier) | Sanitized `TERM_PROGRAM` (any host; not an allowlist) |
+| Model | `ai-model/<slug>` | `model=<slug>` | Sanitized `JFROG_CLI_AI_MODEL` / skill arg |
+
+`trigger` is skill-layer attribution (not a CLI product token). Direct human `jf` without skills/hooks leaves it unset.
+
+`detect_harness()` in `skills/jfrog/scripts/check-environment.sh` must stay in lockstep with `agentEnvDetectors` in jfrog-cli-core `common/commands/execution_context.go`. First match wins.
+
+**CLI release pin:** companions [jfrog-cli-core#1602](https://github.com/jfrog/jfrog-cli-core/pull/1602) + [jfrog-cli#3645](https://github.com/jfrog/jfrog-cli/pull/3645) are merged, but tip still reports `CliVersion = 2.119.0`. Released 2.118/2.119 only appended `ai-agent/`. Skills omit parens `tool=`/`client=` only at `AGENT_UA_MIN_CLI_VERSION` (expected first full Client→Agent→Model release **2.120.0**). After that CLI release cuts, confirm the tag and update the constant if the version number differs.
+
+| Wire name | Session signals |
+|-----------|-----------------|
+| `claude` | `CLAUDE_CODE_CHILD_SESSION` |
+| `gemini` | `GEMINI_CLI` |
+| `goose` | `GOOSE_TERMINAL` |
+| `cursor` | `CURSOR_AGENT`, `CURSOR_EXTENSION_HOST_ROLE=agent-exec` |
+| `copilot` | `COPILOT_CLI`, `COPILOT_AGENT_SESSION_ID` |
+| `kilocode` | `KILOCODE_FEATURE`, `KILO_PID` |
+| `roo_code` | `ROO_ACTIVE`, `ROO_CLI_RUNTIME` |
+| `codex` | `CODEX_CI`, `CODEX_THREAD_ID`, `CODEX_SANDBOX` |
+| `windsurf` | `WINDSURF_CASCADE_TERMINAL` |
+| `aider` | `AI_AGENT` / `AGENT` only |
+| `cline` | `CLINE_ACTIVE` |
+| `opencode` | `OPENCODE`, `OPENCODE_SESSION_ID` |
+| `amp` | `AMP_CURRENT_THREAD_ID` |
+| `augment` | `AUGMENT_AGENT` |
+| `qwen` | `QWEN_CODE` |
+| `antigravity` | `ANTIGRAVITY_AGENT` |
+| `crush` | `CRUSH` |
+| `iflow` | `IFLOW_CLI` |
+| `trae` | `TRAE_AI_SHELL_ID` |
+| `amazon_q` | `AI_AGENT` / `AGENT` only |
+| `unknown` | `AI_AGENT` / `AGENT` set to an unrecognized value |
+
+Common `AI_AGENT` / `AGENT` aliases: `claude-code`→`claude`, `gemini-cli`→`gemini`, `cursor-cli`→`cursor`, `github-copilot`/`copilot-cli`→`copilot`, `roo-code`→`roo_code`, `amazon-q`/`amazon-q-cli`→`amazon_q`, `qwen-code`→`qwen`. Version suffixes (`goose@1.2.3`) are stripped.
 
 ### Reference files
+
+`references/INDEX.md` is the routing index for everything below: `SKILL.md`'s `When to read reference files` section links to it, and it maps task categories to the specific files in the five categories that follow. It must list every `references/*.md` file (itself excepted); `tests/jfrog/test_reference_index_contract.py` fails CI if the index and the actual files diverge, so a new reference file cannot ship unrouted. The same test also locks the MUST-tier model — Tier A always-read floor, Tier B path-gated refs (before `jf api` / advanced CLI), Tier C on-demand — so wording cannot regress to claiming the four base refs are mandatory before every CLI or that setup requires a full base `SKILL.md` read.
 
 The `references/` directory contains markdown files organized into five categories:
 
@@ -226,7 +282,8 @@ Agent receives user request
     │
     ├─ Run check-environment.sh (first CLI/API operation only)
     │
-    ├─ Match task to "When to read reference files" index
+    ├─ Match task to the routing index in references/INDEX.md
+    │   (via the "When to read reference files" pointer in SKILL.md)
     │   │
     │   ├─ Entity disambiguation? → jfrog-entity-index.md → domain file
     │   ├─ Artifactory operation? → artifactory-operations.md

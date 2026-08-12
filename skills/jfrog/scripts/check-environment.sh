@@ -35,6 +35,17 @@ FORCE=false
 # skill) landed in 2.100.0; older CLIs fail with "unknown command: api".
 MIN_CLI_VERSION="2.100.0"
 
+# CLIs >= this version emit ai-agent/ + ai-client/ + ai-model/ (Client→Agent→Model
+# via jfrog-cli-core #1602 + jfrog-cli #3645). Omit tool=/client= in the skill UA
+# to avoid double-encoding.
+#
+# MERGE / RELEASE PIN: tip `CliVersion` is still 2.119.0 while the identity code
+# is already on master. Released 2.118/2.119 only appended ai-agent/. Keep this
+# gate at the first *released* CLI that ships full Client→Agent→Model (expected
+# 2.120.0). When that release cuts, confirm the tag and update this constant if
+# the version number differs — do not lower it to tip's 2.119.0.
+AGENT_UA_MIN_CLI_VERSION="2.120.0"
+
 MODEL_SLUG=""
 for arg in "$@"; do
   if [[ "$arg" == "--force" ]]; then
@@ -143,59 +154,160 @@ EOF
   return 1
 }
 
-# Detect the calling harness from environment signals. Output is one of:
-# claude, cursor, gemini, goose, copilot, codex, opencode, unknown — or empty
-# string when no agent signal is present (direct CLI/CI invocation).
-# Naming matches the JFrog CLI's DetectExecutionContext() vocabulary.
+# Lowercase and keep only [a-z0-9._-], then truncate to 64 chars — mirrors the
+# Go CLI sanitizeToken (cardinality bound + no header-splitting on the wire).
+sanitize_token() {
+  local s
+  s="$(printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9._-')"
+  printf '%s' "${s:0:64}"
+}
+
+# Map a generic AI_AGENT/AGENT value (agents.md proposal, @vercel/detect-agent)
+# to a canonical name. Strips a version suffix (e.g. "goose@1.2.3") and lowercases.
+# Empty input → nothing; unrecognized non-empty → "unknown".
+# Accepts both hyphenated ecosystem ids and our underscore/canonical forms so
+# AI_AGENT=roo_code / amazon_q / qwen round-trip the same as the Go CLI.
+canonical_agent_name() {
+  local raw
+  raw="$(printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  raw="${raw%%@*}"
+  raw="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+  case "$raw" in
+    "") ;;
+    claude-code|claude) echo "claude" ;;
+    gemini-cli|gemini) echo "gemini" ;;
+    goose) echo "goose" ;;
+    cursor-cli|cursor) echo "cursor" ;;
+    github-copilot|copilot-cli|copilot) echo "copilot" ;;
+    kilocode) echo "kilocode" ;;
+    roo-code|roo_code) echo "roo_code" ;;
+    codex) echo "codex" ;;
+    windsurf) echo "windsurf" ;;
+    aider) echo "aider" ;;
+    cline) echo "cline" ;;
+    opencode) echo "opencode" ;;
+    amp) echo "amp" ;;
+    augment) echo "augment" ;;
+    qwen-code|qwen) echo "qwen" ;;
+    antigravity) echo "antigravity" ;;
+    crush) echo "crush" ;;
+    iflow) echo "iflow" ;;
+    trae) echo "trae" ;;
+    amazon-q-cli|amazon-q|amazon_q) echo "amazon_q" ;;
+    *) echo "unknown" ;;
+  esac
+}
+
+# Detect the calling harness from environment signals. Output and first-match
+# order match the JFrog CLI's DetectExecutionContext() table (claude, gemini,
+# goose, cursor, copilot, kilocode, roo_code, codex, windsurf, cline,
+# opencode, amp, augment, qwen, antigravity, crush, iflow, trae; plus
+# aider/amazon_q via AI_AGENT/AGENT only) — or empty when no agent signal.
 # Devin Desktop is not detected here — see harness-common.md (agent identity
-# + VSCODE_IPC_HOOK). The TERM_PROGRAM=vscode editor hint is also table-only.
+# + VSCODE_IPC_HOOK). The TERM_PROGRAM client hint is agent-session-only.
+# MODEL_SLUG→unknown fallback is applied by emit_skill_env (not here) so the
+# emitter can still carry tool= when the CLI will not emit ai-agent/.
 detect_harness() {
-  if [[ -n "${CLAUDECODE:-}" || -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
+  # Keep in lockstep with jfrog-cli-core agentEnvDetectors (session markers only).
+  if [[ -n "${CLAUDE_CODE_CHILD_SESSION:-}" ]]; then
     echo "claude"
-  elif [[ -n "${CURSOR_AGENT:-}" || -n "${CURSOR_CLI:-}" || -n "${CURSOR_TRACE_ID:-}" ]]; then
-    echo "cursor"
   elif [[ -n "${GEMINI_CLI:-}" ]]; then
     echo "gemini"
   elif [[ -n "${GOOSE_TERMINAL:-}" ]]; then
     echo "goose"
-  elif [[ -n "${COPILOT_CLI:-}" ]]; then
+  elif [[ -n "${CURSOR_AGENT:-}" || "${CURSOR_EXTENSION_HOST_ROLE:-}" == "agent-exec" ]]; then
+    echo "cursor"
+  elif [[ -n "${COPILOT_CLI:-}" || -n "${COPILOT_AGENT_SESSION_ID:-}" ]]; then
     echo "copilot"
+  elif [[ -n "${KILOCODE_FEATURE:-}" || -n "${KILO_PID:-}" ]]; then
+    echo "kilocode"
+  elif [[ -n "${ROO_ACTIVE:-}" || -n "${ROO_CLI_RUNTIME:-}" ]]; then
+    echo "roo_code"
   elif [[ -n "${CODEX_CI:-}" || -n "${CODEX_THREAD_ID:-}" || -n "${CODEX_SANDBOX:-}" ]]; then
     echo "codex"
-  elif [[ -n "${OPENCODE:-}" ]]; then
+  elif [[ -n "${WINDSURF_CASCADE_TERMINAL:-}" ]]; then
+    echo "windsurf"
+  elif [[ -n "${CLINE_ACTIVE:-}" ]]; then
+    echo "cline"
+  elif [[ -n "${OPENCODE:-}" || -n "${OPENCODE_SESSION_ID:-}" ]]; then
     echo "opencode"
-  elif [[ -n "${AGENT:-}" || -n "$MODEL_SLUG" ]]; then
-    # Agent invoked us but we can't name it.
-    echo "unknown"
+  elif [[ -n "${AMP_CURRENT_THREAD_ID:-}" ]]; then
+    echo "amp"
+  elif [[ -n "${AUGMENT_AGENT:-}" ]]; then
+    echo "augment"
+  elif [[ -n "${QWEN_CODE:-}" ]]; then
+    echo "qwen"
+  elif [[ -n "${ANTIGRAVITY_AGENT:-}" ]]; then
+    echo "antigravity"
+  elif [[ -n "${CRUSH:-}" ]]; then
+    echo "crush"
+  elif [[ -n "${IFLOW_CLI:-}" ]]; then
+    echo "iflow"
+  elif [[ -n "${TRAE_AI_SHELL_ID:-}" ]]; then
+    echo "trae"
+  elif [[ -n "${AI_AGENT:-}" || -n "${AGENT:-}" ]]; then
+    # aider and amazon_q have no reliable session env — AI_AGENT / AGENT only.
+    canonical_agent_name "${AI_AGENT:-${AGENT:-}}"
   fi
-  # No match → print nothing; emitter omits the parens block entirely.
+  # No match → print nothing; emitter may still apply MODEL_SLUG→unknown.
 }
 
 # Emit skill-level env vars to stdout (for eval by the caller)
 emit_skill_env() {
-  local skill_version cli_version ua harness
+  local skill_version cli_version ua harness harness_from_model_fallback=false
   # Parse version from SKILL.md YAML frontmatter (metadata.version)
   skill_version="$(awk '/^---$/{n++; next} n==1 && /^[[:space:]]*version:/{gsub(/["'"'"']/, "", $2); print $2; exit}' "$SKILL_ROOT/SKILL.md" 2>/dev/null | tr -d '[:space:]')"
   skill_version="${skill_version:-unknown}"
-  cli_version=$(jq -r '.cli_version // "unknown"' "$CACHE_FILE" 2>/dev/null || echo "unknown")
+  # Prefer a live `jf --version` so AGENT_UA_MIN omit-gate is not stuck on a
+  # stale cache for up to 24h after the user upgrades the CLI.
+  cli_version="$(jf --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+  cli_version="${cli_version:-$(jq -r '.cli_version // "unknown"' "$CACHE_FILE" 2>/dev/null || echo "unknown")}"
+  # Sanitize the model slug once so the MODEL_SLUG→unknown fallback and the
+  # wire model= key share the same cardinality-bounded, header-safe value
+  # (mirrors the CLI's sanitizeToken on JFROG_CLI_AI_MODEL).
+  MODEL_SLUG="$(sanitize_token "${MODEL_SLUG:-}")"
   harness=$(detect_harness)
-  # Build the parens block: semicolon-separated key=value pairs.
-  local meta=""
+  # Defense: re-canonicalize so alias wire values (e.g. claude-code from a
+  # hand-built AI_AGENT / future detector slip) never reach tool=. Empty stays
+  # empty; known aliases map; unrecognized non-empty → unknown.
   if [[ -n "$harness" ]]; then
-    meta="tool=${harness}"
+    h2=$(canonical_agent_name "$harness")
+    [[ -n "$h2" ]] && harness=$h2
   fi
+  # Agent invoked us (passed a model slug) but set no harness signal the CLI
+  # shares — CLI will not emit ai-agent/, so the skill must still carry tool=.
+  if [[ -z "$harness" && -n "$MODEL_SLUG" ]]; then
+    harness="unknown"
+    harness_from_model_fallback=true
+  fi
+  # Client (TERM_PROGRAM): app hosting the agent. Agent sessions only.
+  local client
+  client="$(sanitize_token "${TERM_PROGRAM:-}")"
+  # Omit tool=/client= when the CLI emits ai-agent/ai-client itself. Keep them
+  # when harness came only from the model-slug fallback (CLI IsAgent=false).
+  local carry_agent_ua="false"
+  if [[ "$cli_version" == "unknown" ]] || version_lt "$cli_version" "$AGENT_UA_MIN_CLI_VERSION" || [[ "$harness_from_model_fallback" == "true" ]]; then
+    carry_agent_ua="true"
+  fi
+  # Build the parens block: semicolon-separated key=value pairs.
+  # trigger=skill always leads — this script only runs on the skill path.
+  # (APR agent-hooks set trigger=hook when they spawn jf; see eager-setup.)
+  local meta="trigger=skill"
+  if [[ "$carry_agent_ua" == "true" && -n "$harness" ]]; then
+    meta="${meta}; tool=${harness}"
+  fi
+  if [[ "$carry_agent_ua" == "true" && -n "$harness" && -n "$client" ]]; then
+    meta="${meta}; client=${client}"
+  fi
+  # model= is emitted regardless of CLI version (not deduped like tool=/client=):
+  # the CLI's own ai-model/ token is conditional on it detecting the agent via
+  # env AND the caller exporting JFROG_CLI_AI_MODEL, so the skill can't know
+  # whether the CLI will carry it. Keeping model= here guarantees the slug is
+  # always recorded; Coralogix coalesces the two sources so it isn't counted twice.
   if [[ -n "$MODEL_SLUG" ]]; then
-    if [[ -n "$meta" ]]; then
-      meta="${meta}; model=${MODEL_SLUG}"
-    else
-      meta="model=${MODEL_SLUG}"
-    fi
+    meta="${meta}; model=${MODEL_SLUG}"
   fi
-  ua="jfrog-skills/${skill_version}"
-  if [[ -n "$meta" ]]; then
-    ua="${ua} (${meta})"
-  fi
-  ua="${ua} jfrog-cli-go/${cli_version}"
+  ua="jfrog-skills/${skill_version} (${meta}) jfrog-cli-go/${cli_version}"
   printf '%s\n' "$ua"
 }
 
