@@ -1,15 +1,14 @@
 # Xray entities
 
-When to read this file:
+Read when working with:
 
-- Working with **security scanning**, **vulnerabilities**, or **license compliance**.
-- Configuring or querying **watches**, **policies**, or **violations**.
-- Debugging why a scan produced unexpected results or why violations are missing.
-- Generating **security reports** or **SBOM** data.
-- Searching for **artifacts impacted by a CVE** or containing a specific package.
+- **Security scanning**, **vulnerabilities**, or **license compliance**
+- **Watches**, **policies**, or **violations** (configure / query / debug missing results)
+- **Security reports** or **SBOM** data
+- **Artifacts impacted by a CVE** or containing a specific package
 
-For CLI commands: `jf xr --help`, `jf audit --help`, `jf scan --help`.
-For REST fallback: `jf api /xray/api/v2/...` (see the base skill's *Invoking platform APIs with `jf api`* section).
+CLI: `jf xr --help`, `jf audit --help`, `jf scan --help`.
+REST: `jf api /xray/api/v2/...` (see base skill *Invoking platform APIs with `jf api`*).
 
 ## Entity relationship overview
 
@@ -29,85 +28,74 @@ erDiagram
     IgnoreRule }o--o{ Violation : "suppresses"
 ```
 
-The core chain: **Watch** monitors **Resources** using **Policies**. When a
-**Component** in a resource matches a policy **Rule**, Xray generates a
-**Violation**.
+Core chain: **Watch** monitors **Resources** via **Policies**. When a
+**Component** matches a policy **Rule** → Xray generates a **Violation**.
 
 ## Indexed resources
 
-Before Xray can scan or monitor a resource, it must be **indexed**. Indexing
-tells Xray to decompose artifacts in that resource into components and track
-them continuously.
+Xray must **index** a resource before scan/monitor. Indexing decomposes
+artifacts into components and tracks them continuously.
 
-Indexable resource types:
-- **Repositories** — local and remote repos (Xray indexes the `-cache` for remote repos)
-- **Builds** — build info records published to Artifactory
+Indexable types:
+- **Repositories** — local and remote (Xray indexes the `-cache` for remotes)
+- **Builds** — build info published to Artifactory
 - **Release Bundles** — release bundle versions
 
-Indexing is configured in the Xray UI or via the
-`PUT /api/v1/binMgr/builds` / `PUT /api/v1/binMgr/repos` endpoints.
+Configure via Xray UI or `PUT /api/v1/binMgr/builds` / `PUT /api/v1/binMgr/repos`.
 
 ## Components
 
-A component is a software package that Xray identifies during scanning.
-Xray decomposes artifacts (JARs, Docker layers, npm tarballs, etc.) into
-their constituent components and maps each to its vulnerability and license
-data.
+Software package Xray identifies during scanning. Artifacts (JARs, Docker
+layers, npm tarballs, …) decompose into components mapped to vulnerability
+and license data.
 
-Component identifiers vary by package type:
+IDs by package type:
 - Maven: `gav://group:artifact:version`
 - npm: `npm://package:version`
 - Docker: `docker://image:tag`
 - Python: `pypi://package:version`
 - Go: `go://module:version`
-- Generic: identified by checksum
+- Generic: by checksum
 
 ## Vulnerabilities
 
-A vulnerability is a known security issue associated with specific component
-versions.
+Known security issue tied to specific component versions.
 
 | Field | Description |
 |-------|-------------|
 | `cve` | CVE identifier (e.g. `CVE-2021-44228`) |
 | `xray_id` | JFrog-assigned identifier |
 | `severity` | `Critical`, `High`, `Medium`, `Low`, `Unknown` |
-| `cvss_v3` | Numeric score extracted from the CVSS v3 string (e.g. `"7.2/CVSS:3.1/..."` → `7.2`) |
+| `cvss_v3` | Numeric score from CVSS v3 string (e.g. `"7.2/CVSS:3.1/..."` → `7.2`) |
 | `fixed_versions` | Component versions where the vulnerability is resolved |
 | `references` | Links to advisories and patches |
 
-When asked about CVSS score, always use 'cvss_v3' field. 
-Xray maintains its own vulnerability database, updated continuously.
+CVSS score → always use `cvss_v3`. Xray maintains its own continuously updated DB.
 
 ## Contextual analysis
 
-Contextual analysis evaluates whether a vulnerability is **actually
-reachable** in the specific usage context, going beyond the raw CVE data.
-It considers factors like whether vulnerable code paths are invoked, whether
-mitigating configurations are present, and whether the component is used in a
-way that exposes the vulnerability.
+Evaluates whether a vulnerability is **actually reachable** in this usage
+context (beyond raw CVE data): invoked code paths, mitigating configs,
+exposure via how the component is used.
 
-The result is an **applicability** status that helps prioritize remediation:
-a Critical CVE that is not applicable in context is lower priority than a
-High CVE that is confirmed applicable.
+**Applicability** status drives remediation priority: Critical + not
+applicable ≺ High + confirmed applicable.
 
-Available for supported package types and vulnerability types; check Xray
-documentation for current coverage.
+Coverage varies by package/vulnerability type — check Xray docs.
 
 ### Response fields: `applicability` vs `applicability_details`
 
-The summary artifact API returns **two** contextual analysis fields per issue.
-They are not interchangeable — use the correct one for the task:
+Summary artifact API returns **two** contextual fields per issue — not
+interchangeable:
 
 | Field | Scope | Use for |
 |-------|-------|---------|
 | `applicability` | Top-level array; only populated when a scanner ran and produced a definitive `true`/`false` result. Many issues have `applicability: null`. | Checking whether a specific CVE is confirmed applicable or not applicable, and reading the `info` field for the human-readable reason. |
 | `applicability_details` | Array present on every issue with exactly one entry per component-vulnerability pair. Always has a `result` string. | **Counting and summarizing** contextual analysis across all issues. This is the authoritative source for breakdowns. |
 
-**Always use `applicability_details[].result` for counts and summaries.** The
-top-level `applicability` field is null for issues where no scanner exists or
-where the result is undetermined, which leads to incorrect "not analyzed"
-buckets if used for aggregation.
+**Always use `applicability_details[].result` for counts and summaries.**
+Top-level `applicability` is null when no scanner exists or result is
+undetermined — aggregating on it mis-buckets "not analyzed".
 
 ### `applicability_details` result values
 
@@ -143,17 +131,13 @@ jf api /xray/api/v2/summary/artifact \
 
 ## Licenses
 
-License metadata associated with a component, identified by SPDX identifier
-or license name (e.g. `Apache-2.0`, `MIT`, `GPL-3.0`).
-
-Used in **license compliance policies** — organizations define which licenses
-are approved, restricted, or banned, and Xray enforces these rules through
-watches and policies.
+Component license metadata (SPDX ID or name, e.g. `Apache-2.0`, `MIT`,
+`GPL-3.0`). Feeds **license compliance policies** — approved / restricted /
+banned lists enforced via watches and policies.
 
 ## Watches
 
-A watch is the central **monitoring configuration** that connects resources to
-policies.
+Central **monitoring config** linking resources to policies.
 
 | Field | Description |
 |-------|-------------|
@@ -163,15 +147,14 @@ policies.
 | `active` | Whether the watch is enabled |
 | `project_key` | Optional project scope |
 
-When an indexed resource changes (new artifact, updated component data), Xray
-re-evaluates all watches that include that resource.
+Indexed resource change (new artifact, updated component data) → Xray
+re-evaluates watches that include that resource.
 
 API: `GET/POST/PUT/DELETE /api/v2/watches`
 
 ## Policies
 
-A policy defines **rules** that Xray evaluates against components found in
-watched resources.
+**Rules** Xray evaluates against components in watched resources.
 
 | Policy type | Rule evaluates | Common conditions |
 |-------------|---------------|-------------------|
@@ -179,16 +162,15 @@ watched resources.
 | **License** | Licenses | Allowed/banned license list |
 | **Operational risk** | Package metadata | End-of-life, no new versions, low activity |
 
-Each rule has:
-- **Condition** — what triggers the rule (severity ≥ High, license in banned list, etc.)
-- **Actions** — what happens on match: generate violation, block download, fail build, send notification
+Each rule:
+- **Condition** — trigger (severity ≥ High, license in banned list, …)
+- **Actions** — on match: violation, block download, fail build, notify
 
 API: `GET/POST/PUT/DELETE /api/v2/policies`
 
 ## Violations
 
-A violation is generated when a component in a watched resource matches a
-policy rule.
+Generated when a watched component matches a policy rule.
 
 | Field | Description |
 |-------|-------------|
@@ -203,26 +185,22 @@ policy rule.
 | `description` | Violation description (markdown from Xray 3.42.3+) |
 | `matched_policies` | Policies that matched |
 
-Violations are the primary output that security teams act on. They accumulate
-until the underlying component is updated, the artifact is removed, or the
-violation is suppressed via an ignore rule.
+Primary security-team output. Accumulates until the component is updated, the
+artifact is removed, or an ignore rule suppresses it.
 
-Starting from Xray 3.42.3, JFrog Security CVE Research and Enrichment data is
-included in the response. The `short_description`, `full_description`, and
-`remediation` fields are markdown.
+From Xray 3.42.3+: JFrog Security CVE Research/Enrichment in the response;
+`short_description`, `full_description`, `remediation` are markdown.
 
 ### API: `POST /api/v1/violations`
 
-Search violations with filters and pagination. Requires Read permissions.
+Search with filters + pagination. Requires Read permissions.
 
-**Performance warning:** On large or shared instances the violations API can
-hang indefinitely when called without narrowing filters. Always include at
-least one of `watch_name` or `created_from` (or both) to avoid timeouts. There
-is no server-side query timeout — the request simply never returns. If you need
-violations across all watches, iterate per-watch rather than issuing a single
-unfiltered call. The API also has no `package_type` filter, so filtering by
-component type (e.g. npm-only) must be done client-side on `infected_components`
-or by querying watches that cover specific repository types.
+**Performance warning:** On large/shared instances, violations API can hang
+indefinitely without narrowing filters. Always include at least `watch_name`
+or `created_from` (or both). No server-side query timeout — request may never
+return. For all watches: iterate per-watch; do not issue one unfiltered call.
+No `package_type` filter — filter client-side on `infected_components`, or
+query watches covering specific repo types.
 
 ```bash
 jf api /xray/api/v1/violations \
@@ -282,62 +260,48 @@ Narrow violations to specific artifacts, builds, or release bundles:
 | `release_bundles` | `name`, `version` |
 | `release_bundles_v2` | `name`, `version`, `project` |
 
-**There is no `component` filter.** To find violations for a specific component
-(e.g. `npm://lodash:4.17.19`), filter by the resource that contains it
-(artifact path, build, or release bundle) or use `cve_id`/`issue_id` to
-narrow by vulnerability, then inspect `infected_components` in the response.
+**No `component` filter.** For a component (e.g. `npm://lodash:4.17.19`),
+filter by containing resource (artifact path, build, release bundle) or by
+`cve_id`/`issue_id`, then inspect `infected_components`.
 
 ## Ignore rules
 
-An ignore rule suppresses specific violations so they no longer surface in
-reports or block downloads.
+Suppress specific violations so they no longer surface or block downloads.
 
-Ignore rules can be scoped by:
-- **Vulnerability** — specific CVE or Xray ID
-- **Component** — specific component and version
-- **Artifact** — specific repo path
-- **Docker layer** — specific layer in a Docker image
-- **Build** — specific build name
-- **Release bundle** — specific bundle name/version
-
-Each rule has optional `expires_at` and `notes` fields.
+Scope by: **Vulnerability** (CVE / Xray ID), **Component**, **Artifact**,
+**Docker layer**, **Build**, **Release bundle**. Optional `expires_at`, `notes`.
 
 API: `GET/POST/DELETE /api/v1/ignore_rules`
 
-**Version note:** The ignore rules API uses **v1** only. The `/api/v2/ignore_rules`
-endpoint does not exist and returns 404.
+**Version note:** Ignore rules are **v1 only**. `/api/v2/ignore_rules` → 404.
 
 ## Summary APIs
 
-On-demand security, license, and operational risk lookups for artifacts
-stored in Artifactory. Use **only for security and compliance queries**.
+On-demand security, license, and operational-risk lookups for Artifactory
+artifacts. Use **only for security/compliance queries**.
 
-**Which endpoint to use:**
-- Know the Artifactory path and the repo is indexed → `/api/v2/summary/artifact`
-- Know the component ID (GAV, npm, pypi) or the artifact is not indexed → `/api/v1/summary/component`
-- Not sure if indexed → try component summary first (always works if the component exists in Xray's DB)
+**Which endpoint:**
+- Know Artifactory path + repo indexed → `/api/v2/summary/artifact`
+- Know component ID (GAV, npm, pypi) or artifact not indexed → `/api/v1/summary/component`
+- Unsure if indexed → try component summary first (works if component is in Xray DB)
 
-**Prerequisite — Xray indexing:** These endpoints return data only if the
-artifact's repository is indexed by Xray **and** Xray has already scanned
-the artifact. An artifact can exist in Artifactory while Xray knows nothing
-about it — either because the repository was not marked for indexing, or
-because Xray has not yet processed it. Empty results do **not** mean the
-artifact is clean; they mean Xray has no data. When results are empty,
-report that the artifact may not be indexed rather than declaring it
-vulnerability-free.
+**Prerequisite — Xray indexing:** Data only if the repo is indexed **and**
+Xray has scanned the artifact. Artifact may exist in Artifactory while Xray
+knows nothing (repo not marked for indexing, or not yet processed). Empty
+results ≠ clean — means no Xray data. Report possibly not indexed; do not
+declare vulnerability-free.
 
 ### `/api/v1/summary/component`
 
-**v1 only — there is no `/api/v2/summary/component`.** Calling v2 returns 404.
+**v1 only — no `/api/v2/summary/component`.** v2 → 404.
 
-Query by component identifier. Returns `issues[]`, `licenses[]`, and
-`operational_risks[]` per component. Useful for looking up vulnerabilities
-affecting a specific package version without needing to know its Artifactory
-path, or when the artifact's repository is not indexed by Xray (making the
-artifact summary endpoint return empty).
+Query by component ID. Returns `issues[]`, `licenses[]`,
+`operational_risks[]` per component. Use when you know the package version
+but not the Artifactory path, or when the repo is not indexed (artifact
+summary would be empty).
 
-The request body uses `component_details` (an array of objects with
-`component_id`), **not** `component_ids`.
+Body uses `component_details` (array of `{component_id}`), **not**
+`component_ids`.
 
 ```bash
 jf api /xray/api/v1/summary/component \
@@ -345,8 +309,7 @@ jf api /xray/api/v1/summary/component \
   -d '{"component_details": [{"component_id": "npm://lodash:4.17.19"}]}'
 ```
 
-Component ID format follows the same convention as component identifiers
-elsewhere in Xray (see [Components](#components) above):
+Component ID format matches [Components](#components) above:
 - npm: `npm://package:version`
 - Maven: `gav://group:artifact:version`
 - Python: `pypi://package:version`
@@ -355,24 +318,21 @@ elsewhere in Xray (see [Components](#components) above):
 
 ### `/api/v1/summary/artifact` and `/api/v2/summary/artifact`
 
-Query by Artifactory path or SHA-256 checksum. Returns `issues[]`,
-`licenses[]`, and `operational_risks[]` per artifact.
+Query by Artifactory path or SHA-256. Returns `issues[]`, `licenses[]`,
+`operational_risks[]` per artifact.
 
-- **v1** — base response with vulnerability, license, and operational risk data
-- **v2** — same structure plus `components[]` inside each issue, containing
-  `component_id`, `version`, `pkg_type`, and `fixed_versions[]`
+- **v1** — vulnerability, license, operational risk
+- **v2** — same + `components[]` per issue (`component_id`, `version`,
+  `pkg_type`, `fixed_versions[]`)
 
-Use v2 when you need to know which component is affected and what version
-fixes the vulnerability. Use v1 when fixed-version data is not needed.
+Prefer v2 when you need affected component + fix version; v1 otherwise.
 
-Either `paths` or `checksums` must be provided in the request body. If both
-are provided, checksums are ignored.
+Provide `paths` or `checksums` (if both, checksums ignored).
 
-**Paths must point to specific artifacts, not repositories.** A path like
-`default/my-repo/com/example/lib-1.0.jar` works; a repo-level path like
-`default/my-repo` returns empty results. To get a security summary for an
-entire repository, query individual artifact paths (discovered via AQL or
-`jf rt search`) or use the violations API / reports API instead.
+**Paths must be specific artifacts, not repos.**
+`default/my-repo/com/example/lib-1.0.jar` works; `default/my-repo` → empty.
+For a whole repo: query individual paths (AQL / `jf rt search`) or use
+violations / reports APIs.
 
 ```bash
 # v1 — by path
@@ -390,13 +350,13 @@ See `SKILL.md` § *Invoking platform APIs with `jf api`* for the full response s
 
 ## Impacted resources search
 
-`GET /api/v2/search/impactedResources` — find all resources (artifacts, builds,
-release bundles) impacted by a specific CVE **or** containing a specific
-package. **Preferred over `/api/v1/component/searchByCves`** when you need
-artifact paths, repos, and scan dates rather than just component identifiers.
+`GET /api/v2/search/impactedResources` — resources (artifacts, builds, release
+bundles) impacted by a CVE **or** containing a package. **Prefer over
+`/api/v1/component/searchByCves`** when you need paths, repos, scan dates
+(not just component IDs).
 
-Requires the **Reports Manager** permission and the **SBOM Service** (returns
-403 if SBOM is disabled on self-hosted). Available since Xray 3.131.
+Needs **Reports Manager** + **SBOM Service** (403 if SBOM disabled
+self-hosted). Since Xray 3.131.
 
 ### Search modes
 
@@ -406,7 +366,7 @@ Requires the **Reports Manager** permission and the **SBOM Service** (returns
 | By package version | `name` + `type` + `version` | "Where is log4j-core 2.14.1 used?" |
 | By package (all versions) | `name` + `type` | "Where is lodash used, any version?" |
 
-All parameters are **query string** params (not request body):
+All params are **query string** (not body):
 
 | Param | Description |
 |-------|-------------|
@@ -478,7 +438,7 @@ jf api "/xray/api/v2/search/impactedResources?name=lodash&type=npm"
 
 ### Pagination
 
-Page through results using `last_key`:
+Page with `last_key`:
 
 ```bash
 # First page
@@ -491,17 +451,14 @@ jf api "/xray/api/v2/search/impactedResources?vulnerability=CVE-2021-23337&limit
 
 ## Exposures (Advanced Security)
 
-Exposures are actionable security findings produced by JFrog Advanced Security
-that go beyond traditional vulnerability scanning. While vulnerabilities
-identify known CVEs in software components, exposures detect **real-world
-exploitable threats** in binaries, source code, and configurations — such as
-hard-coded secrets, insecure Infrastructure-as-Code templates, and service
-misconfigurations. This helps prioritize critical fixes over theoretical risks.
+Actionable findings from JFrog Advanced Security beyond CVE scanning:
+hard-coded secrets, insecure IaC, service misconfigs — real exploitable
+threats in binaries, source, and configs (vs theoretical CVEs).
 
-Exposures require **JFrog Advanced Security** to be enabled on the Xray
-instance. Artifacts must be in an indexed repository and already scanned.
+Requires **JFrog Advanced Security** enabled. Artifact must be in an indexed
+repo and already scanned.
 
-After getting results, keep only results with status==`to_fix` unless asked otherwise.
+After results: keep only `status==to_fix` unless asked otherwise.
 
 ### Exposure categories
 
@@ -527,8 +484,8 @@ After getting results, keep only results with status==`to_fix` unless asked othe
 
 ### API: Get exposure results
 
-`GET /api/v1/{category}/results` — returns a paginated list of exposure scan
-results for a specific artifact. Available since Xray 3.59.4.
+`GET /api/v1/{category}/results` — paginated exposure results for one
+artifact. Since Xray 3.59.4.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -593,13 +550,12 @@ done
 
 ### Discovering artifact paths for exposures
 
-The exposures API requires a specific artifact `path` — it cannot scan an
-entire repository in one call. For Docker images the scannable artifact is
-the **manifest**: `<image>/<tag>/manifest.json`. For other package types use
-the artifact filename (e.g. `app-1.0.0.tgz`, `lib-2.3.jar`).
+Exposures API needs a specific artifact `path` — cannot scan a whole repo in
+one call. Docker: scannable artifact is the **manifest**
+`<image>/<tag>/manifest.json`. Other types: artifact filename
+(e.g. `app-1.0.0.tgz`, `lib-2.3.jar`).
 
-When the caller doesn't know the artifact paths, discover them first with AQL
-and then fan out to the exposures endpoint.
+Unknown paths → discover with AQL, then fan out to exposures.
 
 **Docker repos** — find all manifests:
 
@@ -613,9 +569,8 @@ echo "$OUT"
 jq -r '.results[] | .path + "/" + .name' "$OUT"
 ```
 
-The `$nmatch` filter excludes temporary upload layers. Each result path
-(e.g. `my-image/latest/manifest.json`) can be passed directly to the
-exposures API's `path` parameter.
+`$nmatch` excludes temporary upload layers. Each result path
+(e.g. `my-image/latest/manifest.json`) → exposures API `path` param.
 
 **Non-Docker repos** — find scannable artifacts:
 
@@ -627,10 +582,8 @@ jf api /artifactory/api/search/aql \
 
 ## Curation audit events
 
-Curation audits every package check that passes through a curated repository
-and records whether the download was **approved** or **blocked**. The audit
-log also captures **dry-run** policy evaluations (policies configured in
-dry-run mode).
+Curation logs every package check through a curated repo as **approved** or
+**blocked**, plus **dry-run** policy evaluations.
 
 ### Get audit logs
 
@@ -638,13 +591,12 @@ dry-run mode).
 GET /xray/api/v1/curation/audit/packages
 ```
 
-Since 3.82.x. Requires `VIEW_POLICIES` permission.
+Since 3.82.x. Requires `VIEW_POLICIES`.
 
-**Time-range limit:** The maximum allowed window between `created_at_start` and
-`created_at_end` is **168 hours (7 days)**. Requests exceeding this return an
-error (`"Maximum allowed duration is 168 hours"`). To query longer periods,
-split into consecutive 7-day (or shorter) chunks and merge results client-side.
-Use 6-day windows to avoid edge-case overflows from hour-level rounding.
+**Time-range limit:** Max window `created_at_start`→`created_at_end` is
+**168 hours (7 days)**. Longer → error `"Maximum allowed duration is 168 hours"`.
+Split into ≤7-day chunks (prefer 6-day to avoid hour-rounding overflow) and
+merge client-side.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -705,28 +657,25 @@ Response shape (key fields):
 }
 ```
 
-The `action` field is either `"blocked"` or `"approved"`. Each event includes
-the `policies` array listing every non-dry-run policy that affected the
-decision (blocking, bypassed, and waived).
+`action` is `"blocked"` or `"approved"`. `policies` lists every non-dry-run
+policy that affected the decision (blocking, bypassed, waived).
 
 ### Pagination
 
-Use `offset` + `num_of_rows` for pagination. The `meta.next_offset` field
-gives the offset for the next page. Set `include_total=true` on the first
-request to know the total number of events.
+`offset` + `num_of_rows`. `meta.next_offset` → next page. First request:
+`include_total=true` for total event count.
 
 ### Common use cases
 
-- **Export all blocked packages**: paginate with `num_of_rows=2000`, filter
-  results by `action == "blocked"`.
-- **Dry-run analysis**: set `dry_run=true` to see what *would* be blocked if
-  dry-run policies were enforced.
-- **CSV export**: set `format=csv` for bulk export. Narrow the time range if
-  the response indicates incomplete data (`audit_packages_incomplete.csv`).
+- **Export blocked packages**: paginate `num_of_rows=2000`, filter
+  `action == "blocked"`.
+- **Dry-run analysis**: `dry_run=true` → what *would* block if enforced.
+- **CSV export**: `format=csv`. Narrow time range if
+  `audit_packages_incomplete.csv`.
 
 ## Reports
 
-On-demand analysis over a defined scope, produced asynchronously.
+On-demand scoped analysis, async.
 
 | Report type | Analyzes |
 |-------------|----------|
@@ -735,6 +684,5 @@ On-demand analysis over a defined scope, produced asynchronously.
 | **Violations** | Policy violations across watched resources |
 | **Operational risks** | Package health metrics |
 
-Reports can be scoped to repositories, builds, release bundles, or projects.
-They are generated via `POST /api/v1/reports/{type}` and retrieved after
-completion.
+Scope: repos, builds, release bundles, or projects.
+`POST /api/v1/reports/{type}` → retrieve after completion.

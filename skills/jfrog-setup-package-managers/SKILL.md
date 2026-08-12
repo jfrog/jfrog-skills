@@ -9,6 +9,8 @@ description: >-
   already has the same repo key. Never pick a repo by discovery; use resolver
   output only (unless the user names or asks to browse repos). On unresolved
   or failed setup, ask with the failure verbatim — never switch servers.
+  NOT for installing packages, general Artifactory repo operations (use the base
+  jfrog skill), or MCP server setup (use jfrog-mcp-management).
 metadata:
   role: workflow
 ---
@@ -19,6 +21,33 @@ Apply the session hook's repo pick via [`jf setup`](references/jf-setup-command.
 then record it in [`.jfrog/local/package-resolution.json`](references/workspace-binding.md).
 `jf setup` writes package-manager-native config (`.npmrc`, `pip.conf`, `uv.toml`, …); the binding
 lets the hook re-apply on later sessions.
+
+## At a glance (always-read core)
+
+Every `jf setup` this session:
+
+- **Cover base [`../jfrog/SKILL.md`](../jfrog/SKILL.md) At-a-glance / Tier A**
+  (Step 0.1) → `<UA>`, `--server-id` placement, single-server, stop-don't-switch.
+  Prefer full base SKILL.md when you can; Tier B (`cli-gotchas` / `jf-api` / …)
+  only if the next action needs `jf api` / advanced CLI
+- **Always `--repo` + `--server-id`.** `<repoKey>` ← [Step 2](#step-2--get-the-resolved-repo)
+  (table / binding / global-cache) or user override / unresolved AskQuestion;
+  never self-discover. `<SID>` ← resolver only (never user-selected)
+- **Confirm** before first `jf setup` unless user asked silent / non-interactive
+- **Exit 0 → merge binding**; non-zero → stop, surface CLI verbatim, offer
+  alternate repo or `abort` (2-answer cap)
+- **Binding = decisions, not creds** — never write tokens into
+  `.jfrog/local/package-resolution.json`
+- **Unresolved / failed:** ask with failure verbatim — never switch servers
+- **Never skip** [Gotchas](#gotchas--hard-rules-never-skip) + base Tier A hard
+  rules (`../jfrog/SKILL.md` Cautious execution / Server selection / Tier A
+  gotcha floor). Full `cli-gotchas.md` is Tier B — not required for `jf setup`
+
+Steps: [0](#step-0--read-the-base-skill-then-ensure-jf-is-ready) →
+[1](#step-1--identify-package-managers-to-bind) →
+[2](#step-2--get-the-resolved-repo) →
+[3](#step-3--confirm-run-jf-setup-persist-binding) →
+[4](#step-4--load-the-routing-policy)
 
 ## Scope (this skill vs session hook)
 
@@ -42,11 +71,17 @@ unlisted package manager apply as usual).
 - `jf setup` **mutates user state** (`~/.npmrc`, `~/.docker/config.json`, …).
   Confirm before the first `jf setup` in a session unless the user explicitly
   requests silent/non-interactive setup.
-- Reading [`../jfrog/SKILL.md`](../jfrog/SKILL.md) is required — done as Step 0.1 below.
+- Covering base At-a-glance / Tier A is required — done as Step 0.1 below.
 
 **Out of scope:** CLI install/login (`../jfrog/references/…`).
 
-## Gotchas
+## Gotchas — hard rules (never skip)
+
+**Not tips.** Do/don'ts and known traps for `jf setup` — follow every bullet
+before binding. Also honor base **Tier A** hard rules from
+[`../jfrog/SKILL.md`](../jfrog/SKILL.md) (Cautious execution, Server selection,
+Tier A gotcha floor). Full `cli-gotchas.md` is Tier B — load only if this
+session also needs `jf api` / advanced CLI.
 
 - **Always pass `--repo` and `--server-id`** — omitting `--repo` fails when
   multiple repos match. See [`jf-setup-command.md`](references/jf-setup-command.md).
@@ -70,11 +105,13 @@ unlisted package manager apply as usual).
 
 ## Step 0 — Read the base skill, then ensure `jf` is ready
 
-1. **Read [`../jfrog/SKILL.md`](../jfrog/SKILL.md) fully first — always, before any
-   `jf` command, even when `jf` is already configured.** It carries the `jf`
-   invariants this skill relies on. After reading, run that skill's
-   *Environment check* (and export `JFROG_CLI_USER_AGENT`) before the first
-   `jf` call.
+1. **Cover base skill At-a-glance / Tier A before the first non-exempt `jf`
+   (even when `jf` is already configured).** Prefer reading
+   [`../jfrog/SKILL.md`](../jfrog/SKILL.md) in full when you can; the At-a-glance
+   Tier A floor is enough for `jf setup` / package-manager binding. Load Tier B
+   (`cli-gotchas.md`, `jf-api.md`, …) only if the next action needs `jf api` /
+   advanced CLI. Then run that skill's *Environment check* (and export
+   `JFROG_CLI_USER_AGENT`) before the first `jf` call.
 2. Ensure `jf` + a configured server (`<SID>`). If `jf config show` already
    succeeds, skip to Step 1; otherwise:
    - **`jf --version`** missing → install per
@@ -198,3 +235,16 @@ hard rules. Continue the original request using those URLs.
 If the command prints nothing, routing is off by config
 (`packageResolution.enabled` is not `true`) — an admin opt-in. Report that to
 the user and let them decide whether to enable it.
+
+## Before you run `jf setup` — checklist
+
+[At a glance](#at-a-glance-always-read-core) invariants:
+
+- [ ] base At-a-glance / Tier A covered; `<UA>` exported
+- [ ] `<repoKey>` ← Step 2 or user override; `<SID>` ← resolver only
+- [ ] confirmed (or explicit silent-setup)
+- [ ] `jf setup <pm> --server-id <SID> --repo <repoKey>`
+- [ ] exit 0 → merge binding (no creds); non-zero → stop + report verbatim;
+      never switch servers
+- [ ] **never skip** Gotchas (this skill) + base Tier A hard rules (full
+      `cli-gotchas.md` only if Tier B path)

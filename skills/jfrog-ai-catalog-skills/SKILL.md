@@ -12,6 +12,8 @@ description: >-
   search/browse the catalog, to install/update/uninstall a skill, to see a
   skill's versions, or to publish/upload/release a skill to JFrog /
   Artifactory / the AI Catalog.
+  NOT for managing MCP servers (use jfrog-mcp-management) or downloading
+  packages/artifacts (use jfrog-package-safety-and-download).
 metadata:
   role: workflow
 ---

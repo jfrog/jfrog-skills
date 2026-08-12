@@ -20,6 +20,16 @@ Any command or script added to this repository must start with `jfrog` (e.g., `j
 
 All skills live directly under `skills/<name>/` -- flat structure, never nested into subdirectories like `skills/base/` or `skills/workflows/`. Layering (base vs workflow) is expressed through SKILL.md metadata and prerequisites, not through directory hierarchy.
 
+## SKILL.md layout (primacy / recency)
+
+Session invariants / long skills: top `## At a glance (always-read core)` + tail
+`## Before you run … checklist`. Canonical pattern + summary fidelity:
+[`.cursor/skills/skill-authoring/references/instruction-patterns.md`](.cursor/skills/skill-authoring/references/instruction-patterns.md).
+**Gotchas / caveats / known issues / do-don'ts / strict enforcements** must
+never be framed as optional or on-demand — see that file → Gotchas / hard
+rules. Enforcement: [`.cursor/rules/skill-validation.mdc`](.cursor/rules/skill-validation.mdc).
+Examples: `skills/jfrog/SKILL.md`, `skills/jfrog-setup-package-managers/SKILL.md`.
+
 ## Local Development
 
 Symlink `skills/` into your global agent scope so edits apply immediately:
@@ -42,6 +52,21 @@ Skills are discovered automatically from `skills/*/SKILL.md` — no per-skill co
 ## Skill Structure
 
 Every skill lives in `skills/<name>/` and must contain at least a `SKILL.md`. Optional: a `references/` subdirectory for CLI command patterns and API reference docs.
+
+## Customer-facing skill content only
+
+Everything under `skills/` is **published** (see `.dist-include`) and is what
+`skill-validator` token-counts. Put **only** customer-facing agent content there:
+
+| Location | What belongs | Token gate |
+|----------|--------------|------------|
+| `skills/<name>/SKILL.md` | Agent instructions | Soft warn ~5k tokens / 500 lines |
+| `skills/<name>/references/*.md` | On-demand agent references | Hard fail at **50k** aggregate |
+| `skills/<name>/assets/` | Customer-facing templates / static assets | Counted separately (100k other/assets budget) |
+| `skills/<name>/scripts/` | Runnable helpers (not loaded into context as prose) | Not in the refs total |
+
+**Do not** put maintainer-only or internal process notes under `skills/`.
+Those live in `docs/` (not distributed, not validated as skill tokens).
 
 ## No Internal Test Data
 
@@ -86,8 +111,6 @@ skills repo. Each entry has:
 
 - `name` — repo name under the `jfrog/` GitHub org
 - `dest_prefix` — prefix inside the plugin repo where `skills/` should land. Empty string means repo root.
-- `version_bumps` (optional) — `{file, path}` entries; each JSON semver field is patch-bumped when the sync produces changes.
-- `pin_updates` (optional) — `{file, path}` entries; each vendor-pin field (e.g. `.github/scripts/sync-skills-vendor.json` → `pin`) is set to the synced tag. Required for plugins whose CI re-vendors from that pin so the committed skills and pin stay aligned.
 
 Example: `{ "name": "cursor-plugin", "dest_prefix": "plugins/jfrog" }` copies this repo's `skills/` to `jfrog/cursor-plugin` at `plugins/jfrog/skills/`.
 

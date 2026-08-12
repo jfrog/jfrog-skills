@@ -2,18 +2,16 @@
 
 When to read this file:
 
-- Querying **packages stored in Artifactory** at the package level (not raw artifacts).
-- Finding **where a package version lives** (which repository, which path).
-- Looking up **download statistics**, **tags**, or **qualifiers** on packages.
-- Using the OneModel GraphQL API with the `storedPackages` query root.
-- Understanding how the **Metadata layer bridges** Artifactory storage with
-  Applications and Catalog.
+- Querying **packages stored in Artifactory** at package level (not raw artifacts).
+- Finding **where a package version lives** (repository, path).
+- **Download statistics**, **tags**, or **qualifiers** on packages.
+- OneModel GraphQL with `storedPackages` query root.
+- How **Metadata layer bridges** Artifactory storage with Applications and Catalog.
 
-Stored Packages entities are accessed via the **OneModel GraphQL API**
-(`/onemodel/api/v1/graphql`).
+Stored Packages via **OneModel GraphQL API** (`/onemodel/api/v1/graphql`).
 
-For the OneModel query workflow (credentials, schema fetch, validation,
-execution), read `references/onemodel-graphql.md`.
+OneModel workflow (credentials, schema fetch, validation, execution):
+`references/onemodel-graphql.md`.
 
 ## Entity relationship overview
 
@@ -32,9 +30,7 @@ erDiagram
 
 ## StoredPackage
 
-A software package as known to Artifactory's metadata layer. This is the
-**package-centric abstraction** over raw artifact storage — it groups related
-artifacts into named, typed, versioned packages.
+Package in Artifactory metadata — **package-centric abstraction** over raw storage.
 
 | Field | Description |
 |-------|-------------|
@@ -55,8 +51,7 @@ Query: `storedPackages.getPackage(name: "...", type: "...")` or
 
 ### Repository package type mapping
 
-The `repositoryPackageType` enum canonicalizes Artifactory repo types. Notable
-aliases:
+`repositoryPackageType` canonicalizes Artifactory repo types. Notable aliases:
 
 | Artifactory type | Enum value |
 |------------------|------------|
@@ -67,12 +62,12 @@ aliases:
 | `terraformprovider`, `terraformmodule` | `TERRAFORM` |
 | `hfdataset` | `HUGGINGFACEML` |
 
-The full enum includes 40+ types. Use `repositoryPackageType` for filtering
-when the Artifactory repo type name differs from the canonical form.
+Full enum: 40+ types. Use `repositoryPackageType` when Artifactory repo type
+≠ canonical form.
 
 ## StoredPackageVersion
 
-A specific version of a package, with location and artifact details.
+Specific package version with location and artifact details.
 
 | Field | Description |
 |-------|-------------|
@@ -92,19 +87,13 @@ Query: `storedPackages.searchPackageVersions(where: {...})`.
 
 ### Filtering capabilities
 
-StoredPackageVersion supports rich filtering:
-- By version string (exact, prefix, contains)
-- By project key
-- By creation/modification date ranges
-- By version size
-- By associated tags, qualifiers, locations, artifacts, licenses
-- `ignorePreRelease` flag to exclude pre-release versions
+Filter by: version (exact/prefix/contains), project key, date ranges, size,
+tags, qualifiers, locations, artifacts, licenses; `ignorePreRelease` excludes pre-release.
 
 ## StoredPackageVersionLocation
 
-The **bridge entity** connecting a package version to a physical repository
-location in Artifactory. This is the key entity for answering "where does
-package X version Y live?"
+**Bridge entity** — package version → physical repository location. Key for
+"where does package X version Y live?"
 
 | Field | Description |
 |-------|-------------|
@@ -116,17 +105,13 @@ package X version Y live?"
 | `evidenceSubject` | Evidence attestation anchor (shared across domains) |
 | `stats` | Location-specific download count and last-downloaded timestamps |
 
-The `evidenceSubject` field connects to the Evidence domain — evidence can be
-attached to a specific package version in a specific repo, not just to the
-version globally.
+`evidenceSubject` → Evidence domain — evidence per package version in specific repo.
 
-The `stats` block includes `downloadCount`, `lastDownloadedAt`, and
-`remoteLastDownloadedAt` — the last field tracks when the artifact was last
-fetched from a remote repository source.
+`stats`: `downloadCount`, `lastDownloadedAt`, `remoteLastDownloadedAt` (last fetch from remote source).
 
 ## StoredPackageArtifact
 
-An individual binary file within a package version.
+Individual binary file within a package version.
 
 | Field | Description |
 |-------|-------------|
@@ -137,22 +122,18 @@ An individual binary file within a package version.
 | `mimeType` | Content type |
 | `qualifiers` | Artifact-level key-value qualifiers |
 
-Filtering supports `isLeadArtifact` to identify the primary artifact in a
-package version, and `projectKey` for project-scoped queries.
+Filtering: `isLeadArtifact` (primary artifact), `projectKey` (project-scoped queries).
 
 ## Cross-domain connections
 
 Stored Packages bridge Artifactory storage to higher-level domains:
 
 - **Applications (AppTrust)** — `ApplicationVersionReleasable.packageVersionLocation`
-  links to `StoredPackageVersionLocation`. Applications reference where their
-  package releasables physically reside.
-- **Evidence** — `StoredPackageVersionLocation.evidenceSubject` connects to
-  the Evidence domain via `EvidenceSubject.fullPath`. Evidence can attest to
-  a specific package version at a specific repository location.
-- **Catalog** — Stored Packages represent what's *in your Artifactory*, while
-  the Catalog represents the global knowledge base *about* those packages.
-  The package `type` + `name` can join across both.
+  → `StoredPackageVersionLocation` (where package releasables reside).
+- **Evidence** — `StoredPackageVersionLocation.evidenceSubject` → Evidence via
+  `EvidenceSubject.fullPath` (attestation at specific repo location).
+- **Catalog** — Stored Packages = what's *in Artifactory*; Catalog = global
+  knowledge *about* packages. Join on `type` + `name`.
 
 ## Stored Packages vs. raw Artifactory
 

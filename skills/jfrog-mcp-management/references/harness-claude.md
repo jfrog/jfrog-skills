@@ -3,7 +3,7 @@
 Claude Code-specific config for the `jfrog-mcp-management` skill. Read this
 together with [harness-common.md](harness-common.md) (shared entry shape and
 success criterion). You reached this file because the harness is Claude Code
-(`CLAUDECODE` / `CLAUDE_CODE_ENTRYPOINT`).
+(`CLAUDE_CODE_CHILD_SESSION`, or system prompt identifies Claude Code).
 
 ## Config files
 

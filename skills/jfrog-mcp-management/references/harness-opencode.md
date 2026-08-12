@@ -2,9 +2,10 @@
 
 OpenCode-specific config for the `jfrog-mcp-management` skill. Read this together
 with [harness-common.md](harness-common.md) (shared entry shape and success
-criterion). You reached this file because the harness is OpenCode (`OPENCODE`,
-set in the environment at startup). This targets all OpenCode surfaces (TUI, CLI,
-Desktop, IDE, web) - they share one backend and the same `opencode.json`.
+criterion). You reached this file because the harness is OpenCode (`OPENCODE`
+and/or `OPENCODE_SESSION_ID` in the environment). This targets all OpenCode
+surfaces (TUI, CLI, Desktop, IDE, web) - they share one backend and the same
+`opencode.json`.
 
 > **How OpenCode stores the entry:** config is **JSON / JSONC** under the
 > top-level **`mcp`** key; each server is a **`type: "local"`** entry whose
