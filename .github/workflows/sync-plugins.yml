@@ -75,6 +75,7 @@ jobs:
       - name: Copy skills into plugin
         env:
           DEST_PREFIX: ${{ matrix.dest_prefix }}
+          VERSION: ${{ env.VERSION }}
           VERSION_BUMPS: ${{ toJson(matrix.version_bumps) }}
           PIN_UPDATES: ${{ toJson(matrix.pin_updates) }}
         run: python3 .github/scripts/jfrog-sync-plugins.py copy
