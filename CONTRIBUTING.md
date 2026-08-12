@@ -86,6 +86,8 @@ skills repo. Each entry has:
 
 - `name` — repo name under the `jfrog/` GitHub org
 - `dest_prefix` — prefix inside the plugin repo where `skills/` should land. Empty string means repo root.
+- `version_bumps` (optional) — `{file, path}` entries; each JSON semver field is patch-bumped when the sync produces changes.
+- `pin_updates` (optional) — `{file, path}` entries; each vendor-pin field (e.g. `.github/scripts/sync-skills-vendor.json` → `pin`) is set to the synced tag. Required for plugins whose CI re-vendors from that pin so the committed skills and pin stay aligned.
 
 Example: `{ "name": "cursor-plugin", "dest_prefix": "plugins/jfrog" }` copies this repo's `skills/` to `jfrog/cursor-plugin` at `plugins/jfrog/skills/`.
 

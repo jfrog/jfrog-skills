@@ -5,6 +5,9 @@
       "dest_prefix": "",
       "version_bumps": [
         { "file": ".claude-plugin/plugin.json", "path": "version" }
+      ],
+      "pin_updates": [
+        { "file": ".github/scripts/sync-skills-vendor.json", "path": "pin" }
       ]
     },
     {
@@ -13,6 +16,9 @@
       "version_bumps": [
         { "file": ".cursor-plugin/marketplace.json", "path": "metadata.version" },
         { "file": "plugins/jfrog/.cursor-plugin/plugin.json", "path": "version" }
+      ],
+      "pin_updates": [
+        { "file": ".github/scripts/sync-skills-vendor.json", "path": "pin" }
       ]
     },
     {
