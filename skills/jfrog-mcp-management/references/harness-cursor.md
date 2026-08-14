@@ -3,7 +3,7 @@
 Cursor-specific config for the `jfrog-mcp-management` skill. Read this together
 with [harness-common.md](harness-common.md) (shared entry shape and success
 criterion). You reached this file because the harness is Cursor (`CURSOR_AGENT`
-/ `CURSOR_EXTENSION_HOST_ROLE=agent-exec`).
+/ `CURSOR_CLI` / `CURSOR_TRACE_ID`).
 
 ## Config files
 
