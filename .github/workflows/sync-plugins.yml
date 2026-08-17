@@ -32,6 +32,10 @@ on:
           - vscode-plugin
           - codex-plugin
           - opencode-jfrog-plugin
+          - jfrog-devin-extension
+          - jfrog-kiro-power
+          - devin-plugin
+          - jetbrains-plugin
 
 permissions:
   contents: read
