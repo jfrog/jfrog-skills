@@ -36,8 +36,9 @@ FORCE=false
 MIN_CLI_VERSION="2.100.0"
 
 # CLIs >= this version emit ai-agent/ + ai-client/ + ai-model/ (Client→Agent→Model
-# via jfrog-cli-core #1602 + jfrog-cli #3645). Omit tool=/client= in the skill UA
-# to avoid double-encoding.
+# via jfrog-cli-core #1602 + jfrog-cli #3645). Omit client= in the skill UA to
+# avoid double-encoding. Always emit tool= — mcp-management Step A parses it from
+# this script's stdout, which never includes the CLI's ai-agent/ token.
 #
 # MERGE / RELEASE PIN: tip `CliVersion` is still 2.119.0 while the identity code
 # is already on master. Released 2.118/2.119 only appended ai-agent/. Keep this
@@ -198,24 +199,23 @@ canonical_agent_name() {
   esac
 }
 
-# Detect the calling harness from environment signals. Output and first-match
-# order match the JFrog CLI's DetectExecutionContext() table (claude, gemini,
-# goose, cursor, copilot, kilocode, roo_code, codex, windsurf, cline,
-# opencode, amp, augment, qwen, antigravity, crush, iflow, trae; plus
-# aider/amazon_q via AI_AGENT/AGENT only) — or empty when no agent signal.
-# Devin Desktop is not detected here — see harness-common.md (agent identity
-# + VSCODE_IPC_HOOK). The TERM_PROGRAM client hint is agent-session-only.
-# MODEL_SLUG→unknown fallback is applied by emit_skill_env (not here) so the
-# emitter can still carry tool= when the CLI will not emit ai-agent/.
+# Detect the calling harness from environment signals. First-match order matches
+# the JFrog CLI's DetectExecutionContext() table (claude, gemini, goose, cursor,
+# …) plus v0.22.0 product envs so mcp-management Step A still sees tool=claude /
+# tool=cursor in Claude Code / Cursor IDE terminals (CLAUDECODE, CURSOR_TRACE_ID).
+# Those product envs are also set for humans; real agent skill usage is the
+# model= slug. Devin Desktop is not detected here — see harness-common.md.
+# MODEL_SLUG→unknown fallback is applied by emit_skill_env (not here).
 detect_harness() {
-  # Keep in lockstep with jfrog-cli-core agentEnvDetectors (session markers only).
-  if [[ -n "${CLAUDE_CODE_CHILD_SESSION:-}" ]]; then
+  # Claude/Cursor: session markers OR the v0.22.0 product envs Agent Guard uses.
+  # Other rows stay on CLI session markers.
+  if [[ -n "${CLAUDE_CODE_CHILD_SESSION:-}" || -n "${CLAUDECODE:-}" || -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
     echo "claude"
   elif [[ -n "${GEMINI_CLI:-}" ]]; then
     echo "gemini"
   elif [[ -n "${GOOSE_TERMINAL:-}" ]]; then
     echo "goose"
-  elif [[ -n "${CURSOR_AGENT:-}" || "${CURSOR_EXTENSION_HOST_ROLE:-}" == "agent-exec" ]]; then
+  elif [[ -n "${CURSOR_AGENT:-}" || "${CURSOR_EXTENSION_HOST_ROLE:-}" == "agent-exec" || -n "${CURSOR_CLI:-}" || -n "${CURSOR_TRACE_ID:-}" ]]; then
     echo "cursor"
   elif [[ -n "${COPILOT_CLI:-}" || -n "${COPILOT_AGENT_SESSION_ID:-}" ]]; then
     echo "copilot"
@@ -280,23 +280,24 @@ emit_skill_env() {
     harness="unknown"
     harness_from_model_fallback=true
   fi
-  # Client (TERM_PROGRAM): app hosting the agent. Agent sessions only.
+  # Client (TERM_PROGRAM): app hosting the session. Omitted on new CLI when the
+  # CLI will emit ai-client/ itself (not on the model-slug fallback path).
   local client
   client="$(sanitize_token "${TERM_PROGRAM:-}")"
-  # Omit tool=/client= when the CLI emits ai-agent/ai-client itself. Keep them
-  # when harness came only from the model-slug fallback (CLI IsAgent=false).
-  local carry_agent_ua="false"
+  local carry_client_ua="false"
   if [[ "$cli_version" == "unknown" ]] || version_lt "$cli_version" "$AGENT_UA_MIN_CLI_VERSION" || [[ "$harness_from_model_fallback" == "true" ]]; then
-    carry_agent_ua="true"
+    carry_client_ua="true"
   fi
   # Build the parens block: semicolon-separated key=value pairs.
   # trigger=skill always leads — this script only runs on the skill path.
   # (APR agent-hooks set trigger=hook when they spawn jf; see eager-setup.)
+  # tool= is always emitted when known: mcp-management parses this stdout line
+  # and never sees the CLI's later ai-agent/ token.
   local meta="trigger=skill"
-  if [[ "$carry_agent_ua" == "true" && -n "$harness" ]]; then
+  if [[ -n "$harness" ]]; then
     meta="${meta}; tool=${harness}"
   fi
-  if [[ "$carry_agent_ua" == "true" && -n "$harness" && -n "$client" ]]; then
+  if [[ "$carry_client_ua" == "true" && -n "$harness" && -n "$client" ]]; then
     meta="${meta}; client=${client}"
   fi
   # model= is emitted regardless of CLI version (not deduped like tool=/client=):
