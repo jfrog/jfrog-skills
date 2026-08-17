@@ -19,7 +19,7 @@ compatibility: >-
   (CLI) and Tier 3 (jf api) operations; without it, only MCP (Tier 1) is available.
 metadata:
   role: base
-  version: "0.23.1"
+  version: "0.24.0"
 ---
 
 # JFrog Skill
@@ -33,15 +33,16 @@ Network-facing `jf` this session. Exempt until `<SID>`: `jf --version`,
 
 **Tier A — always-read floor** (before first *non-exempt* `jf`):
 
-- **UA:** [Environment check](#environment-check) once →
-  `export JFROG_CLI_USER_AGENT='<UA>'` atop every bash that runs `jf`
+- **UA:** [Environment check](#environment-check) once → on exit 0/1, export
+  its **exact stdout line** as `JFROG_CLI_USER_AGENT` atop every bash that
+  runs `jf` (never invent / rebuild the UA)
 - **Server:** resolve default once → `--server-id <SID>` **after** subcommand
   (`jf api --server-id …`, never `jf --server-id … api`). One request → one
   server (unless user names servers, e.g. `compare <a> and <b>`)
 - **Error (401/403/404/timeout):** stop — never retry another server / never
   infer multi-server. Override only if user names a server
 - **No prep mutations:** missing repo/artifact/build → stop + report; no
-  create/copy/upload unless asked
+  create/copy/move/upload to fill the gap (workaround ask ≠ permission)
 - **Never guess** tools / `jf api` paths → tool list / `--help` / `references/`.
   404 → stop (no guessed retry). `jf api` needs product prefix
   (`/artifactory`, `/xray`, …)
@@ -140,24 +141,39 @@ thing to check — re-run with the appropriate escalation above.
 ## Environment check
 
 MCP (Tier 1) skips this check — proceed immediately. Before your first Tier 2
-or Tier 3 (`jf`) operation this session, run the environment check and
-**remember its stdout** as `<UA>` for the rest of the session:
+or Tier 3 (`jf`) operation this session, run the environment check. On exit
+0/1, **remember its stdout line verbatim** as `<UA>` for the rest of the
+session:
 
 ```bash
 bash <skill_path>/scripts/check-environment.sh <model-slug>
-# stdout (one line): jfrog-skills/<version> (trigger=skill; tool=<harness>; client=<app>; model=<model-slug>) jfrog-cli-go/<cli-version>
-#   Stack: trigger (skill vs hook) → client (app) → agent/tool (harness) → model.
-#   Keys after trigger= are present when known. On jf >= 2.120.0 the CLI emits
-#   ai-agent/ and ai-client/ itself, so tool=/client= are omitted here.
-#   `trigger=skill` always stays (APR hooks set `trigger=hook` when they spawn jf).
+# exit 0/1 stdout: exactly one opaque line — that line IS <UA>. Copy it byte-for-byte.
+# Do not parse, rebuild, or approximate the export value from this comment.
 # stderr: JSON state (cached 24h at ${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/jfrog-skill-state.json)
 ```
+
+Exit 2/3 produces no `<UA>`; follow the exit table below and do not proceed to
+Tier 2 or 3.
 
 Pass your own model slug, lowercased, with version (e.g. `opus-4.7`,
 `gpt-5.6-sol`, `gemini-2.5-pro`, `composer-2-fast`). Examples, not an
 allowlist — emit a new/unlisted name verbatim, not `unknown`. Not
 harness/role (`subagent`, `agent`) or bare family (`claude`, `gpt`);
 subagents inherit the parent's slug. `unknown` only if truly unidentifiable.
+
+### Never invent `JFROG_CLI_USER_AGENT`
+
+On exit 0/1, the script's stdout line **is** `<UA>` — export it verbatim (never
+invent, rebuild, or edit it). On exit 2/3 there is no `<UA>` — do not synthesize
+one. Current stdout starts with `jfrog-skills/`, never with `model/`.
+
+- **Parent session:** if `<UA>` is missing or starts with `model/` (legacy),
+  discard it and **re-run** `check-environment.sh`. Export the new exit 0/1
+  stdout line only when it does **not** start with `model/`; otherwise **stop**
+  (do not invent).
+- **Subagents:** use only the parent-passed exact `<UA>` — never re-run the
+  script or construct a replacement. If that value is missing or starts with
+  `model/`, **stop** (do not export / do not invent); do not re-run.
 
 ### Export `JFROG_CLI_USER_AGENT` once per bash invocation
 
@@ -173,15 +189,16 @@ jf api /artifactory/api/system/version
 
 `JFROG_CLI_AI_MODEL` carries the model the CLI cannot infer from the environment;
 export it alongside `<UA>` (same `<model-slug>` you passed the script). Older CLIs
-ignore it and rely on the `model=` key already inside `<UA>`.
+ignore it; the remembered `<UA>` already carries the slug when the script
+recorded one.
 
 Do **not** repeat the assignment per `jf` call (`JFROG_CLI_USER_AGENT='<UA>' jf …`
 on every line). This is a **session-global invariant**: it applies to *every*
 `jf` invocation in the session, including `jf` calls you make while following
 any workflow skill that builds on this base skill. Examples elsewhere in this
 skill and in `references/*.md` omit the export for readability — the rule is
-global. When launching a subagent, pass `<UA>` in its prompt; subagents do not
-re-run the script.
+global. When launching a subagent, pass `<UA>` in its prompt (see
+[Never invent](#never-invent-jfrog_cli_user_agent)).
 
 | Exit | Meaning |
 |------|---------|
@@ -189,6 +206,9 @@ re-run the script.
 | 1 | Cache refreshed — CLI ready (Tiers 2 and 3 available), proceed |
 | 2 | `jf` not installed — Tiers 2 and 3 unavailable; only MCP (Tier 1) remains |
 | 3 | `jf` below minimum version — Tiers 2 and 3 unavailable; only MCP (Tier 1) remains |
+
+Exit 2 or 3 prints no `<UA>` on stdout. Do not invent or hand-assemble one
+from this file or from `jf --version`.
 
 Exit 2 or 3 is not a fatal error. Attempt to install or upgrade the CLI
 (see `references/jfrog-cli-install-upgrade.md`). If installation succeeds,
@@ -237,7 +257,12 @@ forbidden. Before any JFrog CLI command, MCP tool call, or API call:
    repository does not exist, package not at the expected location, build not
    found), **stop and report the gap to the user**. Do not perform copy, move,
    upload, create-repo, or any other mutating operation to satisfy the
-   precondition unless the user explicitly asks for it. These "helper" mutations
+   precondition. "Put it there so the download succeeds", "make it work", or
+   "do whatever you need" is still a workaround — not permission to invent
+   the missing artifact. Only perform that mutation when it **is** the
+   user's requested work (publish this file, create this repo, move this
+   artifact), not a helper to make a different operation succeed. These
+   "helper" mutations
    can have cascading effects the user has not considered — virtual repository
    resolution changes, storage quota consumption, replication triggers, Xray
    re-indexing, or permission propagation.
@@ -425,12 +450,13 @@ re-run the same network call to fix parsing.
 [At a glance](#at-a-glance-always-read-core) **Tier A** floor; add **Tier B**
 only when the next action needs `jf api` / advanced CLI:
 
-- [ ] `export JFROG_CLI_USER_AGENT='<UA>'` in this bash
+- [ ] `export JFROG_CLI_USER_AGENT='<UA>'` in this bash — `<UA>` is the exact
+      stdout line from `check-environment.sh` exit 0/1 (never invent / rebuild)
 - [ ] network `jf`: `--server-id <SID>` after subcommand (not `jf --version` /
       `jf config show` pre-SID)
 - [ ] one server; error → stop, don't switch (multi only if user names /
       `compare`)
-- [ ] no prep create/copy/upload unless asked
+- [ ] no prep create/copy/move/upload to fill a gap (workaround ask ≠ permission)
 - [ ] never guess tools/paths → list / `--help` / `references/`; 404 → stop;
       `jf api` product prefix (`/artifactory`, `/xray`, …)
 - [ ] **Tier A** hard rules: Cautious execution + Server selection + Gotchas

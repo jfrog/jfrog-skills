@@ -23,17 +23,11 @@
 
 set -euo pipefail
 
-jf_api_http_status() {
-  # Parses "Http Status: NNN" from jf api stderr.
-  local err_file="$1"
-  local line
-  line=$(grep -F 'Http Status:' "$err_file" 2>/dev/null | tail -1 || true)
-  if [[ "$line" =~ Http\ Status:\ ([0-9]+) ]]; then
-    echo "${BASH_REMATCH[1]}"
-  else
-    echo "0"
-  fi
-}
+# Parameter expansion so a stripped PATH (tests) still resolves this file.
+_this="${BASH_SOURCE[0]}"
+SCRIPT_DIR="${_this%/*}"
+[[ "$SCRIPT_DIR" == "$_this" ]] && SCRIPT_DIR="."
+unset _this
 
 JFROG_PLATFORM_URL="${1:-}"
 
@@ -48,6 +42,9 @@ if ! command -v jf &>/dev/null; then
   echo "ERROR: jf is not installed" >&2
   exit 1
 fi
+
+# shellcheck source=lib/jf-api-http-status.sh
+. "$SCRIPT_DIR/lib/jf-api-http-status.sh"
 
 # `jf api` was added in JFrog CLI 2.100.0 and every request below depends on it.
 # Check it explicitly: on an older CLI the ping fails with an unknown-command
@@ -68,8 +65,10 @@ fi
 TMPERR="$(mktemp)"
 trap 'rm -f "$TMPERR"' EXIT
 
-# Verify server is reachable (unauthenticated ping)
-if ! jf api /artifactory/api/system/ping --url "$JFROG_PLATFORM_URL" >/dev/null 2>"$TMPERR"; then
+# Verify server is reachable (unauthenticated ping).
+# Flags before the path — jf api 2.120+ treats `jf api <path> --url …` as
+# extra positional args ("Wrong number of arguments").
+if ! jf api --url "$JFROG_PLATFORM_URL" /artifactory/api/system/ping >/dev/null 2>"$TMPERR"; then
   PING_CODE=$(jf_api_http_status "$TMPERR")
   echo "ERROR: Server not reachable at ${JFROG_PLATFORM_URL} (HTTP ${PING_CODE})" >&2
   exit 2
@@ -81,11 +80,11 @@ VERIFY_CODE=${SESSION_UUID: -4}
 
 # Register the session with the Access API
 : >"$TMPERR"
-if ! jf api /access/api/v2/authentication/jfrog_client_login/request \
-  --url "$JFROG_PLATFORM_URL" \
+if ! jf api --url "$JFROG_PLATFORM_URL" \
   -X POST \
   -H "Content-Type: application/json" \
-  -d "{\"session\":\"${SESSION_UUID}\"}" >/dev/null 2>"$TMPERR"; then
+  -d "{\"session\":\"${SESSION_UUID}\"}" \
+  /access/api/v2/authentication/jfrog_client_login/request >/dev/null 2>"$TMPERR"; then
   REG_CODE=$(jf_api_http_status "$TMPERR")
   echo "ERROR: Session registration failed (HTTP ${REG_CODE})" >&2
   exit 3

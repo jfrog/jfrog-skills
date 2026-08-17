@@ -47,6 +47,36 @@ export the variable in the environment that launches Devin Desktop (see
 next launch. If a required `${env:VAR}` is unset the Agent Guard fails at
 startup — confirm the export before restart. Never write a raw secret.
 
+`${env:…}` / `${file:…}` are for the upstream MCP's own secrets and inputs —
+never for JFrog Agent Guard credentials (see below).
+
+## JFrog credentials - from the `jf` config
+
+**Include `--server <SERVER_ID>` by default.** It reads that server's URL + token
+from the on-disk `jf` CLI config, is unambiguous, and keeps working if the user
+later adds more servers. Resolve `<SERVER_ID>` per the agent-guard-common
+Pre-flight rules; never emit an empty `--server`.
+
+`--server` can be **omitted only when exactly one `jf` server is configured** - in
+that case the Agent Guard auto-resolves it. With **multiple** `jf` servers,
+omitting `--server` fails: the Agent Guard cannot choose between them and does NOT
+fall back to the `jf` default, so `--server` is required. (When in doubt, include
+it.)
+
+**Devin exception to the shared rule.** [SKILL.md](../SKILL.md) treats `--server`
+as conditional and permits dropping it on the `JFROG_URL`+token env path (see its
+Step 4 Guardrails, "`--server` … drop it only on the `JFROG_URL`+token env
+path"). **That env path does NOT apply on Devin Desktop** - do NOT authenticate
+JFrog via env-var credentials, even though Devin Desktop would resolve
+`${env:JFROG_URL}` / `${env:JFROG_ACCESS_TOKEN}` (or inherit them from the
+launch environment) into the Agent Guard process. Use `--server <SERVER_ID>`
+(or a single configured `jf` server) as described above. If there is no usable
+`jf` server, ask the user to add one (`jf c add <ID>`, or `jf login`) before
+continuing.
+
+If credentials cannot be resolved (no `--server` and either zero or multiple `jf`
+servers), the entry fails to start and the server connects with no tools.
+
 ## Enable
 
 Devin Desktop loads every non-disabled entry in `mcpServers` automatically on

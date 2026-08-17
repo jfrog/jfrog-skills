@@ -177,9 +177,6 @@ Do **not** reuse one project's role payload as representative of all projects.
 
 ## Further reading
 
-- [JFrog documentation URLs in this skill](jfrog-url-references.md)
-- [Get Started with Projects](https://docs.jfrog.com/projects/docs)
-- [Basic Projects Terminology](https://docs.jfrog.com/projects/docs/basic-projects-terminology)
-- [Environments (Administration)](https://docs.jfrog.com/administration/docs/environments)
-- [Projects API (interactive reference)](https://docs.jfrog.com/projects/reference)
-- [Projects API (this skill)](projects-api.md)
+See `jfrog-url-references.md`, the inline Documentation links above
+(Projects, Environments), the Projects API interactive reference at
+`docs.jfrog.com/projects/reference`, and [Projects API (this skill)](projects-api.md).
