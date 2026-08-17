@@ -48,6 +48,23 @@ class TestPluginsJsonPinUpdates(unittest.TestCase):
             by_name["opencode-jfrog-plugin"]["pin_updates"],
             [{"file": "sync-skills-vendor.json", "path": "pin"}],
         )
+        self.assertEqual(
+            by_name["jfrog-devin-extension"]["pin_updates"],
+            [{"file": ".github/scripts/sync-skills-vendor.json", "path": "pin"}],
+        )
+        self.assertEqual(
+            by_name["jfrog-kiro-power"]["pin_updates"],
+            [{"file": "scripts/sync-skills-vendor.json", "path": "pin"}],
+        )
+        self.assertEqual(
+            by_name["devin-plugin"]["pin_updates"],
+            [{"file": ".github/scripts/sync-skills-vendor.json", "path": "pin"}],
+        )
+        self.assertEqual(
+            by_name["jetbrains-plugin"]["pin_updates"],
+            [{"file": ".github/scripts/sync-skills-vendor.json", "path": "pin"}],
+        )
+        self.assertEqual(by_name["jetbrains-plugin"]["dest_prefix"], ".junie")
 
 
 class TestCopyPinUpdates(unittest.TestCase):

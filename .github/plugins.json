@@ -46,6 +46,43 @@
       "pin_updates": [
         { "file": "sync-skills-vendor.json", "path": "pin" }
       ]
+    },
+    {
+      "name": "jfrog-devin-extension",
+      "dest_prefix": "",
+      "version_bumps": [
+        { "file": "package.json", "path": "version" }
+      ],
+      "pin_updates": [
+        { "file": ".github/scripts/sync-skills-vendor.json", "path": "pin" }
+      ]
+    },
+    {
+      "name": "jfrog-kiro-power",
+      "dest_prefix": "",
+      "version_bumps": [
+        { "file": "package.json", "path": "version" }
+      ],
+      "pin_updates": [
+        { "file": "scripts/sync-skills-vendor.json", "path": "pin" }
+      ]
+    },
+    {
+      "name": "devin-plugin",
+      "dest_prefix": "",
+      "version_bumps": [
+        { "file": ".devin-plugin/plugin.json", "path": "version" }
+      ],
+      "pin_updates": [
+        { "file": ".github/scripts/sync-skills-vendor.json", "path": "pin" }
+      ]
+    },
+    {
+      "name": "jetbrains-plugin",
+      "dest_prefix": ".junie",
+      "pin_updates": [
+        { "file": ".github/scripts/sync-skills-vendor.json", "path": "pin" }
+      ]
     }
   ]
 }
