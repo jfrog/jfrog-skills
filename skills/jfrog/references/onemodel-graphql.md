@@ -351,10 +351,10 @@ Include the resolved base URL so they can open it immediately.
 
 ### Official documentation
 
-- [JFrog OneModel GraphQL](https://jfrog.com/help/r/jfrog-rest-apis/jfrog-one-model-graphql)
-- [OneModel common patterns](https://jfrog.com/help/r/jfrog-rest-apis/one-model-graphql-common-patterns-and-conventions)
-- [Release lifecycle GraphQL examples](https://jfrog.com/help/r/jfrog-rest-apis/get-release-bundle-v2-version-graphql-use-cases-examples)
-- [GraphQL introduction](https://graphql.org/learn/)
+- https://jfrog.com/help/r/jfrog-rest-apis/jfrog-one-model-graphql
+- https://jfrog.com/help/r/jfrog-rest-apis/one-model-graphql-common-patterns-and-conventions
+- https://jfrog.com/help/r/jfrog-rest-apis/get-release-bundle-v2-version-graphql-use-cases-examples
+- https://graphql.org/learn/
 
 ## Gotchas
 

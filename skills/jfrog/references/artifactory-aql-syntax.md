@@ -584,13 +584,13 @@ repo name you queried.
 
 ## Official documentation
 
-- [Artifactory Query Language](https://docs.jfrog.com/artifactory/docs/artifactory-query-language) — overview and architecture
-- [Query Structure and Syntax](https://docs.jfrog.com/artifactory/docs/aql-syntax) — domain queries, field references, JSON-like syntax rules
-- [Search Criteria and Operators](https://docs.jfrog.com/artifactory/docs/aql-search-criteria) — comparators, wildcards, `$msp`, relative time
-- [AQL Entities and Fields Reference](https://docs.jfrog.com/artifactory/docs/aql-entities-fields-reference) — complete field list for all domains
-- [Query Output and Modifiers](https://docs.jfrog.com/artifactory/docs/aql-query-output) — `.include()`, `.sort()`, `.offset()`, `.limit()`, `.distinct()`
-- [Query Execution and Permissions](https://docs.jfrog.com/artifactory/docs/aql-query-execution) — authentication, scoped tokens, HTTP errors, streaming
-- [AQL Examples and Common Patterns](https://docs.jfrog.com/artifactory/docs/aql-examples) — ready-to-use queries by use case
-- [Repository-Specific Queries](https://docs.jfrog.com/artifactory/docs/aql-repository-queries) — `.transitive()`, virtual repos, remote search
-- [Performance and Operational Controls](https://docs.jfrog.com/artifactory/docs/aql-performance) — result limits, timeouts, rate limiting, optimization
+- https://docs.jfrog.com/artifactory/docs/artifactory-query-language
+- https://docs.jfrog.com/artifactory/docs/aql-syntax
+- https://docs.jfrog.com/artifactory/docs/aql-search-criteria
+- https://docs.jfrog.com/artifactory/docs/aql-entities-fields-reference
+- https://docs.jfrog.com/artifactory/docs/aql-query-output
+- https://docs.jfrog.com/artifactory/docs/aql-query-execution
+- https://docs.jfrog.com/artifactory/docs/aql-examples
+- https://docs.jfrog.com/artifactory/docs/aql-repository-queries
+- https://docs.jfrog.com/artifactory/docs/aql-performance
 

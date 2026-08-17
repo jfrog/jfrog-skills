@@ -42,7 +42,7 @@ VERIFY_CODE=<last 4 chars>
 
 Exit codes: 0 = success, 2 = server unreachable, 3 = registration failed.
 
-### 2. Show the user the verification code and login link
+### 2. Open the login link and show the verification code
 
 Build login URL:
 
@@ -50,11 +50,24 @@ Build login URL:
 ${JFROG_PLATFORM_URL}/ui/login?jfClientSession=${SESSION_UUID}&jfClientName=JFrog-Skills&jfClientCode=1
 ```
 
-Show verification code prominently, then clickable link:
+Open it in the user's default browser automatically — don't just print
+the link and ask them to click it. OS-appropriate opener:
+
+```bash
+open "<login-url>"          # macOS
+xdg-open "<login-url>"      # Linux
+start "" "<login-url>"      # Windows (cmd) / `Start-Process "<login-url>"` in PowerShell
+```
+
+Opener fails or unavailable (headless/remote, no `$DISPLAY`) → fall back
+to showing the link as text; not a hard failure.
+
+Show verification code prominently, then confirm the link was opened
+(or provide it, on fallback):
 
 > ## Verification code: `<last 4 chars of SESSION_UUID>`
 >
-> Open the login link from above, then enter the code.
+> I've opened the login page in your browser — enter the code above.
 >
 > Let me know when you're done.
 
@@ -83,10 +96,7 @@ SERVER_ID=<derived-id>
 
 Exit codes: 0 = success, 2 = token retrieval failed (user may not have
 completed browser login — HTTP 400), 3 = empty token, 4 = config save or
-verification failed.
-
-**The token endpoint is one-time-use.** If consumed (even in failed save),
-session UUID invalidated — restart from step 1.
+verification failed. The token is one-time-use — see Gotchas below.
 
 ## Post-login handoff (mandatory gate)
 

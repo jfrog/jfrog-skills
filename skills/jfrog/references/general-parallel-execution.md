@@ -19,13 +19,8 @@ jf api /artifactory/api/system/ping    > /tmp/jf-ping-$$.json && \
 jf api /artifactory/api/storageinfo    > /tmp/jf-storage-$$.json
 ```
 
-Cross-product reads batch the same way:
-
-```bash
-jf api /access/api/v2/users/        > /tmp/jf-users-$$.json && \
-jf api /access/api/v2/groups/       > /tmp/jf-groups-$$.json && \
-jf api /access/api/v2/permissions/  > /tmp/jf-perms-$$.json
-```
+Cross-product reads (Access, Xray, etc.) batch the same way — same `jf api`
+command, just a different path per call.
 
 ## Tier 2: Parallel Shell tool calls
 

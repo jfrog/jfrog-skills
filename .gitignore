@@ -16,6 +16,10 @@ tests/data/
 __pycache__/
 *.py[cod]
 
+# Gradle scratch state and output.
+.gradle/
+build/
+
 # Local E2E harness state (see e2e/README.md)
 e2e/.venv/
 e2e/.env
