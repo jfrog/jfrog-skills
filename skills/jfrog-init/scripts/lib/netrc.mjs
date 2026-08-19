@@ -28,7 +28,7 @@ export function dropNetrcHost(content, host) {
   return kept.join("\n");
 }
 
-// Saves `content` as ~/.netrc.
+// Saves `content` as ~/.netrc, replacing any symlink so the token stays out of a dotfiles repo.
 function replaceNetrc(content) {
   const tmp = `${NETRC}.${process.pid}.${Date.now()}.tmp`;
   try {

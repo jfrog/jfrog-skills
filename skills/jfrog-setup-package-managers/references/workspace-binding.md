@@ -71,14 +71,26 @@ to-bind set, map it to a package type and compare
 
 ### 2. Write / merge
 
-After each successful `jf setup`:
+After each successful `jf setup`, run the skill script (do **not** hand-edit
+JSON):
 
-1. Read the current file (treat ENOENT as `{ "repositories": {} }`).
-2. Set `repositories[<pkgType>] = <repoKey>` using the package-manager → type table above.
-3. Atomically write `{ "repositories": { ... } }` — preserve other package
-   types already in the map.
+```bash
+bash <skill_path>/scripts/merge-workspace-binding.sh \
+  --package-manager <package-manager> \
+  --repo <repoKey> \
+  [--workspace-root <workspace-root>]
+```
 
-JSON must use 2-space indent.
+The script:
+
+1. Maps `--package-manager` → package type using the table above (unknown PM → exit 1).
+2. Validates `--repo` (`^[A-Za-z0-9._-]+$`).
+3. Reads the current file (ENOENT → empty `repositories`).
+4. Sets `repositories[<pkgType>] = <repoKey>`, preserve other package types, **last write wins** for the same type.
+5. Writes `{ "repositories": { ... } }` only (drops other top-level keys), 2-space indent, atomic replace via `mktemp` + `mv`.
+6. Serializes concurrent merges with a workspace **directory** lock (`package-resolution.lock.d`; symlink-safe; reclaim when owner PID is dead on this host or the owner hostname differs; owner-less lock dirs are **not** reclaimed — `mkdir` is the mutex; reclaimers take an exclusive side-gate so a late reclaim cannot delete a newly acquired lock).
+7. On corrupt/invalid existing JSON → exit 1 and **leaves the file untouched**.
+8. Requires `jq`; if missing → exit 1.
 
 ### 3. Never write
 
@@ -90,7 +102,7 @@ JSON must use 2-space indent.
 | Consumer | What it reads |
 |---|---|
 | Session-start hook | `repositories` — first workspace root with this file (multi-root) |
-| This skill | Round-trip load → diff → confirm → write |
+| This skill | Round-trip load → diff → confirm → `merge-workspace-binding.sh` |
 | `opencode-jfrog-plugin` | **Not updated** — out of scope until it reads this file |
 
 Changing the `repositories` key semantics is a breaking change; coordinate

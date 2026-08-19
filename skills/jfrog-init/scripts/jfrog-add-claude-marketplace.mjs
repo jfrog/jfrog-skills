@@ -2,12 +2,13 @@
 // Registers the JFrog Claude agent-plugin marketplace for the server this walk
 // resolved. See references/marketplace-setup.md.
 //
-// Usage: node jfrog-add-claude-marketplace.mjs [server-id]
+// Usage: node jfrog-add-claude-marketplace.mjs [server-id] [project-key]
 // Exit 0 -> registered
 // Exit 1 -> unusable jf config, or the marketplace call failed
 // Exit 3 -> jf missing or not running, or claude missing from PATH
 
 import { claude, marketplaceAdd } from "./lib/claude.mjs";
+import { moveTokenToHeader } from "./lib/claude-config.mjs";
 import {
   describeJfUnavailable,
   isMainModule,
@@ -50,17 +51,18 @@ function readServerCreds(serverId) {
   return { jpd, login, token };
 }
 
-function marketplaceUrl({ jpd, login, token }, prefix) {
+function marketplaceUrl({ jpd, login, token }, prefix, projectKey) {
   const userinfo = `${encodeURIComponent(login)}:${encodeURIComponent(token)}`;
   const base = `${jpd.host}${jpd.pathname.replace(/\/+$/, "")}`;
-  return `${jpd.protocol}//${userinfo}@${base}${prefix}${MARKETPLACE_PATH}`;
+  const query = projectKey ? `?projectKey=${encodeURIComponent(projectKey)}` : "";
+  return `${jpd.protocol}//${userinfo}@${base}${prefix}${MARKETPLACE_PATH}${query}`;
 }
 
 function redactToken(text, token) {
   return text.split(encodeURIComponent(token)).join("***");
 }
 
-function register(argServerId) {
+function register(argServerId, projectKey) {
   if (!jfAvailable()) fail(`ERROR: ${describeJfUnavailable()}`, 3);
   if (!claude.found) fail("ERROR: claude not on PATH.", 3);
 
@@ -71,8 +73,10 @@ function register(argServerId) {
 
   const failures = [];
   for (const prefix of MARKETPLACE_PREFIXES) {
-    const { ok, out } = marketplaceAdd(marketplaceUrl(creds, prefix));
+    const url = marketplaceUrl(creds, prefix, projectKey);
+    const { ok, out } = marketplaceAdd(url);
     if (ok) {
+      moveTokenToHeader(url);
       process.stdout.write(redactToken(out, creds.token));
       return 0;
     }
@@ -82,9 +86,9 @@ function register(argServerId) {
   return 1;
 }
 
-function main(argServerId) {
+function main(argServerId, projectKey) {
   try {
-    return register(argServerId);
+    return register(argServerId, projectKey);
   } catch (err) {
     if (err.exitCode === undefined) throw err;
     process.stderr.write(`${err.message}\n`);
@@ -93,5 +97,5 @@ function main(argServerId) {
 }
 
 if (isMainModule(import.meta.url)) {
-  process.exitCode = main(process.argv[2] || "");
+  process.exitCode = main(process.argv[2] || "", process.argv[3] || "");
 }

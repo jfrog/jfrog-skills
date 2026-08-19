@@ -15,7 +15,7 @@ Install by **slug** (the registry `slug`/`name`, never a display name). Latest
 version is used by default, and the user may pass an explicit version.
 **The `jf skills install` command takes no project.** Resolving which repo hosts
 the slug uses `--list-skill-versions` (below), which does require `--project`, so
-resolve it (from `JF_PROJECT`, else ask the user) before that lookup.
+use `<PROJECT>` resolved at session start (see SKILL.md Prerequisites).
 
 ```bash
 jf skills install "<slug>" \
@@ -37,13 +37,21 @@ defaults to `$CI`, so exporting `CI=true` has the same effect if the flag is eve
 unavailable. Run non-interactively and resolve every choice (`--repo`, target)
 up front.
 
-**Resolve `<harness>` from the host you are running in. Never take it from your
-model name, and never hardcode it.** Get the valid names from the CLI: run
-`jf skills list --harness '?'` to print the
-`Supported agents:` table, then install into the row for your host. Identify the
-host from its environment. For example, `CURSOR_*` → `cursor`,
-`CLAUDECODE` → `claude-code`, VS Code / GitHub Copilot → `github-copilot`. If
-nothing identifies the host, ask the user. Never assume.
+**Resolve `<harness>` from the environment check script — never from your model
+name.** If `<UA>` is not already known from this session, run
+`bash <skill_path>/../jfrog/scripts/check-environment.sh <model-slug>` now and capture
+its stdout as `<UA>`. Parse the `tool=<h>` field from `<UA>` and map it to a
+`jf` harness name:
+
+| `tool=` value in `<UA>` | `--harness` for `jf skills` |
+|-------------------------|------------------------------|
+| `claude` | `claude-code` |
+| `cursor` | `cursor` |
+| `copilot` | `github-copilot` |
+| `unknown`, empty, or any other | Ask the user |
+
+If `tool` is `unknown`, empty, or not in the table — do **not** guess. Ask
+the user for the desired install path and use `--path <dir>` instead.
 
 Choose exactly one install target (these are mutually exclusive):
 

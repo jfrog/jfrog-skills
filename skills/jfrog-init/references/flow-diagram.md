@@ -100,9 +100,10 @@ flowchart TD
     WRITE --> S8CHECK{"Step 7 green AND harness == Claude Code? (detectHarness() reused from Step 5)"}:::stepBox
     S8CHECK -->|no| DONE
     S8CHECK -->|yes| S8["8. Claude agent-plugin marketplace registered?"]:::stepBox
-    S8 -->|exit 0, success| F8OK["Reply: Added the JFrog marketplace ... — trailing sentence after Final Summary"]:::autoBox
-    S8 -->|exit 1 or 3, failed| DONE
+    S8 -->|exit 0, success| F8OK["Final Summary: ✅ JFrog Marketplace, plus the trailing sentence"]:::autoBox
+    S8 -->|exit 1 or 3, failed| F8BAD["Final Summary: ⚠️ JFrog Marketplace — not registered, no cause"]:::fixBox
     F8OK --> DONE
+    F8BAD --> DONE
 
     DONE(["JFrog init complete"]):::doneBox
 
