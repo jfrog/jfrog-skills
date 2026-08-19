@@ -6,7 +6,7 @@ This repository ships AI agent skills for the JFrog Platform:
 
 - **`jfrog`** (required): The base skill covering CLI setup, artifact operations, security queries, AQL, and GraphQL. All other skills depend on it.
 - **`jfrog-package-safety-and-download`**: A workflow skill for package safety checks and curation-aware downloads. Requires `jfrog`.
-- **`jfrog-ai-catalog-skills`**: A workflow skill to discover, install, update, and publish agent skills in the JFrog AI Catalog. Requires `jfrog`.
+- **`jfrog-ai-catalog`**: A workflow skill to discover, install, update, and publish agent skills and agent plugins in the JFrog AI Catalog. Requires `jfrog`.
 - **`jfrog-reference-architecture`**: A workflow skill for topology, sizing, deployment patterns, and use-case selection using the [JFrog Platform Reference Architecture](https://jfrog.com/reference-architecture/) (live `WebFetch`, primarily [llms-full.txt](https://jfrog.com/reference-architecture/llms-full.txt)). Requires `jfrog` for vocabulary only; no CLI needed for planning.
 - **`jfrog-setup-package-managers`**: A workflow skill that binds local package managers (npm, pip, maven, go, docker, …) to Artifactory via `jf setup` and records the workspace binding in `.jfrog/local/package-resolution.json`. Requires `jfrog`.
 
@@ -25,7 +25,7 @@ From remote repository:
 npx skills add git@github.com:jfrog/jfrog-skills.git -g \
     --skill jfrog \
     --skill jfrog-package-safety-and-download \
-    --skill jfrog-ai-catalog-skills \
+    --skill jfrog-ai-catalog \
     --skill jfrog-reference-architecture \
     --skill jfrog-setup-package-managers
 ```
@@ -36,7 +36,7 @@ From a local clone:
 npx skills add . -g \
     --skill jfrog \
     --skill jfrog-package-safety-and-download \
-    --skill jfrog-ai-catalog-skills \
+    --skill jfrog-ai-catalog \
     --skill jfrog-reference-architecture \
     --skill jfrog-setup-package-managers
 ```
@@ -162,9 +162,9 @@ Try asking:
 
 CLI setup, multi-instance management, access tokens.
 
-### Discover and Install AI Catalog Skills
+### Discover and Install AI Catalog Skills and Plugins
 
-Browse, install, update, and publish agent skills hosted in the JFrog AI Catalog.
+Browse, install, update, and publish agent skills and agent plugins hosted in the JFrog AI Catalog.
 
 Try asking:
 
@@ -179,6 +179,18 @@ Try asking:
 > Update the *skill-name* skill from the JFrog AI Catalog to the latest version
 
 > Publish the skill at *path* to my JFrog AI Catalog project *project-name*
+
+> What plugins are available in my JFrog AI Catalog project *project-name*?
+
+> Install the *plugin-name* plugin from my JFrog AI Catalog project *project-name*
+
+> What plugins do I have installed from the JFrog AI Catalog?
+
+> Show me the versions of *plugin-name* in my JFrog AI Catalog project *project-name*
+
+> Update the *plugin-name* plugin from the JFrog AI Catalog to the latest version
+
+> Publish the plugin at *path* to my JFrog AI Catalog project *project-name*
 
 ### Plan topology, sizing, and deployment
 

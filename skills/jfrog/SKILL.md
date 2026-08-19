@@ -19,7 +19,7 @@ compatibility: >-
   (CLI) and Tier 3 (jf api) operations; without it, only MCP (Tier 1) is available.
 metadata:
   role: base
-  version: "0.25.0"
+  version: "0.28.0"
 ---
 
 # JFrog Skill
@@ -36,6 +36,8 @@ Network-facing `jf` this session. Exempt until `<SID>`: `jf --version`,
 - **UA:** [Environment check](#environment-check) once → on exit 0/1, export
   its **exact stdout line** as `JFROG_CLI_USER_AGENT` atop every bash that
   runs `jf` (never invent / rebuild the UA)
+- **CLI offer:** after [Environment check](#environment-check) exit 0/1
+  (skip `jfrog-init` / MCP-only). `NEWER_AVAILABLE` → stop, Yes/No; SKIP/No → silent
 - **Server:** resolve default once → `--server-id <SID>` **after** subcommand
   (`jf api --server-id …`, never `jf --server-id … api`). One request → one
   server (unless user names servers, e.g. `compare <a> and <b>`)
@@ -143,13 +145,24 @@ thing to check — re-run with the appropriate escalation above.
 MCP (Tier 1) skips this check — proceed immediately. Before your first Tier 2
 or Tier 3 (`jf`) operation this session, run the environment check. On exit
 0/1, **remember its stdout line verbatim** as `<UA>` for the rest of the
-session:
+session. Skip the CLI offer during `jfrog-init`.
 
 ```bash
 bash <skill_path>/scripts/check-environment.sh <model-slug>
 # exit 0/1 stdout: exactly one opaque line — that line IS <UA>. Copy it byte-for-byte.
 # Do not parse, rebuild, or approximate the export value from this comment.
 # stderr: JSON state (cached 24h at ${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/jfrog-skill-state.json)
+```
+
+Then, on exit 0/1 only:
+
+```bash
+bash <skill_path>/scripts/cli-newer-version-offer.sh
+# SKIP → continue the original task; do not mention the offer.
+# NEWER_AVAILABLE <cli_version> <latest> (suggest_upgrade) → stop; Yes / No. After:
+#   bash <skill_path>/scripts/cli-newer-version-offer.sh --clear
+# Yes → references/jfrog-cli-install-upgrade.md, then check-environment.sh --force
+# (Tier 2/3 only on exit 0/1). No → silent. Next offer = next new latest.
 ```
 
 Exit 2/3 produces no `<UA>`; follow the exit table below and do not proceed to
@@ -198,7 +211,8 @@ on every line). This is a **session-global invariant**: it applies to *every*
 any workflow skill that builds on this base skill. Examples elsewhere in this
 skill and in `references/*.md` omit the export for readability — the rule is
 global. When launching a subagent, pass `<UA>` in its prompt (see
-[Never invent](#never-invent-jfrog_cli_user_agent)).
+[Never invent](#never-invent-jfrog_cli_user_agent)) and whether the CLI
+offer already ran. Subagents do not re-ask.
 
 | Exit | Meaning |
 |------|---------|
@@ -452,6 +466,7 @@ only when the next action needs `jf api` / advanced CLI:
 
 - [ ] `export JFROG_CLI_USER_AGENT='<UA>'` in this bash — `<UA>` is the exact
       stdout line from `check-environment.sh` exit 0/1 (never invent / rebuild)
+- [ ] CLI offer (`cli-newer-version-offer.sh`) done or N/A (`jfrog-init` / MCP-only)
 - [ ] network `jf`: `--server-id <SID>` after subcommand (not `jf --version` /
       `jf config show` pre-SID)
 - [ ] one server; error → stop, don't switch (multi only if user names /

@@ -20,7 +20,8 @@ brew install jfrog-cli
 curl -fL https://install-cli.jfrog.io | sh
 ```
 
-After installation, run `jf --version` to confirm and refresh the cache.
+After installation, run `jf --version` to confirm, then
+`bash <skill_path>/scripts/check-environment.sh <model-slug> --force`.
 
 ## Upgrading the JFrog CLI
 
@@ -35,4 +36,5 @@ brew upgrade jfrog-cli
 curl -fL https://install-cli.jfrog.io | sh
 ```
 
-After upgrading, run `jf --version` to confirm and refresh the cache.
+After upgrading, run `jf --version` to confirm, then
+`bash <skill_path>/scripts/check-environment.sh <model-slug> --force`.

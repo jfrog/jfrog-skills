@@ -46,7 +46,7 @@ No `jf` CLI is required for planning-only questions.
 
 ### Workflow skill: `jfrog-setup-package-managers`
 
-Binds local package managers (npm, pip, maven, gradle, go, docker, helm, nuget, …) to Artifactory repositories via `jf setup`, then records the decision in the workspace binding file `.jfrog/local/package-resolution.json`. It does not discover repos on its own — it uses the repo keys resolved by the Package Resolution session hook. Reference details live in `skills/jfrog-setup-package-managers/references/`.
+Binds local package managers (npm, pip, maven, gradle, go, docker, helm, nuget, …) to Artifactory repositories via `jf setup`, then records the decision in the workspace binding file `.jfrog/local/package-resolution.json` using `scripts/merge-workspace-binding.sh` (bash + `jq`; no dependency on the APR session hook). It does not discover repos on its own — it uses the repo keys resolved by the Package Resolution session hook when that hook is present. Reference details live in `skills/jfrog-setup-package-managers/references/`.
 
 ---
 
@@ -214,7 +214,8 @@ Helper scripts in `scripts/` handle environment bootstrapping and credential man
 
 | Script | Purpose | When called |
 |--------|---------|-------------|
-| `check-environment.sh` | Verifies `jf` CLI is installed and current; caches result for 24h | First JFrog operation in a session |
+| `cli-newer-version-offer.sh` | Reads cache `suggest_upgrade` plus existing `cli_version` / `latest_version_available`; prints `SKIP` or `NEWER_AVAILABLE <cur> <latest>`; `--clear` writes `suggest_upgrade: false` after Yes/No | After `check-environment.sh` exit 0/1 (not during `jfrog-init`) |
+| `check-environment.sh` | Verifies `jf` CLI is installed and current; caches result for 24h. Writes `suggest_upgrade: true` when published latest is strictly newer and the flag is missing, unknown, or the latest changed; writes `false` when current is equal/newer or the user already declined this latest. Failed probes keep the previous valid latest. | First JFrog operation in a session |
 | `jfrog-login-register-session.sh` | Registers a browser login session; outputs `SESSION_UUID` and `VERIFY_CODE` | Adding a new server via web login |
 | `jfrog-login-save-credentials.sh` | Retrieves token from completed login session and runs `jf config add`; verifies with `jf api /artifactory/api/system/version` | Completing a web login flow |
 

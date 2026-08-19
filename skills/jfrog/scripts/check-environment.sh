@@ -135,8 +135,44 @@ check_cli() {
     meets_minimum="false"
   fi
 
+  # Offer once per new latest. suggest_upgrade is tri-state:
+  #   true  — pending offer
+  #   false — declined (or not behind); --clear writes false
+  #   missing / non-semver prev latest — never evaluated → set true when behind
+  local prev_latest="" prev_flag="" suggest_upgrade=false
+  if [[ -f "$CACHE_FILE" ]] && command -v jq &>/dev/null; then
+    prev_latest="$(jq -r '.latest_version_available // empty' "$CACHE_FILE" 2>/dev/null || true)"
+    if jq -e '.suggest_upgrade == true' "$CACHE_FILE" >/dev/null 2>&1; then
+      prev_flag=true
+      suggest_upgrade=true
+    elif jq -e '.suggest_upgrade == false' "$CACHE_FILE" >/dev/null 2>&1; then
+      prev_flag=false
+    fi
+  fi
+  if [[ ! "$latest_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    if [[ "$prev_latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      latest_version="$prev_latest"
+    else
+      suggest_upgrade=false
+    fi
+  fi
+  if [[ "$latest_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    && [[ "$cli_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    && version_lt "$cli_version" "$latest_version"; then
+    if [[ ! "$prev_latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+      || [[ "$prev_latest" != "$latest_version" ]]; then
+      suggest_upgrade=true
+    elif [[ "$prev_flag" != "false" ]]; then
+      suggest_upgrade=true
+    else
+      suggest_upgrade=false
+    fi
+  elif [[ "$latest_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    suggest_upgrade=false
+  fi
+
   mkdir -p "$CACHE_DIR"
-  local state
+  local state tmp
   state=$(cat <<EOF
 {
   "checked_at": "$(iso_now)",
@@ -146,11 +182,13 @@ check_cli() {
   "cli_version": "$cli_version",
   "minimum_version": "$MIN_CLI_VERSION",
   "meets_minimum_version": $meets_minimum,
-  "latest_version_available": "$latest_version"
+  "latest_version_available": "$latest_version",
+  "suggest_upgrade": $suggest_upgrade
 }
 EOF
 )
-  echo "$state" > "$CACHE_FILE"
+  tmp="${CACHE_DIR}/.jfrog-skill-state.$$.tmp"
+  printf '%s\n' "$state" >"$tmp" && mv "$tmp" "$CACHE_FILE"
   echo "$state" >&2
   return 1
 }

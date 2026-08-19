@@ -191,7 +191,7 @@ walk — the same logic as the Steps below, drawn as a map.
 5. **JFrog MCP plugin file has a jfrog entry?** — `scripts/jfrog-detect-jfrog-mcp.mjs [server-id]`
 6. **Project resolved?** — `scripts/jfrog-detect-project.mjs [server-id] [project-input]`
 7. **AI Catalog reachable & user entitled?** — `scripts/jfrog-detect-catalog-runtime.mjs [server-id]`
-8. **Claude agent-plugin marketplace registered?** — `scripts/jfrog-add-claude-marketplace.mjs [server-id]`, Claude Code only
+8. **Claude agent-plugin marketplace registered?** — `scripts/jfrog-add-claude-marketplace.mjs [server-id] [project-key]`, Claude Code only
 
 Run detectors in this exact order and stop at the first non-green
 result — except Step 5 going red/error (see Step 5), Step 6 hitting
@@ -417,11 +417,12 @@ walk.
 Otherwise run:
 
 ```bash
-node "${CLAUDE_SKILL_DIR}/scripts/jfrog-add-claude-marketplace.mjs" "[server-id]"; rc=$?; true
+node "${CLAUDE_SKILL_DIR}/scripts/jfrog-add-claude-marketplace.mjs" "[server-id]" "[project-key]"; rc=$?; true
 ```
 
 Pass the same `<server-id>` already resolved for Step 4 (empty string
-if Step 4 resolved silently via default/single-server).
+if Step 4 resolved silently via default/single-server), then Step 6's
+canonical project key, or an empty string if Step 6 resolved none.
 
 **Stop and read `references/marketplace-setup.md` in full before
 acting on the exit code** — required behavior, not optional
@@ -430,9 +431,8 @@ background.
 - **Exit 0 (green)** → success. The last stdout line is
   `Successfully added marketplace: <marketplace-name>` — extract
   `<marketplace-name>` for the Final Summary's trailing line.
-- **Exit 1 or 3 (red)** → non-blocking failure. Say **nothing** —
-  exactly as in the skip above, not even in the Final Summary, and never
-  volunteer which cause it was.
+- **Exit 1 or 3 (red)** → non-blocking failure. Nothing beyond the Final
+  Summary's ⚠️ line, and never volunteer which cause it was.
 
 ## Final summary
 
@@ -473,8 +473,8 @@ Skip Node.js (Step 1) — implementation detail, not user-facing.
 
 **Rules for the checklist:**
 1. Do **not** use the word "done" anywhere in it.
-2. Keep it to exactly these three grouped lines — never expand back out
-   to five.
+2. Keep those checks in exactly these three grouped lines — never
+   expand back out to five.
 3. All three groups fully resolved → use this exact format, verbatim:
 
    > ✨ **JFrog initialization complete!**
@@ -495,19 +495,20 @@ Skip Node.js (Step 1) — implementation detail, not user-facing.
    semicolon: `⚠️ Project & AI Catalog — project not set up yet; catalog
    access not entitled`.
 
-5. **Step 8's outcome is never a fourth checklist line** — still exactly
-   three grouped lines above. On Claude Code only, append one trailing
-   sentence after the checklist block:
-   - **Success** — this exact wording, do not reword it:
+5. **Step 8 gets a fourth checklist line, but only when it ran** —
+   nothing appears when it was skipped:
+   - **Success** — `✅ JFrog Marketplace`, plus this trailing sentence
+     after the checklist block, in this exact wording:
 
      > Added the JFrog marketplace `<marketplace-name>` to Claude Code.
      > Browse available plugins with `/plugins`, or install directly with
      > `claude plugin install <plugin>@<marketplace-name>`
 
-   - **Failed/error, or skipped** — nothing.
+   - **Red** — `⚠️ JFrog Marketplace — not registered`, and no trailing
+     sentence.
 
 Never phrase a ⚠️ line as a failure or as something the user needs to
-fix before continuing — these three are non-blocking by design. The
+fix before continuing — all of them are non-blocking by design. The
 short fact after the em dash is the same underlying cause this skill
 has always surfaced, just worded without "pending":
 

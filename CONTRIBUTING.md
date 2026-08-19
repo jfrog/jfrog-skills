@@ -97,8 +97,9 @@ This project uses `0.x` versioning while in beta. The `1.0` release will be tagg
 
 Production releases (`release.yml` → distribute to `github.com/jfrog/jfrog-skills`)
 end with a public `v*` tag. That repo's `Sync Plugins` workflow opens a PR in every
-plugin listed in `.github/plugins.json` (cursor, claude, **vscode**). Each PR vendors
-`skills/` at the tagged ref. Plugin teams review and merge manually.
+plugin listed in `.github/plugins.json` (use each entry's exact `name` — the
+github.com repo slug under `jfrog/`). Each PR vendors `skills/` at the tagged ref.
+Plugin teams review and merge manually.
 
 This GHE repo keeps a mirror of `.github/plugins.json` for the `/release` skill and
 post-distribute notify. Prefer the interactive **`/release`** skill for production cuts;
@@ -106,10 +107,36 @@ use **`release-testing`** for milestone/test pipeline checks. Slack channel IDs,
 names, and other ops routing live in [`.github/RELEASE_PIPELINE.md`](.github/RELEASE_PIPELINE.md)
 (internal; not distributed to the public skills repo).
 
-To add or remove a plugin, update `.github/plugins.json` here **and** on the public
-skills repo. Each entry has:
+### To add or remove a plugin
 
-- `name` — repo name under the `jfrog/` GitHub org
+Updating `.github/plugins.json` (GHE + public) is necessary but not sufficient.
+For each new `jfrog/<repo>`:
+
+1. **Public** `jfrog/jfrog-skills` `.github/plugins.json` — exact GitHub repo
+   `name`, `dest_prefix`, and `version_bumps` / `pin_updates` as needed.
+2. **GHE** `JFROG/jfrog-skills` `.github/plugins.json` — must match public. This
+   is what notify-slack and `/release` read. Do **not** add a second hard-coded
+   repo list in `release.yml`; the workflow reads this JSON (token mint is
+   owner-scoped with `permission-pull-requests: read`).
+3. **GitHub App** `PUBLIC_REPO_APP_ID` — install (or add to selected repos) on
+   that repository. notify-slack warns when a `plugins.json` name is outside
+   the installation and skips polling it.
+4. **PLUGIN_SYNC_TOKEN** / public Sync Plugins App — Contents: write and Pull
+   requests: write on that repo.
+5. **Live-check shape** — if the plugin publishes GitHub Releases
+   (`version_bumps`), post-release uses `gh release view`; if it is pin-only
+   (`pin_updates` only, e.g. `jetbrains-plugin`), confirm the pin file on
+   `main` instead of a tag.
+6. **Versions dashboard** — add the repo to
+   `.cursor/skills/skills-versions-report/config/sources.json` if it should
+   appear on `/versions/` (that list is separate from `plugins.json`).
+
+Use the `name` field as the github.com repo slug. Do **not** document nicknames
+(`opencode`, `kiro`, `jetbrains`, `devin-extension`).
+
+Each entry has:
+
+- `name` — repo name under the `jfrog/` GitHub org (exact slug)
 - `dest_prefix` — prefix inside the plugin repo where `skills/` should land. Empty string means repo root.
 
 Example: `{ "name": "cursor-plugin", "dest_prefix": "plugins/jfrog" }` copies this repo's `skills/` to `jfrog/cursor-plugin` at `plugins/jfrog/skills/`.
@@ -118,7 +145,7 @@ To re-trigger a sync for an existing tag, run Sync Plugins on the **public** rep
 
 ### Required setup
 
-- Public repo secret `PLUGIN_SYNC_TOKEN`: PAT with `Contents: write` and `Pull requests: write` on every plugin listed in `plugins.json`.
+- Public Sync Plugins auth: App / token with `Contents: write` and `Pull requests: write` on every plugin listed in `plugins.json`.
 - GHE Slack notify secrets/vars: see [`.github/RELEASE_PIPELINE.md`](.github/RELEASE_PIPELINE.md).
 
 ## Contributor License Agreement

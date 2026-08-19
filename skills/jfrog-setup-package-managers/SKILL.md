@@ -17,8 +17,12 @@ metadata:
 
 # JFrog — Setup Package Managers for Artifactory
 
+In examples below, `<skill_path>` is this skill's directory (parent of
+`scripts/` / `references/`).
+
 Apply the session hook's repo pick via [`jf setup`](references/jf-setup-command.md),
-then record it in [`.jfrog/local/package-resolution.json`](references/workspace-binding.md).
+then record it in [`.jfrog/local/package-resolution.json`](references/workspace-binding.md)
+via [`scripts/merge-workspace-binding.sh`](scripts/merge-workspace-binding.sh).
 `jf setup` writes package-manager-native config (`.npmrc`, `pip.conf`, `uv.toml`, …); the binding
 lets the hook re-apply on later sessions.
 
@@ -57,7 +61,8 @@ renderer is available on demand via `modules/package-resolution/scripts/print-po
 notice embeds the exact command), so the policy can be loaded after setup.
 
 **This skill:** reads that output, runs `jf setup`, and persists the workspace
-binding at `.jfrog/local/package-resolution.json` when package-manager config is still missing.
+binding at `.jfrog/local/package-resolution.json` (via
+`scripts/merge-workspace-binding.sh`) when package-manager config is still missing.
 
 **Honor the injected policy's governed scope.** The session policy lists the
 package managers it governs. Do **not** *proactively* onboard a package manager the policy
@@ -92,6 +97,8 @@ session also needs `jf api` / advanced CLI.
   `<host>/<repoKey>/<img>`.
 - **Binding holds decisions, not credentials** — never write tokens into
   `.jfrog/local/package-resolution.json`.
+- **Persist binding with the merge script** — after each successful `jf setup`,
+  run `scripts/merge-workspace-binding.sh` (Step 6). Do **not** hand-edit the JSON.
 - **`gradle` ≠ `maven`.** Bind under `repositories.gradle`, never `repositories.maven`.
 - **Yarn / Poetry** — not APR zero-touch; bind only on explicit user ask (Step 1).
 
@@ -101,7 +108,8 @@ session also needs `jf api` / advanced CLI.
 |------|--------------|
 | [`references/jf-setup-command.md`](references/jf-setup-command.md) | CLI flags, supported package managers, exit-code contract, `jf setup --help` |
 | [`references/global-cache-file.md`](references/global-cache-file.md) | Global cache shape, resolution classes, jq one-liners |
-| [`references/workspace-binding.md`](references/workspace-binding.md) | Workspace binding schema, package-manager → type map, merge semantics |
+| [`references/workspace-binding.md`](references/workspace-binding.md) | Workspace binding schema, package-manager → type map, merge script |
+| [`scripts/merge-workspace-binding.sh`](scripts/merge-workspace-binding.sh) | After each successful `jf setup` — deterministic binding merge (`jq` required) |
 
 ## Step 0 — Read the base skill, then ensure `jf` is ready
 
@@ -214,15 +222,20 @@ Cap at **2 answers per package manager**, then abort. User may override repo onl
 5. **Exit code `0` = success** — merge binding (step 6). On non-zero, **stop**,
    surface CLI output verbatim, offer alternate repo or `abort` (2-answer cap).
 
-6. On success, merge into `.jfrog/local/package-resolution.json` per
-   [`workspace-binding.md`](references/workspace-binding.md):
+6. On success, **run the merge script** (do **not** hand-edit JSON). Pass the
+   IDE workspace root when the shell cwd is not that root:
 
-   ```json
-   { "repositories": { "<pkgType>": "<repoKey>" } }
+   ```bash
+   bash <skill_path>/scripts/merge-workspace-binding.sh \
+     --package-manager <package-manager> \
+     --repo <repoKey> \
+     [--workspace-root <workspace-root>]
    ```
 
-   Map package manager → type via the reference table (`gradle` → `gradle`).
-   Merge atomically.
+   Requires `jq` (same prerequisite as the base `jfrog` skill). Exit `0` prints
+   `merged <type> → <repo> into <path>`. On non-zero, **stop**, surface stderr
+   verbatim — do not claim the binding was recorded. Schema and PM → type map:
+   [`workspace-binding.md`](references/workspace-binding.md).
 
 ## Step 4 — Load the routing policy
 
