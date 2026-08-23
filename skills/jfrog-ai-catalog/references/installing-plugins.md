@@ -33,14 +33,18 @@ every choice (`--repo`, target) up front.
 **Resolve `<harness>` from the environment check script — never from your model
 name.** If `<UA>` is not already known from this session, run
 `bash <skill_path>/../jfrog/scripts/check-environment.sh <model-slug>` now and capture
-its stdout as `<UA>`. Parse the `tool=<h>` field from `<UA>` and pass it straight
-through as `--harness <h>`.
+its stdout as `<UA>`. Parse the `tool=<h>` field from `<UA>` and map it to a
+`jf` harness name:
 
-If `tool` is `unknown` or empty, do **not** guess — ask the user for the
-desired install path and use `--path <dir>` instead.
+| `tool=` value in `<UA>` | `--harness` for `jf agent plugins` |
+|-------------------------|-------------------------------------|
+| `claude` | `claude` |
+| `cursor` | `cursor` |
+| `copilot` | `vscode` |
+| `unknown`, empty, or any other | Ask the user |
 
-If the CLI rejects the harness with `unknown agent`, fall back to asking the
-user for `--path <dir>`, the same as the unknown/empty case above.
+If `tool` is `unknown`, empty, or not in the table — do **not** guess. Ask
+the user for the desired install path and use `--path <dir>` instead.
 
 Choose exactly one install target (these are mutually exclusive):
 

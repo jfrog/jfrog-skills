@@ -217,7 +217,7 @@ canonical_agent_name() {
     gemini-cli|gemini) echo "gemini" ;;
     goose) echo "goose" ;;
     cursor-cli|cursor) echo "cursor" ;;
-    github-copilot|copilot-cli|copilot) echo "copilot" ;;
+    github-copilot|copilot-cli|copilot|github_copilot_vscode_agent) echo "copilot" ;;
     kilocode) echo "kilocode" ;;
     roo-code|roo_code) echo "roo_code" ;;
     codex) echo "codex" ;;
@@ -255,7 +255,7 @@ detect_harness() {
     echo "goose"
   elif [[ -n "${CURSOR_AGENT:-}" || "${CURSOR_EXTENSION_HOST_ROLE:-}" == "agent-exec" || -n "${CURSOR_CLI:-}" || -n "${CURSOR_TRACE_ID:-}" ]]; then
     echo "cursor"
-  elif [[ -n "${COPILOT_CLI:-}" || -n "${COPILOT_AGENT_SESSION_ID:-}" ]]; then
+  elif [[ -n "${COPILOT_CLI:-}" || -n "${COPILOT_AGENT_SESSION_ID:-}" || -n "${COPILOT_AGENT:-}" ]]; then
     echo "copilot"
   elif [[ -n "${KILOCODE_FEATURE:-}" || -n "${KILO_PID:-}" ]]; then
     echo "kilocode"

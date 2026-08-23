@@ -108,7 +108,7 @@ Identity axes on the wire (CLI User-Agent / Call-Home / Visibility):
 | `gemini` | `GEMINI_CLI` |
 | `goose` | `GOOSE_TERMINAL` |
 | `cursor` | `CURSOR_AGENT`, `CURSOR_EXTENSION_HOST_ROLE=agent-exec`, `CURSOR_CLI`, `CURSOR_TRACE_ID` |
-| `copilot` | `COPILOT_CLI`, `COPILOT_AGENT_SESSION_ID` |
+| `copilot` | `COPILOT_CLI`, `COPILOT_AGENT_SESSION_ID`, `COPILOT_AGENT` |
 | `kilocode` | `KILOCODE_FEATURE`, `KILO_PID` |
 | `roo_code` | `ROO_ACTIVE`, `ROO_CLI_RUNTIME` |
 | `codex` | `CODEX_CI`, `CODEX_THREAD_ID`, `CODEX_SANDBOX` |
@@ -126,7 +126,7 @@ Identity axes on the wire (CLI User-Agent / Call-Home / Visibility):
 | `amazon_q` | `AI_AGENT` / `AGENT` only |
 | `unknown` | `AI_AGENT` / `AGENT` set to an unrecognized value |
 
-Common `AI_AGENT` / `AGENT` aliases: `claude-code`→`claude`, `gemini-cli`→`gemini`, `cursor-cli`→`cursor`, `github-copilot`/`copilot-cli`→`copilot`, `roo-code`→`roo_code`, `amazon-q`/`amazon-q-cli`→`amazon_q`, `qwen-code`→`qwen`. Version suffixes (`goose@1.2.3`) are stripped.
+Common `AI_AGENT` / `AGENT` aliases: `claude-code`→`claude`, `gemini-cli`→`gemini`, `cursor-cli`→`cursor`, `github-copilot`/`copilot-cli`/`github_copilot_vscode_agent`→`copilot`, `roo-code`→`roo_code`, `amazon-q`/`amazon-q-cli`→`amazon_q`, `qwen-code`→`qwen`. Version suffixes (`goose@1.2.3`) are stripped.
 
 ### Reference files
 
