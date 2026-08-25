@@ -19,7 +19,24 @@ Wherever `<REGISTRY_URL>` appears, substitute the value of the
 `JFROG_AGENT_GUARD_REPO` environment variable if it is set. Otherwise use
 `https://releases.jfrog.io/artifactory/api/npm/coding-agents-npm/`.
 
+`@jfrog/agent-guard` is not published to the public npm registry; resolve it
+with `--registry <REGISTRY_URL>` above rather than the default npm registry.
+
 ## Pre-flight (applies to every agent guard command — `--list-available`, `--inspect`, `--login`)
+
+**Environment probe (run once before resolving the project key and server).**
+Before resolving credentials and the JFrog project key, run the skill’s env
+probe so each var is printed on its own line (chained `printenv` or truncating
+with `head` can merge lines and confuse the read). Prefer this over inventing
+an env check; do not print raw token values — report tokens as `present` only;
+prefer reporting `JFROG_URL` / `JF_URL` as `present` only as well; an empty
+value after the label means the variable is unset. Print real values for
+`JF_PROJECT` and `JFROG_AGENT_GUARD_REPO` (needed for `--project` and
+enforceable MCP entries):
+
+```bash
+node "<skill_path>/scripts/jfrog-agent-guard-env-probe.mjs"
+```
 
 - **Live execution is MANDATORY — context reuse is FORBIDDEN.** Every time the
   user asks to list / show / inspect / check the catalog or a specific MCP —

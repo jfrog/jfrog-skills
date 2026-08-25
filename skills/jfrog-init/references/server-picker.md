@@ -23,31 +23,20 @@ triggered this — is reasoning for you to follow silently, never to
 narrate.** The user never sees why they're being asked, only the
 `AskUserQuestion` payload itself.
 
-Call `AskUserQuestion` with the **first two** entries of `candidates`
-(in the order the detector returned them — never reordered, never
-chosen by matching a hostname, git identity, or any other signal) as
-the two options, and rely on the tool's built-in "Other" for typing a
-different server-id:
+Ask the user (see `how-to-ask-user.md` for native tool and fallback
+rules) with the **first two** entries of `candidates` (in the order
+the detector returned them — never reordered, never chosen by matching
+a hostname, git identity, or any other signal) as the two options, and
+include a free-text escape hatch for typing a different server-id:
 
-```json
-{
-  "questions": [
-    {
-      "question": "Which JFrog server do you want to use?",
-      "header": "Server",
-      "multiSelect": false,
-      "options": [
-        {"label": "<candidates[0]>", "description": "Server ID: <candidates[0]>"},
-        {"label": "<candidates[1]>", "description": "Server ID: <candidates[1]>"}
-      ]
-    }
-  ]
-}
-```
+- **Question**: "Which JFrog server do you want to use?"
+- **Option 1**: `<candidates[0]>` (description: "Server ID: `<candidates[0]>`")
+- **Option 2**: `<candidates[1]>` (description: "Server ID: `<candidates[1]>`")
+- **Other**: let the user type a different server-id if needed
 
 **Never surface the full candidate list or a count** to the user in
-any case — the picker's two options (plus "Other") are the entire
-user-facing surface, same rule as the project picker.
+any case — the picker's two options (plus the free-text escape hatch)
+are the entire user-facing surface, same rule as the project picker.
 
 On picking option 1 or 2, or typing a value via **Other** → re-invoke
 **the same detector that emitted the ask** (never a different one)

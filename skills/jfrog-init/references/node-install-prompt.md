@@ -1,26 +1,16 @@
 # Step 1 — the Node.js install prompt
 
 **Required behavior for Step 1's red branch, not optional background.**
-When `node --version` is missing, unparseable, or its major version is
-`< 18`, call `AskUserQuestion` with this exact payload shape (fill in
-`<reason>` with either `isn't installed` or the specific `` `<version>`
-is too old (need ≥ 18) ``, matching whichever is actually true):
+When `node --version` is missing/unparseable/`< 18`, or when `npx
+--version` fails (node present but npx absent — same red branch), ask
+the user (see `how-to-ask-user.md` for native tool and fallback rules):
 
-```json
-{
-  "questions": [
-    {
-      "question": "Node.js <reason>. Install it now?",
-      "header": "Install Node",
-      "multiSelect": false,
-      "options": [
-        {"label": "Yes", "description": "Install Node.js now. Adds a line to your shell startup file so future terminals can find it."},
-        {"label": "No",  "description": "Cancel /jfrog-init."}
-      ]
-    }
-  ]
-}
-```
+- **Question**: "Node.js `<note>`. Install it now?"
+  — where `<note>` is a brief, accurate description of what the tool
+  output actually showed (e.g. "isn't installed", "`v16.4.0` is too old
+  (need ≥ 18)", "is installed but npx is missing").
+- **Yes**: "Install Node.js now. Adds a line to your shell startup file so future terminals can find it."
+- **No**: "Cancel /jfrog-init."
 
 **Do not** mention any install method (nvm, winget), a version manager
 name, or any URL — not in the question, not in an option description.

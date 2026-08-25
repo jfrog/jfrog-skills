@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Verifies the JFrog PLUGIN'S OWN mcp.json (per harness) exists at its
-// installed path AND contains an mcpServers.jfrog entry. This file is
+// installed path AND contains a jfrog entry (under mcpServers.jfrog on every
+// harness but Codex, which has a bare top-level jfrog key). This file is
 // owned by the plugin — we NEVER write to it, with one exception:
 // automatic placeholder substitution (see jfrog-substitute-mcp-placeholders.mjs).
 // If it's missing, malformed, or lacks the jfrog entry, the correct fix
@@ -98,13 +99,9 @@ export function detectJfrogMcp(serverIdArg) {
     return 3;
   }
 
-  // Auto-substitute any `${JFROG_PLATFORM_URL}` / `${JFROG_URL}` placeholder
-  // with the real JPD URL from `jf config`. Left in place, the MCP would
-  // fail to load in the IDE/agent since the env var doesn't exist.
-  // Checked against mcpServers.jfrog.url specifically (not the raw file
-  // text) so a placeholder-shaped string elsewhere in the plugin's
-  // mcp.json — an unrelated MCP entry, say — can't trigger substitution
-  // for a jfrog.url that has none.
+  // Substitute a placeholder in the jfrog entry's own url with the real
+  // JPD URL from `jf config` — checked there specifically, not the raw
+  // file text, so an unrelated MCP entry can't trigger it.
   const preSubstitutionUrl = jfrogMcpUrl(parsed);
   if (typeof preSubstitutionUrl === "string" && hasMcpPlaceholder(preSubstitutionUrl)) {
     const result = substituteMcpPlaceholders(target, SERVER_ID);
@@ -134,11 +131,11 @@ export function detectJfrogMcp(serverIdArg) {
   const url = jfrogMcpUrl(parsed);
   const hasUrl = typeof url === "string" && url.trim() !== "";
   if (!hasUrl) {
-    emit("red", target, "plugin mcp.json has no valid mcpServers.jfrog entry (missing or empty url) — reinstall or update the JFrog plugin");
+    emit("red", target, "plugin mcp.json has no valid jfrog entry (missing or empty url) — reinstall or update the JFrog plugin");
     return 1;
   }
 
-  emit("green", target, "plugin mcp.json present with mcpServers.jfrog entry");
+  emit("green", target, "plugin mcp.json present with a jfrog entry");
   return 0;
 }
 

@@ -86,7 +86,7 @@ lookups), `node
   commands, not the function calls a pre-approved script makes once
   running, so the mutation executes with no prompt whenever Step 5 finds
   a placeholder. This is intentional, not an oversight: the write is
-  narrowly scoped to `mcpServers.jfrog.url`, atomic (temp file + rename),
+  narrowly scoped to the jfrog entry's `url` field, atomic (temp file + rename),
   and idempotent — see `mcp-plugin-config.md` for why that scope was
   judged safe to run unattended, unlike the two mutations below.
 - `jfrog-state-file.mjs`'s **`set`** mode (writes `~/.jfrog/setup.json`

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // This script itself never writes to the plugin's mcp.json — the file is
-// owned by the JFrog plugin (Cursor / VS Code / Claude). It only prints
+// owned by the JFrog plugin (Cursor / VS Code / Claude / Codex). It only prints
 // the diagnosis and the correct remedy for a plugin file that's missing
 // or invalid: reinstall or update the plugin, with per-harness commands
 // so the user isn't left guessing. (A placeholder-only problem — e.g. an
@@ -47,11 +47,21 @@ After install, restart Claude Code, then re-run /jfrog-init.`);
 
 Restart VS Code, then re-run /jfrog-init.`);
     break;
+  case "codex":
+    console.log(`Codex:
+  codex plugin remove jfrog@codex-plugin            # if already installed
+  codex plugin marketplace add jfrog/codex-plugin   # skip if already configured
+  codex plugin marketplace upgrade codex-plugin
+  codex plugin add jfrog@codex-plugin
+
+Restart Codex, then re-run /jfrog-init.`);
+    break;
   default:
     console.log(`Reinstall the JFrog plugin in whichever IDE you're using:
   Cursor:      Settings → Plugins → search "JFrog" → reinstall.
   VS Code:     code --install-extension JFrog.jfrog-vscode-extension --force
   Claude Code: claude plugin install jfrog-beta/jfrog
+  Codex:       codex plugin marketplace add jfrog/codex-plugin && codex plugin add jfrog@codex-plugin
 
 Restart the IDE afterwards, then re-run /jfrog-init.`);
 }
@@ -62,6 +72,8 @@ Expected plugin-owned paths (for reference):
   Cursor:  ~/.cursor/plugins/cache/cursor-public/jfrog/<sha>/mcp.json
   VS Code: ~/.vscode/agent-plugins/github.com/jfrog/vscode-plugin/plugin/.mcp.json
   Claude:  ~/.claude/plugins/cache/<marketplace>/jfrog/<version>/.mcp.json
+  Codex:   $CODEX_HOME/plugins/cache/codex-plugin/jfrog/<version>/.mcp.json
+           ($CODEX_HOME defaults to ~/.codex)
 `);
 
 if (resolved.path && existsSync(resolved.path)) {

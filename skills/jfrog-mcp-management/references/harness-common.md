@@ -38,7 +38,7 @@ editor UI or `mcp.json`, so it falls through to the Fallback section.
 | Codex | `CODEX_SANDBOX` / `CODEX_THREAD_ID` / `CODEX_CI` | [harness-codex.md](harness-codex.md) |
 | Cursor | `CURSOR_AGENT` / `CURSOR_CLI` / `CURSOR_TRACE_ID` env var | [harness-cursor.md](harness-cursor.md) |
 | OpenCode | `OPENCODE` | [harness-opencode.md](harness-opencode.md) |
-| Devin Desktop | Your system prompt / system instructions identify you as **Devin** (Devin Desktop / Devin Local / Cognition). That alone is enough. Optionally confirm with `VSCODE_IPC_HOOK` set to the Devin Desktop IPC socket (full path), e.g. macOS: `~/Library/Application Support/Devin/<version>-main.sock` — the expanded path contains `/Devin/`. The path alone is **not** enough. | [harness-devin.md](harness-devin.md) |
+| Devin | Your system prompt / system instructions identify you as **Devin** (Devin Desktop / Devin Local / Devin CLI / Cognition). | [harness-devin.md](harness-devin.md) |
 | VS Code editor | `TERM_PROGRAM=vscode` **and no `CURSOR_*` var is set** **and no `OPENCODE` var is set** **and no `CODEX_*` var is set** **and no `CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT` var is set** **and no `GEMINI_CLI` / `GOOSE_TERMINAL` / `COPILOT_CLI` var is set** **and** your system prompt / system instructions do **not** identify you as Devin | [harness-vscode.md](harness-vscode.md) |
 | anything else | none of the above | **Fallback** section below — no harness file exists |
 
