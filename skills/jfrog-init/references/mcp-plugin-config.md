@@ -13,21 +13,31 @@ resolved at runtime from an env var:
 {"mcpServers": {"jfrog": {"url": "https://${JFROG_PLATFORM_URL}/mcp"}}}
 ```
 
+Codex's plugin ships the same idea in a different shape — no
+`mcpServers` wrapper, and angle brackets instead of `${...}`:
+
+```json
+{"jfrog": {"url": "https://<JFROG_PLATFORM_URL>/mcp"}}
+```
+
 Because we have that URL sitting in `jf config`, and because leaving
 the placeholder in place means the MCP silently fails to load in the
 IDE / agent, Step 5 auto-substitutes it. If the detector finds the
 placeholder pattern anywhere in the file, it calls
 `jfrog-substitute-mcp-placeholders.mjs`, which:
 
-1. Parses the file as JSON and looks **only** at
-   `mcpServers.jfrog.url` — never a file-wide text replace, so an
-   unrelated MCP server entry or JSON value that happens to contain the
-   same placeholder text is never touched.
+1. Parses the file as JSON and looks **only** at the `jfrog` entry's
+   `url` (nested under `mcpServers` on every harness but Codex, which
+   has no wrapper) — never a file-wide text replace, so an unrelated
+   MCP server entry or JSON value that happens to contain the same
+   placeholder text is never touched.
 2. Reads the JPD URL from `jf config` (default server, or the one
    passed as arg 2), normalizes it to the JPD root, and substitutes it
    into that one `url` string.
-3. Handles both the `https://${...}` form (where our own scheme would
-   double up) and the bare `${...}` form.
+3. Replaces in two passes — first a placeholder preceded by a scheme
+   (`https://${...}`, where our own scheme would otherwise double up),
+   then a bare one. Each pass recognizes all three syntaxes: `${VAR}`,
+   `$VAR`, and Codex's `<VAR>`.
 4. Re-serializes the whole file (`JSON.stringify(parsed, null, 2)`) and
    writes atomically (temp file + rename) so a partial write cannot
    corrupt the file. Original formatting/whitespace elsewhere in the
@@ -44,16 +54,19 @@ This is the ONLY place `/jfrog-init` writes to the plugin-owned
 | Cursor       | `~/.cursor/plugins/cache/cursor-public/jfrog/<sha>/mcp.json` (glob → newest) |
 | VS Code      | `~/.vscode/agent-plugins/github.com/jfrog/vscode-plugin/plugin/.mcp.json` |
 | Claude Code  | `~/.claude/plugins/cache/<marketplace>/jfrog/<version>/.mcp.json` (glob) |
+| Codex        | `$CODEX_HOME/plugins/cache/codex-plugin/jfrog/<version>/.mcp.json` (glob → newest; `$CODEX_HOME` defaults to `~/.codex`) |
 
-Harness detection: `CLAUDECODE` / `CURSOR_TRACE_ID` / `VSCODE_PID` /
-`TERM_PROGRAM`. Override with `JFROG_INIT_HARNESS=claude|cursor|vscode`
-or a specific file via `JFROG_INIT_MCP_CONFIG=/abs/path`.
+Harness detection (in priority order): `CODEX_SANDBOX` / `CLAUDECODE` /
+`CURSOR_TRACE_ID` / `VSCODE_PID` / `TERM_PROGRAM`. Override with
+`JFROG_INIT_HARNESS=claude|cursor|vscode|codex` or a specific file via
+`JFROG_INIT_MCP_CONFIG=/abs/path`.
 
 **What the detector verifies** (three things):
 
 1. Plugin file exists and is non-empty at its harness-specific path.
 2. Parses as valid JSON.
-3. Contains an `mcpServers.jfrog` entry with a non-empty `url`.
+3. Contains a `jfrog` entry (nested under `mcpServers` on every harness
+   but Codex, which has no wrapper) with a non-empty `url`.
 
 It does NOT enforce any other `type`/`url` shape (each plugin owns its
 own schema) and it does NOT probe the endpoint — a mis-configured MCP
@@ -67,12 +80,12 @@ reachable.
 - **Exit 1 (red)** or **Exit 3 (error)** → **non-blocking** — proceed
   to Step 6 as if green, but remember the cause for the Final Summary.
   Steps 6 and 7 call the JPD's REST APIs directly with `jf config`
-  credentials, never through `mcpServers.jfrog`, so a broken or
+  credentials, never through the JFrog MCP, so a broken or
   missing plugin `mcp.json` doesn't affect whether those checks are
   accurate — there's nothing to gain by stopping the walk over it.
   Tell the two red causes apart from the detector's `detail` for the
   Final Summary note:
-  - Plugin file missing / empty / lacks `mcpServers.jfrog`. Fix:
+  - Plugin file missing / empty / lacks a valid `jfrog` entry. Fix:
     **reinstall or update the JFrog plugin.** If the user asks why or
     how to fix it, run:
 

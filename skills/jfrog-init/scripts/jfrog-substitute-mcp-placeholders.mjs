@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 // Rewrites a placeholder-style env-var reference in the JFrog plugin's
-// mcp.json — specifically `mcpServers.jfrog.url`, nothing else in the
-// file — with the real JPD URL from `jf config`. This is the ONLY code
-// path in /jfrog-init that writes to the plugin-owned mcp.json.
+// mcp.json — specifically the `jfrog` entry's `.url` (nested under
+// `mcpServers` on every harness but Codex, which has no wrapper) — with
+// the real JPD URL from `jf config`. This is the ONLY code path in
+// /jfrog-init that writes to the plugin-owned mcp.json.
 //
 // Scoped to that one field (rather than a file-wide text replace) so an
 // unrelated MCP server entry or JSON value that happens to contain the
 // same placeholder text is never touched.
 //
-// Placeholders handled (both `$VAR` and `${VAR}` forms):
+// Placeholders handled (`$VAR`, `${VAR}`, and Codex's `<VAR>` forms):
 //   - JFROG_PLATFORM_URL
 //   - JFROG_URL
 //
@@ -37,7 +38,7 @@
 // Exit 3 -> read/write error, or jf missing
 
 import { existsSync, readFileSync, writeFileSync, renameSync, statSync, chmodSync, unlinkSync } from "node:fs";
-import { emit as emitJf, isMainModule, jfAvailable, jfConfigShow, urlForServer, normalizeJpdUrl, mcpPlaceholderRegexes, jfrogMcpUrl, hasMcpPlaceholder, askServerResult, describeJfUnavailable } from "./lib/jf.mjs";
+import { emit as emitJf, isMainModule, jfAvailable, jfConfigShow, urlForServer, normalizeJpdUrl, mcpPlaceholderRegexes, jfrogMcpEntry, jfrogMcpUrl, hasMcpPlaceholder, askServerResult, describeJfUnavailable } from "./lib/jf.mjs";
 import { resolveJfServer } from "./jfrog-resolve-jf-server.mjs";
 
 // Result shape: { exitCode, status, detail, candidates? } — mirrors the
@@ -69,7 +70,7 @@ export function substituteMcpPlaceholders(target, serverIdOverride) {
   const currentUrl = jfrogMcpUrl(parsed);
 
   if (currentUrl === null) {
-    return { exitCode: 0, status: "green", detail: "no mcpServers.jfrog.url present — nothing to substitute" };
+    return { exitCode: 0, status: "green", detail: "no jfrog entry url present — nothing to substitute" };
   }
 
   // Checked before resolving a jf server at all — an unresolvable/ambiguous
@@ -106,7 +107,7 @@ export function substituteMcpPlaceholders(target, serverIdOverride) {
   let newUrl = currentUrl.replace(withScheme, () => jpdUrl);
   newUrl = newUrl.replace(bare, () => jpdUrl);
 
-  parsed.mcpServers.jfrog.url = newUrl;
+  jfrogMcpEntry(parsed).url = newUrl;
   const rewritten = JSON.stringify(parsed, null, 2) + "\n";
 
   const tmp = `${target}.tmp.${process.pid}`;

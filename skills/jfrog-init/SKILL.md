@@ -11,6 +11,8 @@ metadata:
 
 # /jfrog-init — verify and guide JFrog plugin readiness
 
+**First output must be a tool call, not text.** No "I'll start..." preamble.
+
 Walks a fixed, ordered checklist and stops at the first red result, guiding
 the user through the matching fix before re-checking. Every detector in
 `scripts/` is idempotent, read-only, JSON-emitting, and implemented in
@@ -50,8 +52,8 @@ substitutes it automatically, identically, in both this text and the
 `allowed-tools` Bash rules above — write it literally rather than
 resolving it yourself, so the two stay byte-for-byte consistent
 regardless of install depth (see `references/script-invocation.md`). On
-a harness that doesn't perform this substitution (e.g. Cursor, which
-doesn't consult `allowed-tools` for approval at all — every command
+a harness that doesn't perform this substitution (e.g. Cursor or Codex,
+neither of which consults `allowed-tools` for approval — every command
 below still raises its own prompt there), replace it with the real
 absolute path of this file's directory yourself, same as before.
 
@@ -140,10 +142,12 @@ user needs to know or act on:
 - **Do not** announce that you're about to run the checklist, or name
   which check comes first — not even generically ("I'll run the setup
   checklist silently, starting with the JFrog CLI check" is itself a
-  violation: it names a step while claiming to be silent). Silently
-  means no preamble message at all. Say nothing until you have
-  something the user needs to act on (an ask, a red result) or the
-  final summary.
+  violation: it names a step while claiming to be silent). The same
+  applies to reading reference docs: "I'll start by reading the flow
+  docs" is a preamble. Silently means no preamble message at all — not
+  before running commands, not before reading files. Say nothing until
+  you have something the user needs to act on (an ask, a red result)
+  or the final summary.
 
 Instead:
 
@@ -250,6 +254,11 @@ Read the output yourself, no JSON to parse:
   jfrog-init requires Node ≥ 18."
 - `node --version` ≥ 18 **and** `npx --version` succeeds → **green** →
   proceed to Step 2.
+
+**Never paste the raw shell output.** Translate to plain English —
+"npx is not installed" not `` `command not found` ``, "Node.js v16 is
+too old" not the version string verbatim. The raw output is for your
+reasoning, not for the user.
 
 On red, **stop and read `references/node-install-prompt.md` in full
 before responding to the user.** It has the exact `AskUserQuestion`

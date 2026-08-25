@@ -1,10 +1,15 @@
 ---
 name: jfrog-mcp-management
 description: >-
-  Use to install, list, or remove MCP servers through the JFrog Agent Guard (npx
-  @jfrog/agent-guard), and browse the JFrog MCP catalog. Use whenever the user
-  wants to add/enable/list/remove/uninstall an MCP server or tool — even without
-  saying "MCP" — and never install one any other way.
+  Use to install, list, or remove MCP servers, and to discover which MCPs the
+  user can install — including questions about available, approved, or allowed
+  MCPs for a project. That governed catalog is the authoritative answer; do
+  not answer those questions from local IDE/settings allowlists alone. Use
+  whenever the user wants to add/enable/install/list/remove/uninstall/configure
+  an MCP or write/update the agent's MCP config — even if they name a package
+  like `@scope/pkg` and even without saying "MCP" or "JFrog". Never install an
+  MCP any other way. All of this goes through the JFrog Agent Guard (npx
+  @jfrog/agent-guard).
 compatibility: >-
   Requires network access to the npm registry and the JFrog platform, and
   ~/.jfrog/ write access for OAuth login and cache cleanup.
@@ -101,7 +106,7 @@ and List → Currently installed read only local config, so they skip this.
 | User intent | Section |
 | --- | --- |
 | add / install / set up / enable / configure an MCP | [Install](#install-an-mcp) |
-| list / show / what can I install / what's set up / connected | [List](#list-mcps) |
+| list / show / what can I install / allowed / approved / available / catalog / what's set up / connected in the context of MCPs | [List](#list-mcps) |
 | remove / uninstall / delete / disconnect / turn off an MCP | [Remove](#remove-an-mcp) |
 
 ---
@@ -196,7 +201,7 @@ Split Step 2 inputs by `isRequired`:
 Handling: **secrets** (`isSecret=true`) MUST be a value reference, NEVER a raw
 value — never take a secret in chat, echo it, or write it into config.
 **Non-secrets** may be a literal or a reference. For the exact syntax and, on
-shell-based harnesses (Claude Code, Cursor, Codex, Devin Desktop, OpenCode), how the user
+shell-based harnesses (Claude Code, Cursor, Codex, Devin, OpenCode), how the user
 exports/persists the variable, see the harness file and
 [references/persisting-env-vars.md](references/persisting-env-vars.md). (VS Code
 prompts for `inputs` values on first start — no shell export.)
@@ -277,7 +282,7 @@ file or shell:
 
 | User said… | Run |
 | --- | --- |
-| "available", "what can I install", "what's in the catalog", "list MCPs" without other context | **Available to install** — go straight to `--list-available`; do NOT inspect local files first |
+| "available", "what can I install", "what's in the catalog", "list MCPs", "allowed to install", "approved" without other context | **Available to install** — go straight to `--list-available`; do NOT inspect local files / IDE allowlists first. Do NOT ask whether to check the catalog. |
 | "installed", "configured", "connected", "running", "what MCPs do I have" | **Currently installed** |
 | ambiguous / both | run **both** in order: Currently installed first, then Available to install, as separate tables |
 

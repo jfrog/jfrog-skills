@@ -398,31 +398,35 @@ export function emit(obj) {
   process.stdout.write(JSON.stringify(obj) + "\n");
 }
 
-// The four supported placeholder forms — `${VAR}` or bare `$VAR` followed
-// by a non-identifier character or end of string — and nothing looser.
-// Independently-optional braces (`\{?...\}?`) would also match malformed
-// or unrelated text like `${JFROG_URL_SUFFIX}` or an unclosed `${JFROG_URL`;
-// the `\b` after the bare form and the exact `\{...\}` pairing rule both
-// out. Shared by the detector (jfrog-detect-jfrog-mcp.mjs) and the
-// substituter (jfrog-substitute-mcp-placeholders.mjs) so "is there a
-// placeholder?" and "replace the placeholder" agree on what counts as one.
-const MCP_PLACEHOLDER_PATTERN = "\\$\\{(?:JFROG_PLATFORM_URL|JFROG_URL)\\}|\\$(?:JFROG_PLATFORM_URL|JFROG_URL)\\b";
+// `${VAR}`, bare `$VAR`, or Codex's `<VAR>` — strict pairing so it doesn't
+// also match malformed/unrelated text like `${JFROG_URL_SUFFIX}`. Shared
+// by the detector and substituter so both agree on what counts as one.
+const MCP_PLACEHOLDER_PATTERN = "\\$\\{(?:JFROG_PLATFORM_URL|JFROG_URL)\\}|\\$(?:JFROG_PLATFORM_URL|JFROG_URL)\\b|<(?:JFROG_PLATFORM_URL|JFROG_URL)>";
 
 export function hasMcpPlaceholder(text) {
   return new RegExp(MCP_PLACEHOLDER_PATTERN).test(text);
 }
 
-// Shared "is `mcpServers.jfrog` a valid object, and what's its `.url`?"
-// check — used by the detector (jfrog-detect-jfrog-mcp.mjs, to decide if
-// there's a url worth validating) and the substituter
-// (jfrog-substitute-mcp-placeholders.mjs, to decide if there's a url worth
-// rewriting) so the two agree on what counts as a valid entry, the same
-// way MCP_PLACEHOLDER_PATTERN keeps "is there a placeholder?" in sync.
+// Every harness but Codex nests the entry under `mcpServers.jfrog`; Codex's
+// plugin mcp.json has no wrapper — bare top-level `jfrog`. Branch keyed on
+// the KEY's presence, not truthiness, so `{ "mcpServers": null, "jfrog":
+// {...} }` isn't mistaken for Codex-shaped, and JFROG_INIT_MCP_CONFIG can
+// still point at a Codex-shaped file from any harness.
+//
+// Returns the live entry object (mutations land on `parsed`), or null.
+export function jfrogMcpEntry(parsed) {
+  if (parsed === null || typeof parsed !== "object") return null;
+  const wrapped = "mcpServers" in parsed;
+  const entry = wrapped ? parsed.mcpServers?.jfrog : parsed.jfrog;
+  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return null;
+  if (!wrapped && !("url" in entry)) return null;
+  return entry;
+}
+
 // Returns the url string (possibly empty) on a valid entry, null otherwise.
 export function jfrogMcpUrl(parsed) {
-  const entry = parsed?.mcpServers?.jfrog;
-  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return null;
-  return typeof entry.url === "string" ? entry.url : null;
+  const entry = jfrogMcpEntry(parsed);
+  return entry && typeof entry.url === "string" ? entry.url : null;
 }
 
 // Fresh RegExp instances every call — a shared module-level `g`-flagged
