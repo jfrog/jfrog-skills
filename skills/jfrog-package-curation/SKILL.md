@@ -1,24 +1,58 @@
 ---
-name: jfrog-package-safety-and-download
+name: jfrog-package-curation
 description: >-
-  Check JFrog Public Catalog and stored packages for a version, interpret
-  catalog security signals, and download through Artifactory (JFrog Platform
-  locations, remote cache, curation-aware package managers, or repo proxy).
-  Use when the user asks whether a package is safe, allowed, curated, or
-  wants to download npm, Maven, PyPI, Go, or similar packages via JFrog.
-  Do NOT use for pure CVE or vulnerability lookups (e.g. "details on
-  CVE-2021-23337") — those are handled by the jfrog skill's Public security
-  domain queries without this workflow.
+  Check/download a package (npm, Maven, PyPI, Go...) via JFrog — safe,
+  allowed, curated? Or: package op fails/blocked (ETARGET, 403, blocked by
+  curation policy, missing version, waiver) — root cause it. Checks the JFrog Public
+  Catalog and stored packages for a version, interprets catalog security
+  signals, and downloads through Artifactory (JFrog Platform locations,
+  remote cache, curation-aware package managers, or repo proxy). Do NOT use
+  for pure CVE or vulnerability lookups (e.g. "details on CVE-2021-23337")
+  — those are handled by the jfrog skill's Public security domain queries
+  without this workflow.
+compatibility: >-
+  "Check & download" needs only the JFrog CLI (`jf`). "Troubleshoot a
+  failure" needs the JFrog MCP curation tools (`jfs_curation_*`) — `jf` CLI
+  alone does not cover it; if unavailable, that section cannot run (see its
+  Preflight). Its reference file is local; outbound HTTPS is optional there
+  too (on-demand WebFetch of JFrog docs) — without it, it runs on the MCP
+  tools and local reference, degraded.
 metadata:
   role: workflow
 ---
 
-# JFrog Package Safety and Download
+# JFrog Package Curation
 
 ## Prerequisites
 
 - Read `../jfrog/SKILL.md` for JFrog Platform concepts, domain model, CLI setup, and API patterns.
 - **OneModel shapes drift by server version.** Before inventing GraphQL fields or `where` filters, read `../jfrog/references/onemodel-graphql.md` (schema fetch workflow) and `../jfrog/references/onemodel-query-examples.md` (**Public packages**, **Stored packages**). Regenerate or verify queries against `GET "$JFROG_URL/onemodel/api/v1/supergraph/schema"` when examples fail validation.
+
+## Which path do I need?
+
+- **Package hasn't been checked or downloaded yet** (is it safe / allowed / curated? download it) → go to **Check & download** below.
+- **A package operation already failed** — `ETARGET` (npm), "no matching distribution" (pip), `NU1102` (NuGet), a version missing/stripped from the registry, `403` / "blocked by curation policy", or an approved waiver not taking effect → go to **Troubleshoot a failure** below.
+
+---
+
+# Troubleshoot a failure
+
+> **Requires the JFrog MCP curation tools** (`jfs_curation_*`); no `jf` CLI
+> equivalent is used in this path. See the skill's `compatibility` note.
+
+Root-causing a curation-attributable failure (`ETARGET`, `403`, a version
+missing from the index, a waiver not taking effect) is a multi-step
+investigation — preflight checks, the two-gate model, symptom classification,
+then a full RCA procedure. It doesn't belong inline here since a plain
+download never touches it. **Open
+[references/rca-procedure.md](references/rca-procedure.md) and follow it from
+the top** — one file, covering preflight, the #1 RULE, the two-gate model,
+symptom classification (Step 0), and the RCA itself (Steps 1–4, worked
+examples, gotchas).
+
+---
+
+# Check & download
 
 ## Workflow overview
 
@@ -36,7 +70,7 @@ flowchart TD
     I -->|Yes| J[Check curation policy via API]
     I -->|No| K[Download via remote repo]
     J -->|200 Allowed| K
-    J -->|403 Blocked| M[Report curation blocked — stop]
+    J -->|403 Blocked| M[Report curation blocked — see Troubleshoot a failure]
 ```
 
 ### Parallelization opportunities
@@ -207,7 +241,10 @@ fi
   download via a remote repo (same as Step 6b).
 - **`returned 403` on stderr** → package is **blocked** by a curation
   policy. The response body explains which policy rule blocked it. Report
-  the block reason to the user and stop — do not attempt to download.
+  the block reason to the user and stop — do not attempt to download. For
+  root-cause detail beyond the block reason (why this version specifically,
+  whether a waiver applies, what to use instead), see **Troubleshoot a
+  failure** above.
 - **Any other non-zero exit** → treat as an operational failure (auth, DNS,
   endpoint disabled) and report.
 

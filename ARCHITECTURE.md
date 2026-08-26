@@ -13,17 +13,17 @@ flowchart TD
     end
 
     subgraph workflows ["Workflow Skills"]
-        PS["jfrog-package-safety-and-download"]
+        PC["jfrog-package-curation"]
         RA["jfrog-reference-architecture"]
         SPM["jfrog-setup-package-managers"]
         Future["...future workflow skills"]
     end
 
-    JF -->|"routes to"| PS
+    JF -->|"routes to"| PC
     JF -->|"routes to"| RA
     JF -->|"routes to"| SPM
     JF -.->|"future"| Future
-    PS -.->|"prereq"| JF
+    PC -.->|"prereq"| JF
     RA -.->|"prereq"| JF
     SPM -.->|"prereq"| JF
 ```
@@ -47,6 +47,15 @@ No `jf` CLI is required for planning-only questions.
 ### Workflow skill: `jfrog-setup-package-managers`
 
 Binds local package managers (npm, pip, maven, gradle, go, docker, helm, nuget, …) to Artifactory repositories via `jf setup`, then records the decision in the workspace binding file `.jfrog/local/package-resolution.json` using `scripts/merge-workspace-binding.sh` (bash + `jq`; no dependency on the APR session hook). It does not discover repos on its own — it uses the repo keys resolved by the Package Resolution session hook when that hook is present. Reference details live in `skills/jfrog-setup-package-managers/references/`.
+
+### Workflow skill: `jfrog-package-curation`
+
+Covers the curation domain end to end, branching into two paths from a single entry point:
+
+- **Check & download** — proactive package safety checks and curation-aware downloads via the `jf` CLI and OneModel GraphQL. Requires only `jf` CLI.
+- **Troubleshoot a failure** — reactive root-cause analysis for package failures caused by JFrog Curation. **MCP only** (no `jf` / `jf api` fallback) for this path: correlates the two enforcement points — index-time Compliant Version Selection (CVS) audit (`jfs_curation_query_cvs_audit_events`, `jfs_curation_get_cvs_audit_version_detail`) and download-time package audit (`jfs_curation_query_audit_events`, `jfs_curation_get_audit_event_policies`), with an optional live `jfs_curation_check_remote_package_compliance` cross-check. It always rules out non-curation causes first (version never existed, auth, network, client-side config). CVS product semantics are read from the [CVS documentation](https://docs.jfrog.com/security/docs/compliant-version-selection) via a one-time `WebFetch`, not duplicated in the skill.
+
+The two paths were merged into one skill (rather than kept as separate `jfrog-package-safety-and-download` / `jfrog-curation-troubleshoot` skills) because their overlapping "package" / "curation" vocabulary was causing agents to pick the wrong skill; the Check & download path's Step 6a links forward into Troubleshoot a failure on a 403.
 
 ---
 
