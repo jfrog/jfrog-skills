@@ -11,7 +11,7 @@ description: >-
   Do NOT use for artifact search or download, repository or permission admin,
   CVE or vulnerability lookups, live jf CLI operations against their instance,
   or package curation — use the jfrog base skill or
-  jfrog-package-safety-and-download instead.
+  jfrog-package-curation instead.
 compatibility: >-
   Requires outbound HTTPS (WebFetch or equivalent). Request full_network when
   the runtime blocks fetches. No jf CLI or configured JFrog instance required

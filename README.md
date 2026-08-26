@@ -5,7 +5,7 @@
 This repository ships AI agent skills for the JFrog Platform: 
 
 - **`jfrog`** (required): The base skill covering CLI setup, artifact operations, security queries, AQL, and GraphQL. All other skills depend on it.
-- **`jfrog-package-safety-and-download`**: A workflow skill for package safety checks and curation-aware downloads. Requires `jfrog`.
+- **`jfrog-package-curation`**: A workflow skill for package safety checks, curation-aware downloads, and root-causing package install/resolve/download failures caused by JFrog Curation — correlating index-time (CVS) and download-time audits via the JFrog MCP curation tools for the troubleshooting path (MCP only — no `jf` CLI). Requires `jfrog`.
 - **`jfrog-ai-catalog`**: A workflow skill to discover, install, update, and publish agent skills and agent plugins in the JFrog AI Catalog. Requires `jfrog`.
 - **`jfrog-reference-architecture`**: A workflow skill for topology, sizing, deployment patterns, and use-case selection using the [JFrog Platform Reference Architecture](https://jfrog.com/reference-architecture/) (live `WebFetch`, primarily [llms-full.txt](https://jfrog.com/reference-architecture/llms-full.txt)). Requires `jfrog` for vocabulary only; no CLI needed for planning.
 - **`jfrog-setup-package-managers`**: A workflow skill that binds local package managers (npm, pip, maven, go, docker, …) to Artifactory via `jf setup` and records the workspace binding in `.jfrog/local/package-resolution.json`. Requires `jfrog`.
@@ -24,7 +24,7 @@ From remote repository:
 ```bash
 npx skills add git@github.com:jfrog/jfrog-skills.git -g \
     --skill jfrog \
-    --skill jfrog-package-safety-and-download \
+    --skill jfrog-package-curation \
     --skill jfrog-ai-catalog \
     --skill jfrog-reference-architecture \
     --skill jfrog-setup-package-managers
@@ -35,7 +35,7 @@ From a local clone:
 ```bash
 npx skills add . -g \
     --skill jfrog \
-    --skill jfrog-package-safety-and-download \
+    --skill jfrog-package-curation \
     --skill jfrog-ai-catalog \
     --skill jfrog-reference-architecture \
     --skill jfrog-setup-package-managers
@@ -111,6 +111,10 @@ Try asking:
 > Show me curation audit events from the last 7 days
 
 > Summarize curation activity this month: how many packages were blocked and why?
+
+> `npm install` fails with ETARGET for *package-name*@*X.Y.Z* — is Curation removing that version from the index?
+
+> Why do I get a 403 on *package-name*@*X.Y.Z* even though the version is in the registry?
 
 ### Examine Builds and Provenance
 
@@ -244,7 +248,7 @@ The skill also handles real-world scenarios that span multiple capabilities:
 
 ## How It Works
 
-When your agent receives a JFrog-related request, it reads the skill and matches the task to the appropriate reference files. It loads only the context needed for the current operation, typically 1-3 reference files, keeping the agent focused and efficient. All operations execute through the `jf` CLI or REST/GraphQL APIs.
+When your agent receives a JFrog-related request, it reads the skill and matches the task to the appropriate reference files. It loads only the context needed for the current operation, typically 1-3 reference files, keeping the agent focused and efficient. Most operations execute through the `jf` CLI or REST/GraphQL APIs; a few workflows (e.g. `jfrog-package-curation`'s curation-troubleshooting path) are MCP-only.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for architecture details.
 
