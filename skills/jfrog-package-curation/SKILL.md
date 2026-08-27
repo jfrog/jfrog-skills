@@ -9,7 +9,9 @@ description: >-
   remote cache, curation-aware package managers, or repo proxy). Do NOT use
   for pure CVE or vulnerability lookups (e.g. "details on CVE-2021-23337")
   — those are handled by the jfrog skill's Public security domain queries
-  without this workflow.
+  without this workflow. Do NOT use for installing, listing, or approving MCP
+  servers/tools (even when named like a package, e.g. `@scope/pkg`) — that's
+  `jfrog-mcp-management`.
 compatibility: >-
   "Check & download" needs only the JFrog CLI (`jf`). "Troubleshoot a
   failure" needs the JFrog MCP curation tools (`jfs_curation_*`) — `jf` CLI
