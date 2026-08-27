@@ -125,6 +125,9 @@ jobs:
           VERSION: ${{ env.VERSION }}
           VERSION_BUMPS: ${{ toJson(matrix.version_bumps) }}
           PIN_UPDATES: ${{ toJson(matrix.pin_updates) }}
+        # copy also rewrites plugin README/VENDOR/POWER (and docs/steering)
+        # for SKILL_DIR_ALIASES in jfrog-sync-plugins.py — add a pair there
+        # when a skill directory is renamed.
         run: python3 .github/scripts/jfrog-sync-plugins.py copy
 
       - uses: peter-evans/create-pull-request@v8
