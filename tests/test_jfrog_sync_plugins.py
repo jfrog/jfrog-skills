@@ -49,10 +49,6 @@ class TestPluginsJsonPinUpdates(unittest.TestCase):
             [{"file": "sync-skills-vendor.json", "path": "pin"}],
         )
         self.assertEqual(
-            by_name["jfrog-devin-extension"]["pin_updates"],
-            [{"file": ".github/scripts/sync-skills-vendor.json", "path": "pin"}],
-        )
-        self.assertEqual(
             by_name["jfrog-kiro-power"]["pin_updates"],
             [{"file": "scripts/sync-skills-vendor.json", "path": "pin"}],
         )

@@ -5,7 +5,7 @@ name: Sync Plugins
 # at the tag into the plugin repo.
 #
 # Auth: jfrog-agentic-release-bot GitHub App → short-lived installation token.
-#   vars.PUBLIC_REPO_APP_ID + secrets.PUBLIC_REPO_APP_PRIVATE_KEY
+#   vars.PUBLIC_REPO_CLIENT_ID + secrets.PUBLIC_REPO_APP_PRIVATE_KEY
 #   App needs Contents:write + Pull requests:write on every jfrog/<plugin>
 #   repo in plugins.json. Mint with explicit permission-* inputs.
 #   github-api-url is pinned to api.github.com for consistency with the
@@ -32,7 +32,6 @@ on:
           - vscode-plugin
           - codex-plugin
           - opencode-jfrog-plugin
-          - jfrog-devin-extension
           - jfrog-kiro-power
           - devin-plugin
           - jetbrains-plugin
@@ -99,7 +98,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ vars.PUBLIC_REPO_APP_ID }}
+          client-id: ${{ vars.PUBLIC_REPO_CLIENT_ID }}
           private-key: ${{ secrets.PUBLIC_REPO_APP_PRIVATE_KEY }}
           owner: jfrog
           repositories: ${{ matrix.name }}
