@@ -12,8 +12,8 @@ plus **exactly one** harness file; do NOT open the others.
 
 The `CLAUDECODE` / `CURSOR_*` / `CODEX_*` / `OPENCODE` signals below
 mirror `../../jfrog/scripts/check-environment.sh` `detect_harness()`; the
-`TERM_PROGRAM=vscode` editor hint is **not** in that script, and Devin is
-**not** detected by the script. Each row's signal is **self-contained and
+`TERM_PROGRAM=vscode` editor hint is **not** in that script, and Devin and
+Kiro are **not** detected by the script. Each row's signal is **self-contained and
 non-overlapping**, so detection does not depend on evaluation order. The VS
 Code harness file targets the **VS Code editor** (Copilot MCP support), not
 the standalone GitHub Copilot terminal CLI — the CLI (`COPILOT_CLI`) has no
@@ -39,7 +39,8 @@ editor UI or `mcp.json`, so it falls through to the Fallback section.
 | Cursor | `CURSOR_AGENT` / `CURSOR_CLI` / `CURSOR_TRACE_ID` env var | [harness-cursor.md](harness-cursor.md) |
 | OpenCode | `OPENCODE` | [harness-opencode.md](harness-opencode.md) |
 | Devin | Your system prompt / system instructions identify you as **Devin** (Devin Desktop / Devin Local / Devin CLI / Cognition). | [harness-devin.md](harness-devin.md) |
-| VS Code editor | `TERM_PROGRAM=vscode` **and no `CURSOR_*` var is set** **and no `OPENCODE` var is set** **and no `CODEX_*` var is set** **and no `CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT` var is set** **and no `GEMINI_CLI` / `GOOSE_TERMINAL` / `COPILOT_CLI` var is set** **and** your system prompt / system instructions do **not** identify you as Devin | [harness-vscode.md](harness-vscode.md) |
+| Kiro | Your system prompt / system instructions identify you as **Kiro** (Kiro IDE / `kiro-cli`). | [harness-kiro.md](harness-kiro.md) |
+| VS Code editor | `TERM_PROGRAM=vscode` **and no `CURSOR_*` var is set** **and no `OPENCODE` var is set** **and no `CODEX_*` var is set** **and no `CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT` var is set** **and no `GEMINI_CLI` / `GOOSE_TERMINAL` / `COPILOT_CLI` var is set** **and** your system prompt / system instructions do **not** identify you as Devin or Kiro | [harness-vscode.md](harness-vscode.md) |
 | anything else | none of the above | **Fallback** section below — no harness file exists |
 
 Once you know your harness, use ONLY these fields from its file: `Config files`
@@ -51,7 +52,8 @@ harness-config" means: use the value from your one harness file.
 
 These do not vary; the harness file only overrides the pieces above.
 
-**The Agent Guard entry** always invokes `npx @jfrog/agent-guard` with the same
+**The Agent Guard entry** always invokes
+`npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard` with the same
 argument tokens (in the same order) and the same `_JF_ARGS`. What varies per
 harness is **how the entry is written** — the wrapping top-level key, the
 value-reference syntax, and the entry *shape* itself (the transport field, and
@@ -86,8 +88,22 @@ case; harnesses whose config is not JSON differ — e.g. **Codex** uses TOML wit
 - `"type": "stdio"` always — never `"http"`, `"sse"`, or a top-level `"url"`
   (those bypass the Agent Guard).
 - `--yes` and `--registry <URL>` MUST precede `@jfrog/agent-guard` in `args`.
-- `--server <ID>` in `args` is conditional: drop both array elements only on the
-  `JFROG_URL`+token env path (see [agent-guard-common.md](agent-guard-common.md)).
+- `--server <ID>` in `args` is conditional: drop both array elements only on
+  the URL+token env path (`JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy
+  `JF_URL`+`JF_ACCESS_TOKEN`) — see
+  [agent-guard-common.md](agent-guard-common.md).
+  `<ID>` is a `jf config` server id — never an MCP name, never a URL, and
+  never a hostname you parsed out of `JFROG_URL` / `JF_URL`. If a real id
+  in `jf config show` happens to be hostname-shaped (`myco.jfrog.io`),
+  use it as-is; the ban is on deriving the id from the URL, not on the
+  shape of the value.
+- **NEVER put `--project` or `--mcp` in `args`.** Those flags are for catalog
+  CLI calls only (`--inspect` / `--list-available` / `--login`). In the config
+  entry, project + package belong exclusively in `_JF_ARGS`:
+  `project=<JFROG_PROJECT_KEY>&mcp=<spec.packageName>`.
+  - Wrong: `"args": […, "@jfrog/agent-guard", "--project", "da", "--mcp", "kubernetes-mcp-server"]`
+  - Right: `"args": […, "@jfrog/agent-guard", "--server", "<SERVER_ID>"]` with
+    `"env": { "_JF_ARGS": "project=da&mcp=kubernetes-mcp-server", … }`
 - Never write a raw secret — always a value reference in the harness's syntax.
 - `_JF_ARGS` values are substituted raw (no URL-encoding), which is safe only
   because both are free of query-string reserved chars (`&`, `=`, `+`, space): a

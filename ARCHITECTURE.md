@@ -78,7 +78,7 @@ At a glance is the floor for partial readers. Domain refs → on-demand via
 | **At a glance (always-read core)** | Primacy floor for partial readers: UA; `--server-id` after subcommand (network; bootstrap exempt); one server / stop-don't-switch (+ compare if user names); no prep mutations unless asked; never guess paths; **never skip** Cautious execution / Server selection / the Tier A Gotchas floor. Full `cli-gotchas.md` is Tier B — required only on `jf api` / advanced CLI paths |
 | **Prerequisites** | Required tools (`jq`); per-runtime network and filesystem permission table (Cursor / Claude Code / Other) — replaces the old standalone "Network permissions" section |
 | **Tool selection strategy** | Three-tier routing: JFrog MCP tools (preferred), `jf` CLI commands (fallback), `jf api` (last resort). Defines when to move to the next tier and how to handle cross-tier permission errors |
-| **Environment check** | Cached CLI detection via `scripts/check-environment.sh <model-slug>`; script prints the user-agent value on stdout following RFC 7231 product/comment grammar — `jfrog-skills/<v> (trigger=skill; tool=<harness>; client=<app>; model=<slug>) jfrog-cli-go/<v>` — where the parens carry semicolon-separated `key=value` annotations (`trigger=skill` always on this path; `tool=`/`client=`/`model=` when known; harness from `detect_harness()`, `client` from `TERM_PROGRAM`) for the agent to remember and `export JFROG_CLI_USER_AGENT='<value>'` (plus `export JFROG_CLI_AI_MODEL='<slug>'`) once at the top of every bash invocation that runs `jf`. APR `jfrog-agent-hooks` eager setup overrides the same grammar with `trigger=hook` when it spawns `jf`. `tool=` is always emitted when known — mcp-management Step A parses this stdout line, which never includes the CLI's `ai-agent/` token. On jf >= 2.120.0 the CLI appends `ai-agent/` / `ai-client/` / `ai-model/` itself, so the script omits `client=` to avoid double-encoding; exit-code contract (MCP Tier 1 can proceed without this check; exit 2/3 means CLI tiers are unavailable). Supported harnesses: see **Agent identity table** below. |
+| **Environment check** | Cached CLI detection via `scripts/check-environment.sh <model-slug>`; script prints the user-agent value on stdout following RFC 7231 product/comment grammar — `jfrog-skills/<v> (trigger=skill; tool=<harness>; client=<app>; model=<slug>) jfrog-cli-go/<v>` — where the parens carry semicolon-separated `key=value` annotations (`trigger=skill` always on this path; `tool=`/`client=`/`model=` when known; harness from `detect_harness()`, `client` from `detect_host_client()`) for the agent to remember and `export JFROG_CLI_USER_AGENT='<value>'` (plus `export JFROG_CLI_AI_MODEL='<slug>'`) once at the top of every bash invocation that runs `jf`. APR `jfrog-agent-hooks` eager setup overrides the same grammar with `trigger=hook` when it spawns `jf`. `tool=` is always emitted when known — mcp-management Step A parses this stdout line, which never includes the CLI's `ai-agent/` token. On jf >= 2.120.0 the CLI appends `ai-agent/` / `ai-client/` / `ai-model/` itself, so the script omits `client=` to avoid double-encoding; exit-code contract (MCP Tier 1 can proceed without this check; exit 2/3 means CLI tiers are unavailable). Supported harnesses: see **Agent identity table** below. |
 | **`~/.jfrog/skills-cache/` — allowed files only** | Restricts the cache to two artifacts; routes everything else to `/tmp` |
 | **Cautious execution** | Confirm-before-mutate (all tiers), ask-on-ambiguity, never invent preparatory mutations, never guess tool names or API paths (anti-hallucination rule) |
 | **Server selection rules (mandatory)** | Single-server resolution; `awk` one-liner for the default server; no silent fallback; MCP/CLI auth independence warning; standard error-response template |
@@ -96,22 +96,27 @@ Authoring: `instruction-patterns.md` → Primacy / recency; rule: `skill-validat
 
 ### Agent identity table
 
-Identity axes on the wire (CLI User-Agent / Call-Home / Visibility):
+Two consumers want opposite things from the same UA:
 
-| Axis | Wire (CLI ≥ 2.120) | Skill/hook parens | Source |
-|------|--------------------|-------------------|--------|
-| Trigger | *(parens only)* | `trigger=skill` / `trigger=hook` | Skills `check-environment.sh` vs APR eager-setup spawn |
-| Agent | `ai-agent/<name>` | `tool=<name>` (older CLI / skill carrier) | Env detectors below, else `AI_AGENT` / `AGENT` |
-| Client | `ai-client/<app>` | `client=<app>` (older CLI / skill carrier) | Sanitized `TERM_PROGRAM` (any host; not an allowlist) |
-| Model | `ai-model/<slug>` | `model=<slug>` | Sanitized `JFROG_CLI_AI_MODEL` / skill arg |
+| Meaning | Wire | EXTRACT | Who |
+|---------|------|---------|-----|
+| Product present (Guard / mcp-management) | `tool=` / `agent=` | `ua.tool_product` | Skill `detect_harness()` (frozen). Includes a human in a Claude/Cursor IDE terminal (`CLAUDECODE`, `CURSOR_TRACE_ID`). |
+| Agent spawned `jf` | `ai-agent/<name>` | `ua.agent_session` | CLI `DetectExecutionContext` only. **No fallback** from `tool=` (old CLI + human IDE would look like an agent). |
+| Host app | `client=` / `ai-client/` | `ua.client` | Host window first (`cursor`, `vscode`, `zed`, `jetbrains`, `windsurf`, `antigravity`), then standalone `claude`, then a short terminal name from `TERM_PROGRAM` (`iterm`, `warp`, `terminal`, `tmux`, …). Never inferred from the agent name. Omit when unknown, or when the only signal is inherited `TERM_PROGRAM=vscode` (P13). |
+| Model | `model=` / `ai-model/` | `ua.model_type` | Skills only; hooks never stamp `model=`. |
+| Trigger | `trigger=skill` \| `trigger=hook` | `ua.trigger` | Skills path vs APR spawn |
 
-`trigger` is skill-layer attribution (not a CLI product token). Direct human `jf` without skills/hooks leaves it unset.
+Skill/adoption pies chart `ua.agent_session`. APR `trigger=hook` harness widgets chart `ua.tool_product`. Guard keeps parsing `tool=` from skill stdout.
 
-`detect_harness()` first-match order matches `agentEnvDetectors` in jfrog-cli-core `common/commands/execution_context.go`. Claude and Cursor also accept the v0.22.0 product envs (`CLAUDECODE` / `CLAUDE_CODE_ENTRYPOINT`, `CURSOR_CLI` / `CURSOR_TRACE_ID`) so mcp-management can route Agent Guard. Those envs are set for humans in the IDE terminal too; real agent skill usage is `model=` (or `ai-model/`).
+`detect_harness()` is **not** the CLI session table. Do not narrow it. Claude/Cursor product envs (`CLAUDECODE`, `CURSOR_TRACE_ID`, …) stay so Agent Guard routes when a human IDE terminal is open.
 
-**CLI release pin:** companions [jfrog-cli-core#1602](https://github.com/jfrog/jfrog-cli-core/pull/1602) + [jfrog-cli#3645](https://github.com/jfrog/jfrog-cli/pull/3645) are merged, but tip still reports `CliVersion = 2.119.0`. Released 2.118/2.119 only appended `ai-agent/`. Skills omit parens `client=` at `AGENT_UA_MIN_CLI_VERSION` (expected first full Client→Agent→Model release **2.120.0**) and always emit `tool=` when known. After that CLI release cuts, confirm the tag and update the constant if the version number differs.
+**CLI session** source of truth: `jfrog-cli-core/common/commands/execution_context.go`. Client is the host app: editor-owned env first (`ZED_TERM`, `TERMINAL_EMULATOR=JetBrains-JediTerm`, Cursor vars, askpass path for VS Code forks), then standalone `claude`, then a short `TERM_PROGRAM` name. Copilot in IntelliJ reports `jetbrains`, not `vscode`. Forks resolve before plain `vscode`. Inherited `TERM_PROGRAM=vscode` is omitted (P13). Cowork (`CLAUDE_CODE_IS_COWORK`) emits wire `claude`. Kilo is `KILOCODE_FEATURE=cli` only.
 
-| Wire name | Session signals |
+**CLI release pin:** companions [jfrog-cli-core#1602](https://github.com/jfrog/jfrog-cli-core/pull/1602) + [jfrog-cli#3645](https://github.com/jfrog/jfrog-cli/pull/3645) shipped `ai-agent/` from ~2.118. Skills omit parens `client=` at `AGENT_UA_MIN_CLI_VERSION` (**2.120.0**) and always emit `tool=` when known.
+
+Skill `detect_harness()` product signals (Guard — humans included):
+
+| Wire name | Product / session-ish envs on the skill path |
 |-----------|-----------------|
 | `claude` | `CLAUDE_CODE_CHILD_SESSION`, `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT` |
 | `gemini` | `GEMINI_CLI` |

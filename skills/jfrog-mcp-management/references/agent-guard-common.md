@@ -1,7 +1,8 @@
 # Agent guard common — registry URL & pre-flight
 
 Reference for the Install and List flows of the `jfrog-mcp-management` skill.
-Read this before running any `npx @jfrog/agent-guard` command
+Read this before running any
+`npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard` command
 (`--list-available`, `--inspect`, `--login`).
 
 Terminology used throughout these skills:
@@ -17,7 +18,12 @@ Terminology used throughout these skills:
 
 Wherever `<REGISTRY_URL>` appears, substitute the value of the
 `JFROG_AGENT_GUARD_REPO` environment variable if it is set. Otherwise use
-`https://releases.jfrog.io/artifactory/api/npm/coding-agents-npm/`.
+`https://releases.jfrog.io/artifactory/api/npm/coding-agents-npm/` — JFrog's
+publicly accessible Releases Artifactory instance. It allows anonymous access
+and hosts Agent Guard releases.
+
+Canonical invocation (every catalog / login command; never omit `--registry`):
+`npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard`
 
 `@jfrog/agent-guard` is not published to the public npm registry; resolve it
 with `--registry <REGISTRY_URL>` above rather than the default npm registry.
@@ -76,6 +82,14 @@ node "<skill_path>/scripts/jfrog-agent-guard-env-probe.mjs"
   When the ID came from an existing Agent Guard MCP entry or jf config, always
   pass it as `--server <ID>`; only on the `JFROG_URL`+token env path, never pass
   `--server`.
+
+  **`<SERVER_ID>` is a `jf config` server id only.** NEVER invent it from an
+  MCP package name, and NEVER parse a hostname out of `JFROG_URL` /
+  `JF_URL` (or any other URL) to use as `--server` or as the Step 0 gate
+  positional argument. Hostname-shaped ids from `jf config show` itself
+  are fine — the ban is on deriving the id from the URL, not on the
+  shape of the value. If env URL+token is set, omit `--server` entirely
+  (path 2 above) — do not derive a fake server id from the URL.
 
   > Note: the agent uses `jf config show --format=json` here only to *discover a
   > server ID* — a token is not needed, so the masked output is fine. The Step 0

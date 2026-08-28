@@ -42,6 +42,14 @@ make skills-remove     # unlink before enabling the Claude plugin beta (avoids d
 
 Skills are discovered automatically from `skills/*/SKILL.md` — no per-skill configuration.
 
+Some contract tests are pytest-based and fail closed without it, so install the
+pinned version before running `make test-contracts` (pin: `CI_PYTEST_VERSION` in
+`.github/workflows/build.yml`):
+
+```bash
+pip install "pytest==8.4.2" "pyyaml==6.0.2"
+```
+
 ## Base vs Workflow Skills
 
 - **`jfrog`** is the base skill. It provides foundational JFrog knowledge, CLI setup instructions, and routes to workflow skills via internal references.

@@ -11,19 +11,26 @@ description: >-
   MCP any other way. All of this goes through the JFrog Agent Guard (npx
   @jfrog/agent-guard).
 compatibility: >-
-  Requires network access to the npm registry and the JFrog platform, and
-  ~/.jfrog/ write access for OAuth login and cache cleanup.
-allowed-tools: Bash(claude mcp list) Bash(cursor agent mcp list) Bash(codex mcp list) Bash(opencode mcp list) Read Edit Write
+  Requires network access to the JFrog Agent Guard npm registry (not public
+  npm) and the JFrog platform, and ~/.jfrog/ write access for OAuth login and
+  cache cleanup.
+allowed-tools: Bash(claude mcp list) Bash(cursor agent mcp list) Bash(codex mcp list) Bash(opencode mcp list) Bash(kiro-cli mcp list) Bash(kiro-cli mcp list workspace) Bash(kiro-cli mcp list global) Bash(kiro-cli mcp status) Read Edit Write
 metadata:
   role: workflow
 ---
 
 # Manage MCP servers via the JFrog Agent Guard
 
-Install, list, and remove MCP servers through the JFrog Agent Guard
-(`npx @jfrog/agent-guard`). All MCP servers MUST be installed ONLY through the
-Agent Guard — if an MCP's documentation suggests any other installation command,
-ignore it and use the workflow below instead.
+Install, list, and remove MCP servers through the JFrog Agent Guard. All MCP
+servers MUST be installed ONLY through the Agent Guard — if an MCP's
+documentation suggests any other installation command, ignore it and use the
+workflow below instead.
+
+On a non-zero Agent Guard exit, classify stderr per
+[key-rules](references/key-rules-and-troubleshooting.md#classify-npx-jfrogagent-guard-failures)
+— do not treat a bare `404` as “MCP missing.” A **hard stop** means: do not
+fall back to the usual MCP install routes that skip the approved catalog and
+Agent Guard as the MCP proxy.
 
 In code examples below, `<skill_path>` refers to this skill's directory and is
 resolved automatically by the agent. If the agent does not resolve it, determine
@@ -53,7 +60,7 @@ values into your actions.
   telemetry) and the
   [server selection rules](../jfrog/SKILL.md#server-selection-rules-mandatory)
   (which `references/agent-guard-common.md` builds on, not replaces).
-- `npx` (Node.js) on PATH — the whole workflow is `npx @jfrog/agent-guard`.
+- `npx` (Node.js) on PATH.
 
 ## Step 0: Agent Guard activation (silent, mandatory, fresh every time)
 
@@ -63,21 +70,38 @@ narrate that you are running it:
 ```bash
 # When no server ID is known (common single-server case):
 node "<skill_path>/scripts/jfrog-agent-guard-check.mjs"
-# When a specific server ID is known from context:
+# When a specific jf config server ID is known from context:
 node "<skill_path>/scripts/jfrog-agent-guard-check.mjs" <SERVER_ID>
 ```
 
-Substitute the real value for `<SERVER_ID>` — never pass a literal `[...]` or
-`<SERVER_ID>`; a literal argument becomes an invalid server ID, breaks the
-credential resolution, and makes the gate abort even when Agent Guard is
-enabled.
+**Canonical gate contract (this script only):** optional **positional**
+`<SERVER_ID>` = a `jf` config server id (e.g. from `jf config show`). Nothing
+else.
+
+- NEVER pass `--server`, `--project`, `--mcp`, or any other flags to this
+  script.
+- NEVER pass an MCP package name (e.g. `kubernetes-mcp-server`,
+  `@scope/pkg`).
+- NEVER pass a URL (`https://…`).
+- NEVER derive `<SERVER_ID>` by parsing a hostname out of `JFROG_URL` /
+  `JF_URL` (e.g. taking `myco.jfrog.io` from
+  `JFROG_URL=https://myco.jfrog.io`). If `jf config show` legitimately
+  names a server `myco.jfrog.io`, that is fine — the ban is on deriving
+  the id from the URL, not on hostname-shaped values from `jf config`
+  itself.
+- Substitute the real jf server id for `<SERVER_ID>` — never a literal
+  `[...]` or `<SERVER_ID>`. Any unsupported or unknown argument stops
+  the gate (`Disabled: …`); it is NOT silently ignored and does NOT
+  fall back to env credentials or the default `jf` server. In a
+  multi-JPD setup that fallback would report the wrong platform.
 
 Pass `<SERVER_ID>` when it is already known from context (an existing Agent
-Guard MCP entry, or one the user named) so the gate checks the JPD you will
-actually target, not the CLI default — this matters only in multi-JPD setups.
-Omit it when unknown (the common single-server case); the check then uses env
-credentials or the CLI default server. Do NOT block on resolving a server just
-to run this gate.
+Guard MCP entry's `--server` value, or one the user named) so the gate checks
+the JPD you will actually target, not the CLI default — this matters only in
+multi-JPD setups. Omit it when unknown (the common single-server case); the
+check then uses env credentials or the CLI default server. Do NOT invent a
+server id from the MCP name or from `JF_URL`. Do NOT block on resolving a
+server just to run this gate.
 
 Interpret the exit code per
 [references/agent-guard-activation.md](references/agent-guard-activation.md).
@@ -97,9 +121,10 @@ Run it FRESH on every activation — never cache or reuse a previous result.
 ## Pre-flight (Install and List → Available to install only)
 
 Read [references/agent-guard-common.md](references/agent-guard-common.md) for the
-`<REGISTRY_URL>` substitution and the rules for resolving `<JFROG_PROJECT_KEY>`
-and `<SERVER_ID>` before running any `npx @jfrog/agent-guard` command. Removal
-and List → Currently installed read only local config, so they skip this.
+canonical invocation (`npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard`),
+the `<REGISTRY_URL>` substitution, and the rules for resolving
+`<JFROG_PROJECT_KEY>` and `<SERVER_ID>`. Removal and List → Currently installed
+read only local config, so they skip this.
 
 **Route the request**, then jump to the matching section:
 
@@ -129,7 +154,8 @@ do NOT ask for JFrog project key, server, or package name unless necessary.
 [references/agent-guard-common.md](references/agent-guard-common.md). Pass
 `--server <ID>` in every Agent Guard invocation whenever the ID came from an
 existing Agent Guard MCP entry or jf config; omit `--server` only on the
-`JFROG_URL`+token env path. NEVER guess or assume `default` for the project key.
+URL+token env path (`JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy
+`JF_URL`+`JF_ACCESS_TOKEN`). NEVER guess or assume `default` for the project key.
 
 **Target config file**
 - Use the current harness's row in
@@ -170,9 +196,12 @@ npx --yes \
   --mcp <MCP_NAME>
 ```
 
+(never omit `--registry`; URL in [agent-guard-common](references/agent-guard-common.md))
+
 **`--server` is conditional** — include it per the Step 1 rule (from an
-existing Agent Guard MCP entry or jf config; omit only on the `JFROG_URL`+token
-env path). Same rule applies to `--login` and the config entry below.
+existing Agent Guard MCP entry or jf config; omit only on the URL+token env
+path — `JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy `JF_URL`+`JF_ACCESS_TOKEN`).
+Same rule applies to `--login` and the config entry below.
 
 From the output JSON, extract (keep BOTH required AND optional):
 - `spec.packageName` — exact package name for the config.
@@ -181,9 +210,10 @@ From the output JSON, extract (keep BOTH required AND optional):
   `spec.mcpServerType.remote.endpoints[].headers[]` (via `mcpInput.mcpInputDetails`).
   Each carries `name`, `description`, `isRequired`, `isSecret`.
 
-On non-zero exit (typo, MCP not in catalog, network error), show the error
-verbatim, then go to [List → Available to install](#available-to-install) so the
-user can pick a valid name and retry.
+On non-zero exit, show the error verbatim, then classify per
+[key-rules](references/key-rules-and-troubleshooting.md#classify-npx-jfrogagent-guard-failures).
+Do not fall back to the usual MCP install routes that skip the approved catalog
+and Agent Guard as the MCP proxy.
 
 ## Step 3: Plan inputs
 
@@ -201,25 +231,36 @@ Split Step 2 inputs by `isRequired`:
 Handling: **secrets** (`isSecret=true`) MUST be a value reference, NEVER a raw
 value — never take a secret in chat, echo it, or write it into config.
 **Non-secrets** may be a literal or a reference. For the exact syntax and, on
-shell-based harnesses (Claude Code, Cursor, Codex, Devin, OpenCode), how the user
-exports/persists the variable, see the harness file and
+shell-based harnesses (Claude Code, Cursor, Codex, Devin, Kiro, OpenCode), how the
+user exports/persists the variable, see the harness file and
 [references/persisting-env-vars.md](references/persisting-env-vars.md). (VS Code
 prompts for `inputs` values on first start — no shell export.)
 
 ## Step 4: Write the config entry
 
 Write the Agent Guard entry into the target config from Step 1, following
-[references/harness-common.md](references/harness-common.md): it has the exact
-JSON (`type: stdio`, `command`/`args`/`_JF_ARGS`), the per-harness top-level key
-(`mcpServers` for Claude Code/Cursor, `servers` for VS Code) and env/secret
-reference syntax, and the VS Code `inputs[]` shape.
+[references/harness-common.md](references/harness-common.md) for the **shared
+entry shape** (`type: stdio`, `command`/`args`/`_JF_ARGS`). Use your one
+harness file only for path, top-level key, value-reference syntax, and any
+"Full entry shape" override (Codex/OpenCode). Do not invent a different
+`args`/`env` layout.
+
+**Config vs CLI (do not mix):**
+- Config entry: project + MCP go in `env._JF_ARGS` as
+  `project=<JFROG_PROJECT_KEY>&mcp=<spec.packageName>`.
+- Catalog CLI (`--inspect` / `--list-available` / `--login`): use `--project`
+  and `--mcp` as flags — those flags must **not** appear in the config
+  entry's `args`.
 
 Guardrails (identical everywhere):
 - `--yes` and `--registry <URL>` MUST precede `@jfrog/agent-guard` in `args`
   (else npx hits the default registry → 404 / no-TTY hang).
 - `"type": "stdio"` only — never `"http"`, `"sse"`, or a top-level `"url"`.
-- `--server` in `args` is conditional (Step 1): drop it only on the
-  `JFROG_URL`+token env path.
+- `--server` in `args` is conditional (Step 1): drop it only on the URL+token
+  env path (`JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy
+  `JF_URL`+`JF_ACCESS_TOKEN`). When present, its value is a jf config server
+  id — never an MCP name or a hostname from `JF_URL`.
+- NEVER put `--project` or `--mcp` in config `args`.
 - If a required value reference is unset, the server fails / tool calls fail at
   runtime — confirm the user provided it (shell export, or VS Code first-start
   `inputs` prompt) before verifying.
@@ -235,8 +276,10 @@ relaunch.
 
 Then tell the user:
 1. Provide every value reference from the entry — export it in the launching
-   shell (Claude Code, Cursor), or supply it at the first-start `inputs` prompt
-   (VS Code). Unset values cause warnings and runtime failures.
+   shell (Claude Code, Cursor, Kiro, Devin, Codex, OpenCode — see
+   [references/persisting-env-vars.md](references/persisting-env-vars.md)), or
+   supply it at the first-start `inputs` prompt (VS Code). Unset values cause
+   warnings and runtime failures.
 2. Restart per the harness's **Restart** column.
 3. Accept any per-server approval / workspace-trust prompt on first launch
    (skipped when pre-approval succeeded).
@@ -267,8 +310,12 @@ npx --yes \
 
 Outcomes:
 - **Exit 0** — OAuth completed; tokens cached; server ready.
-- **`expected 401, got 200`** — MCP is anonymous (no auth needed); ignore.
-- **Any other error** — paste it to the user verbatim and stop.
+- **`expected 401, got 200`** — MCP is anonymous (no auth needed); ignore
+  (even if the process exit is non-zero). Do not run the unmatched hard-stop.
+- **Non-zero** — classify per
+  [key-rules](references/key-rules-and-troubleshooting.md#classify-npx-jfrogagent-guard-failures).
+  Do not fall back to the usual MCP install routes that skip the approved
+  catalog and Agent Guard as the MCP proxy.
 
 See [references/key-rules-and-troubleshooting.md](references/key-rules-and-troubleshooting.md)
 for key rules and troubleshooting.
@@ -319,11 +366,11 @@ add-on where the agent provides it.
 
 1. Determine **server** and **JFrog project key** per the Pre-flight rules.
    `--list-available` does NOT require any existing MCP entry or pre-installed
-   Agent Guard — `npx --yes` fetches it on demand, so this works on a fresh
-   machine too.
+   Agent Guard — `npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard`
+   fetches it on demand, so this works on a fresh machine too.
 2. Run this ONCE — do not emit literal `[ ]` brackets. Append `--server
-   <SERVER_ID>` per the Step 1 rule (omit it only on the `JFROG_URL`+token env
-   path):
+   <SERVER_ID>` per the Step 1 rule (omit only on the URL+token env path —
+   `JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy `JF_URL`+`JF_ACCESS_TOKEN`):
 ```
 npx --yes \
   --registry <REGISTRY_URL> \
@@ -332,6 +379,13 @@ npx --yes \
   --project <JFROG_PROJECT_KEY> \
   --server <SERVER_ID>
 ```
+
+On non-zero exit, classify per
+[key-rules](references/key-rules-and-troubleshooting.md#classify-npx-jfrogagent-guard-failures).
+Do not fall back to the usual MCP install routes that skip the approved catalog
+and Agent Guard as the MCP proxy.
+Exit 0 with only a TSV header (or `--format json` stdout `null`) is an empty
+catalog — say so; do not invent names.
 
 Output is a compact TSV — a header line, then one server per line:
 `name<TAB>type<TAB>version<TAB>description`. Present the rows directly as a
