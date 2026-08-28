@@ -201,6 +201,140 @@ sanitize_token() {
   printf '%s' "${s:0:64}"
 }
 
+# askpass_path_contains reports whether a VS Code-fork askpass path is that
+# editor's install, not an unrelated substring (a Windows login named "cursor"
+# would otherwise match). GIT_ASKPASS is generic git and is excluded.
+# Mirrors jfrog-cli-core askpassPathContains.
+askpass_path_contains() {
+  local app="$1" p
+  for key in VSCODE_GIT_ASKPASS_MAIN VSCODE_GIT_ASKPASS_NODE; do
+    p="$(printf '%s' "${!key:-}" | tr '[:upper:]' '[:lower:]' | tr '\\' '/')"
+    [[ -z "$p" ]] && continue
+    if [[ "$p" == *"/${app}.app"* || "$p" == *"/${app}/resources"* || "$p" == *"/.$app-server"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Positive upstream VS Code install only. A non-empty VSCODE_GIT_ASKPASS_* var
+# is not enough — every fork sets those. Mirrors askpassLooksLikeStockVSCode.
+askpass_looks_like_stock_vscode() {
+  local p
+  for key in VSCODE_GIT_ASKPASS_MAIN VSCODE_GIT_ASKPASS_NODE; do
+    p="$(printf '%s' "${!key:-}" | tr '[:upper:]' '[:lower:]' | tr '\\' '/')"
+    [[ -z "$p" ]] && continue
+    if [[ "$p" == *"/visual studio code"* || "$p" == *"/microsoft vs code"* \
+      || "$p" == *"/.vscode-server"* || "$p" == *"/code/resources"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Short product names for known terminals. Unmapped values (including inherited
+# TERM_PROGRAM=vscode) stay empty so client stays on the known-app allowlist.
+canonical_terminal_name() {
+  local name
+  name="$(sanitize_token "${1:-}")"
+  case "$name" in
+    iterm.app) echo "iterm"; return ;;
+  esac
+  name="${name%.app}"
+  case "$name" in
+    "") ;;
+    iterm) echo "iterm" ;;
+    apple_terminal) echo "terminal" ;;
+    warpterminal|warp) echo "warp" ;;
+    tmux) echo "tmux" ;;
+    wezterm) echo "wezterm" ;;
+    alacritty) echo "alacritty" ;;
+    kitty) echo "kitty" ;;
+    ghostty) echo "ghostty" ;;
+    hyper) echo "hyper" ;;
+  esac
+}
+
+fallback_terminal_name() {
+  if [[ -n "${TMUX:-}" ]]; then
+    echo "tmux"
+  elif [[ -n "${WT_SESSION:-}" ]]; then
+    echo "windows-terminal"
+  elif [[ "${TERM:-}" == "xterm-ghostty" ]]; then
+    echo "ghostty"
+  elif [[ -n "${KITTY_WINDOW_ID:-}" ]]; then
+    echo "kitty"
+  elif [[ -n "${ALACRITTY_LOG:-}" ]]; then
+    echo "alacritty"
+  fi
+}
+
+host_terminal_name() {
+  local name
+  name="$(canonical_terminal_name "${TERM_PROGRAM:-}")"
+  if [[ -n "$name" ]]; then
+    echo "$name"
+  else
+    fallback_terminal_name
+  fi
+}
+
+fold_agent_name() {
+  local name
+  name="$(printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')"
+  name="${name%%@*}"
+  printf '%s' "$name"
+}
+
+is_copilot_vscode_plugin_alias() {
+  [[ "$(fold_agent_name "${AI_AGENT:-}")" == "github_copilot_vscode_agent" ]] \
+    || [[ "$(fold_agent_name "${AGENT:-}")" == "github_copilot_vscode_agent" ]]
+}
+
+# detect_host_client prints the app hosting this session. Mirrors detectClient()
+# in jfrog-cli-core/common/commands/execution_context.go — keep the two in sync.
+#
+# Deliberately NOT part of detect_harness(): that table drives Agent Guard
+# routing and mcp-management's tool= parsing and stays frozen. This only feeds
+# the client= key.
+#
+# Order matters: every VS Code fork inherits the VSCODE_* vars from upstream, so
+# a fork must resolve before anything reports vscode. CURSOR_AGENT does not
+# prove the window (standalone CLI in iTerm / CI).
+detect_host_client() {
+  local name
+  if [[ -n "${ZED_TERM:-}" ]]; then
+    echo "zed"
+  elif [[ "${TERMINAL_EMULATOR:-}" == "JetBrains-JediTerm" ]]; then
+    echo "jetbrains"
+  elif [[ -n "${CURSOR_TRACE_ID:-}" ]] || askpass_path_contains cursor; then
+    echo "cursor"
+  elif [[ -n "${WINDSURF_CASCADE_TERMINAL:-}" ]] || askpass_path_contains windsurf; then
+    echo "windsurf"
+  elif [[ -n "${ANTIGRAVITY_AGENT:-}" ]] || askpass_path_contains antigravity; then
+    echo "antigravity"
+  elif [[ -n "${TRAE_AI_SHELL_ID:-}" ]] || askpass_path_contains trae; then
+    echo "trae"
+  elif askpass_path_contains vscodium || askpass_path_contains codium; then
+    echo "codium"
+  elif [[ -n "${VisualStudioVersion:-}" ]]; then
+    echo "visualstudio"
+  elif askpass_looks_like_stock_vscode; then
+    echo "vscode"
+  elif [[ "${COPILOT_AGENT:-}" == "1" ]] || is_copilot_vscode_plugin_alias; then
+    name="$(host_terminal_name)"
+    if [[ -n "$name" ]]; then
+      echo "$name"
+    else
+      echo "vscode"
+    fi
+  elif [[ -n "${CLAUDE_CODE_CHILD_SESSION:-}" || -n "${CLAUDE_CODE_IS_COWORK:-}" ]]; then
+    echo "claude"
+  else
+    host_terminal_name
+  fi
+}
+
 # Map a generic AI_AGENT/AGENT value (agents.md proposal, @vercel/detect-agent)
 # to a canonical name. Strips a version suffix (e.g. "goose@1.2.3") and lowercases.
 # Empty input → nothing; unrecognized non-empty → "unknown".
@@ -318,10 +452,11 @@ emit_skill_env() {
     harness="unknown"
     harness_from_model_fallback=true
   fi
-  # Client (TERM_PROGRAM): app hosting the session. Omitted on new CLI when the
-  # CLI will emit ai-client/ itself (not on the model-slug fallback path).
+  # Client: the editor window hosting the session (see detect_host_client).
+  # Omitted on new CLI when the CLI will emit ai-client/ itself (not on the
+  # model-slug fallback path).
   local client
-  client="$(sanitize_token "${TERM_PROGRAM:-}")"
+  client="$(detect_host_client)"
   local carry_client_ua="false"
   if [[ "$cli_version" == "unknown" ]] || version_lt "$cli_version" "$AGENT_UA_MIN_CLI_VERSION" || [[ "$harness_from_model_fallback" == "true" ]]; then
     carry_client_ua="true"

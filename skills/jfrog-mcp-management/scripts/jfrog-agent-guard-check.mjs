@@ -52,21 +52,57 @@ const registryDisabled = (reason) => {
   process.exit(2);
 };
 
+// Exactly one positional argv[2]. Extras (argv[3..]), flags, and URLs are
+// ALWAYS caller bugs — stop the gate immediately so a multi-JPD setup does
+// not report the wrong platform's state. Everything else is treated as a
+// candidate jf config server id — including hostname-shaped values and ids
+// with spaces — because a text pattern cannot separate a real jf id from
+// an MCP package name. jf config is the source of truth (see
+// resolveCredentials).
+function readGateServerId() {
+  const extra = process.argv.slice(3);
+  if (extra.length > 0) {
+    disabled(
+      `expected zero or one positional jf config server id, got extra ` +
+        `argument(s) ${JSON.stringify(extra)} — the gate accepts only ` +
+        `\`<SERVER_ID>\` positionally, with no flags or additional values ` +
+        `after it`,
+    );
+  }
+  const raw = process.argv[2];
+  if (raw === undefined) return undefined;
+  const id = String(raw).trim();
+  if (!id) return undefined;
+  if (id.startsWith("-")) {
+    disabled(
+      `expected a jf config server id (positional), got flag ` +
+        `${JSON.stringify(id)} — pass \`<SERVER_ID>\` positionally, not as \`--server\``,
+    );
+  }
+  if (/:\/\//.test(id)) {
+    disabled(
+      `expected a jf config server id (positional), got URL ` +
+        `${JSON.stringify(id)} — do not derive an id from \`JFROG_URL\` / \`JF_URL\``,
+    );
+  }
+  return id;
+}
+
 // Resolve credentials from Path A (environment variables) or Path B
 // (the default JFrog CLI configuration). Returns { baseUrl, token, source }
 // or null when neither path yields a usable URL + access token.
 function resolveCredentials() {
-  const explicitServerId = process.argv[2];
-  // With an explicit server ID, try the named jf-config server FIRST so the
-  // gate checks THAT JPD, not the ambient default. But if it does not resolve
-  // (server not in jf config, jf absent/old), fall back to env credentials
-  // rather than reporting a false "disabled" — the platform may be fully
-  // reachable via exported JFROG_URL + token even with no matching jf server.
+  const explicitServerId = readGateServerId();
+  // When the caller names a specific server, honor it or stop. Do not fall
+  // back to env credentials or the default jf server, that would check a
+  // different JPD in a multi-server setup when the named id is wrong (typo,
+  // MCP package name, unknown id).
   if (explicitServerId) {
-    const fromCli = resolveFromCliConfig();
+    const fromCli = resolveFromCliConfig(explicitServerId);
     if (fromCli) return fromCli;
-    debug(
-      "Explicit server ID did not resolve via jf config; falling back to env credentials.",
+    disabled(
+      `server id ${JSON.stringify(explicitServerId)} is not configured in ` +
+        `\`jf config\` (or \`jf\` is unavailable) — refusing to check a different JPD`,
     );
   }
 
@@ -81,22 +117,18 @@ function resolveCredentials() {
     "Environment credentials incomplete; trying JFrog CLI config (Path B).",
   );
 
-  // Path B — default server from the local JFrog CLI configuration. If an
-  // explicit ID was given we already tried the CLI above (and env fell through),
-  // so there is nothing left to resolve.
-  if (explicitServerId) return null;
-  return resolveFromCliConfig();
+  // Path B — default server from the local JFrog CLI configuration.
+  return resolveFromCliConfig(undefined);
 }
 
-function resolveFromCliConfig() {
+function resolveFromCliConfig(serverId) {
   // `jf config export [server ID]` emits the server as a base64-encoded JSON
   // blob containing url, accessToken, and serverId. An optional server ID may
-  // be passed as argv[2]; without it the CLI's default server is used. We use
-  // the CLI rather than reading ~/.jfrog/jfrog-cli.conf.v6 directly because
-  // newer CLIs do not persist the access token in that file (and the platform
-  // URL may be stored only as an /artifactory-suffixed URL there, which is
-  // wrong for /ml/core).
-  const serverId = process.argv[2];
+  // be passed; without it the CLI's default server is used. We use the CLI
+  // rather than reading ~/.jfrog/jfrog-cli.conf.v6 directly because newer CLIs
+  // do not persist the access token in that file (and the platform URL may be
+  // stored only as an /artifactory-suffixed URL there, which is wrong for
+  // /ml/core).
   const exportArgs = serverId ? ["config", "export", serverId] : ["config", "export"];
   let exported;
   try {

@@ -11,7 +11,7 @@ Guard or this script. Key off the EXIT CODE, not the text it prints.
 | --- | --- | --- |
 | 0 | Agent Guard enabled | Proceed with the skill. |
 | 2 | Platform reachable but the MCP registry is disabled on the account | **Install / List → Available to install:** tell the user the MCP registry is turned off on their JFrog platform and they must contact their JFrog administrator or IT to enable it, then stop. **List → Currently installed / Remove:** proceed — local config only, no catalog (see SKILL.md). |
-| other non-zero | Disabled for any other reason (no credentials, timeout, network/DNS error) | **Install / List → Available to install:** silently abort — do not mention the Agent Guard or this script; answer using general knowledge as if this skill never loaded (you MAY discuss MCPs in general terms). **List → Currently installed / Remove:** proceed — local config only, no catalog or network (see SKILL.md). |
+| other non-zero | Disabled for any other reason (no credentials, timeout, network/DNS error) | **Install / List → Available to install:** silently abort — do not mention the Agent Guard or this script. You MAY discuss MCPs in general terms. **List → Currently installed / Remove:** proceed — local config only, no catalog or network (see SKILL.md). |
 
 ## Local-only flows proceed on every exit code
 
