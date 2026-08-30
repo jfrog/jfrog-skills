@@ -10,10 +10,9 @@
 //
 // Contract:
 //   - exit 0 -> Agent Guard ENABLED  (skill may proceed)
-//   - exit 2 -> reachable but the platform has the MCP registry DISABLED
-//               (skill should tell the user to contact their admin / IT)
-//   - exit 1 -> DISABLED for any other reason: no credentials, timeout,
-//               network/DNS error (skill must silently abort)
+//   - exit 2 -> Agent Guard DISABLED (registry off, or _JF_AGENT_GUARD_FORCE_DISABLE)
+//   - exit 1 -> status UNKNOWN: no credentials, timeout, network/DNS error.
+//               Not sure if Enabled or not.
 //   - a single human-readable reason line is written to stdout for
 //     diagnostics only; Step 0 keys off the EXIT CODE, not the text.
 //
@@ -35,21 +34,27 @@ const debug = (message) => {
 const env = (newName, oldName) =>
   process.env[newName] ?? (oldName ? process.env[oldName] : undefined);
 
+const GATE_DONE = Symbol("gateDone");
+
 const enabled = (reason) => {
   process.stdout.write(`Enabled: ${reason}\n`);
-  process.exit(0);
+  process.exitCode = 0;
+  throw GATE_DONE;
 };
 
-const disabled = (reason) => {
-  process.stdout.write(`Disabled: ${reason}\n`);
-  process.exit(1);
+const unknown = (reason) => {
+  process.stdout.write(`Unknown: ${reason}\n`);
+  process.exitCode = 1;
+  throw GATE_DONE;
 };
 
 // Reachable platform that reports the MCP registry turned off. Distinct exit
-// code so the skill can tell the user to contact their admin / IT.
+// code so the skill can tell this definitive answer apart from an undetermined
+// status.
 const registryDisabled = (reason) => {
   process.stdout.write(`RegistryDisabled: ${reason}\n`);
-  process.exit(2);
+  process.exitCode = 2;
+  throw GATE_DONE;
 };
 
 // Exactly one positional argv[2]. Extras (argv[3..]), flags, and URLs are
@@ -62,7 +67,7 @@ const registryDisabled = (reason) => {
 function readGateServerId() {
   const extra = process.argv.slice(3);
   if (extra.length > 0) {
-    disabled(
+    unknown(
       `expected zero or one positional jf config server id, got extra ` +
         `argument(s) ${JSON.stringify(extra)} — the gate accepts only ` +
         `\`<SERVER_ID>\` positionally, with no flags or additional values ` +
@@ -74,13 +79,13 @@ function readGateServerId() {
   const id = String(raw).trim();
   if (!id) return undefined;
   if (id.startsWith("-")) {
-    disabled(
+    unknown(
       `expected a jf config server id (positional), got flag ` +
         `${JSON.stringify(id)} — pass \`<SERVER_ID>\` positionally, not as \`--server\``,
     );
   }
   if (/:\/\//.test(id)) {
-    disabled(
+    unknown(
       `expected a jf config server id (positional), got URL ` +
         `${JSON.stringify(id)} — do not derive an id from \`JFROG_URL\` / \`JF_URL\``,
     );
@@ -100,7 +105,7 @@ function resolveCredentials() {
   if (explicitServerId) {
     const fromCli = resolveFromCliConfig(explicitServerId);
     if (fromCli) return fromCli;
-    disabled(
+    unknown(
       `server id ${JSON.stringify(explicitServerId)} is not configured in ` +
         `\`jf config\` (or \`jf\` is unavailable) — refusing to check a different JPD`,
     );
@@ -201,8 +206,8 @@ async function isGatewayPluginEnabled(baseUrl, token) {
     if (!response.ok) {
       debug(`Settings request returned HTTP ${response.status}.`);
       // Non-OK (incl. 401/403) means an auth/permission/transport problem, NOT
-      // a deliberately-disabled registry — stay silent (exit 1) rather than
-      // sending the user to IT. Only HTTP 200 + value:false is "disabled".
+      // a deliberately-disabled registry — report unknown (exit 1) rather than
+      // claiming disabled. Only HTTP 200 + value:false is "disabled".
       return {
         ok: false,
         reason: `settings endpoint returned HTTP ${response.status}`,
@@ -264,7 +269,7 @@ async function main() {
   const forceEnabled =
     env("JF_AGENT_GUARD_FORCE_ENABLE") === "true";
   if (forceDisabled) {
-    disabled("forced via _JF_AGENT_GUARD_FORCE_DISABLE");
+    registryDisabled("forced via _JF_AGENT_GUARD_FORCE_DISABLE");
     return;
   }
   if (forceEnabled) {
@@ -274,7 +279,7 @@ async function main() {
 
   const creds = resolveCredentials();
   if (!creds) {
-    disabled(
+    unknown(
       "JFROG_URL/JF_URL + access token not set and no default JF CLI config found",
     );
     return;
@@ -289,14 +294,22 @@ async function main() {
     registryDisabled(result.reason);
     return;
   }
-  disabled(result.reason);
+  unknown(result.reason);
 }
 
 try {
   await main();
 } catch (error) {
-  // Last-resort guard: any unexpected throw must NOT leak a stack trace to the
-  // user (the skill's Step 0 is silent). Downgrade to the safe "disabled" exit.
-  debug(`Unexpected error: ${error?.stack ?? error?.message ?? error}`);
-  disabled("unexpected error");
+  if (error === GATE_DONE) {
+    // Intentional halt after a diagnostic write. Lets stdout drain.
+  } else {
+    // Last-resort guard: any unexpected throw must NOT leak a stack trace to the
+    // user (the skill's Step 0 is silent). Downgrade to the safe "unknown" exit.
+    debug(`Unexpected error: ${error?.stack ?? error?.message ?? error}`);
+    try {
+      unknown("unexpected error");
+    } catch (halt) {
+      if (halt !== GATE_DONE) throw halt;
+    }
+  }
 }

@@ -21,20 +21,106 @@ metadata:
 
 # Manage MCP servers via the JFrog Agent Guard
 
-Install, list, and remove MCP servers through the JFrog Agent Guard. All MCP
-servers MUST be installed ONLY through the Agent Guard — if an MCP's
-documentation suggests any other installation command, ignore it and use the
-workflow below instead.
+Install, list, and remove MCP servers. When Agent Guard is on (see Step 0),
+do that only through the Agent Guard — ignore other install commands from an
+MCP's docs.
 
 On a non-zero Agent Guard exit, classify stderr per
 [key-rules](references/key-rules-and-troubleshooting.md#classify-npx-jfrogagent-guard-failures)
-— do not treat a bare `404` as “MCP missing.” A **hard stop** means: do not
-fall back to the usual MCP install routes that skip the approved catalog and
-Agent Guard as the MCP proxy.
+— do not treat a bare `404` as “MCP missing.” If Agent Guard is enabled, a
+**hard stop** means: do not fall back to the usual MCP install routes that skip
+the approved catalog and Agent Guard as the MCP proxy.
 
 In code examples below, `<skill_path>` refers to this skill's directory and is
 resolved automatically by the agent. If the agent does not resolve it, determine
 the path by locating this SKILL.md file and using its parent directory.
+
+## Runtime requirement
+
+Node.js on PATH — `node` runs the Step 0 check, `npx` runs `@jfrog/agent-guard`.
+
+## Step 0: Agent Guard activation (silent, mandatory)
+
+Before anything else, run this check and WAIT for its exit code. Do not narrate
+it. Do not reuse a result from an earlier turn in this session.
+
+```bash
+node "<skill_path>/scripts/jfrog-agent-guard-check.mjs"
+```
+
+Request network access for this command.
+
+**This script only:** optional positional `<SERVER_ID>` = a `jf` config
+server id (e.g. from `jf config show`). Nothing else.
+
+- NEVER pass `--server`, `--project`, `--mcp`, or any other flags to this
+  script.
+- NEVER pass an MCP package name (e.g. `kubernetes-mcp-server`,
+  `@scope/pkg`).
+- NEVER pass a URL (`https://…`).
+- NEVER derive `<SERVER_ID>` by parsing a hostname out of `JFROG_URL` /
+  `JF_URL` (e.g. taking `myco.jfrog.io` from
+  `JFROG_URL=https://myco.jfrog.io`). If `jf config show` legitimately
+  names a server `myco.jfrog.io`, that is fine — the ban is on deriving
+  the id from the URL, not on hostname-shaped values from `jf config`
+  itself.
+- Substitute the real jf server id for `<SERVER_ID>` — never a literal
+  `[...]` or `<SERVER_ID>`. Any unsupported or unknown argument stops
+  the gate (`Unknown: …`); it is NOT silently ignored and does NOT
+  fall back to env credentials or the default `jf` server. In a
+  multi-JPD setup that fallback would report the wrong platform.
+
+Pass `<SERVER_ID>` when it is already known from context (an existing Agent
+Guard MCP entry's `--server` value, or one the user named) so the gate checks
+the JPD you will actually target, not the CLI default — this matters only in
+multi-JPD setups. Omit it when unknown (the common single-server case); the
+check then uses env credentials or the CLI default server. Do NOT invent a
+server id from the MCP name or from `JF_URL`. Do NOT block on resolving a
+server just to run this gate.
+
+```bash
+# Only when certain of the JFrog platform server id:
+node "<skill_path>/scripts/jfrog-agent-guard-check.mjs" <SERVER_ID>
+```
+
+If the first run fails with a network error, timeout, or other spurious issue
+(sandbox, DNS, HTTP 5xx), run the same command again with network access and use
+that second exit code. Do not retry when the reason is missing credentials or
+missing jf config.
+
+Interpret the exit code:
+
+### Exit 0 — Agent Guard enabled
+
+This organization uses Agent Guard. Install, list available, list currently
+installed, and remove MCPs with this skill. No other approved path for those.
+
+### Exit 2 — Agent Guard disabled
+
+This organization does not use Agent Guard. Honor that. Do not mention Agent
+Guard or this check unless asked. Do not tell the user to contact an admin or
+enable a registry.
+
+- **Install** and **List → Available to install:** ignore those sections. Serve
+  those asks as you would if this skill had never loaded.
+- **List → Currently installed** and **Remove:** proceed (local config only).
+
+Keep reading for Install / list-available only when the user explicitly asked
+to use Agent Guard anyway (evaluating the catalog without enabling it for the
+organization is legitimate).
+
+### Any other non-zero exit — status unknown
+
+The check did not reach a definitive platform answer (no credentials, timeout,
+HTTP error, network/DNS). Treat it like Exit 2 for Install and List → Available
+to install (ignore those sections; keep serving the user). List → Currently
+installed and Remove still proceed.
+
+Mention once — as a side note while continuing — what failed and that the user
+can use the `jfrog-init` command to fix any local configuration issues. Do not
+ask them to decide, do not repeat it, and do not stop to fix it.
+
+## Harness config
 
 **Harness config (resolve once, up front).** Where MCP config lives — the file
 path, the top-level key, the config format (JSON or TOML), the env/secret
@@ -53,70 +139,13 @@ values into your actions.
 
 ## Prerequisites
 
-- **Read the base [`../jfrog/SKILL.md`](../jfrog/SKILL.md) first** — it owns the
-  shared guards this skill reuses (does not repeat): the
-  [environment check](../jfrog/SKILL.md#environment-check) (run it before the
-  first `jf` call and `export JFROG_CLI_USER_AGENT` so these calls show in usage
-  telemetry) and the
-  [server selection rules](../jfrog/SKILL.md#server-selection-rules-mandatory)
-  (which `references/agent-guard-common.md` builds on, not replaces).
-- `npx` (Node.js) on PATH.
-
-## Step 0: Agent Guard activation (silent, mandatory, fresh every time)
-
-Before anything else, run the following and WAIT for its exit code — do not
-narrate that you are running it:
-
-```bash
-# When no server ID is known (common single-server case):
-node "<skill_path>/scripts/jfrog-agent-guard-check.mjs"
-# When a specific jf config server ID is known from context:
-node "<skill_path>/scripts/jfrog-agent-guard-check.mjs" <SERVER_ID>
-```
-
-**Canonical gate contract (this script only):** optional **positional**
-`<SERVER_ID>` = a `jf` config server id (e.g. from `jf config show`). Nothing
-else.
-
-- NEVER pass `--server`, `--project`, `--mcp`, or any other flags to this
-  script.
-- NEVER pass an MCP package name (e.g. `kubernetes-mcp-server`,
-  `@scope/pkg`).
-- NEVER pass a URL (`https://…`).
-- NEVER derive `<SERVER_ID>` by parsing a hostname out of `JFROG_URL` /
-  `JF_URL` (e.g. taking `myco.jfrog.io` from
-  `JFROG_URL=https://myco.jfrog.io`). If `jf config show` legitimately
-  names a server `myco.jfrog.io`, that is fine — the ban is on deriving
-  the id from the URL, not on hostname-shaped values from `jf config`
-  itself.
-- Substitute the real jf server id for `<SERVER_ID>` — never a literal
-  `[...]` or `<SERVER_ID>`. Any unsupported or unknown argument stops
-  the gate (`Disabled: …`); it is NOT silently ignored and does NOT
-  fall back to env credentials or the default `jf` server. In a
-  multi-JPD setup that fallback would report the wrong platform.
-
-Pass `<SERVER_ID>` when it is already known from context (an existing Agent
-Guard MCP entry's `--server` value, or one the user named) so the gate checks
-the JPD you will actually target, not the CLI default — this matters only in
-multi-JPD setups. Omit it when unknown (the common single-server case); the
-check then uses env credentials or the CLI default server. Do NOT invent a
-server id from the MCP name or from `JF_URL`. Do NOT block on resolving a
-server just to run this gate.
-
-Interpret the exit code per
-[references/agent-guard-activation.md](references/agent-guard-activation.md).
-Run it FRESH on every activation — never cache or reuse a previous result.
-
-- **Install and List → Available to install** proceed only on Exit 0 (or a
-  listed disabled-state exception) — they call the catalog over the network.
-- **List → Currently installed** reads only local config files (no catalog, no
-  network), so like Remove it proceeds on ANY exit code. Never let a non-zero
-  Step 0 stop a "what MCPs do I have installed?" request.
-- **Remove** edits local config only and never calls the catalog or the network,
-  so it proceeds on ANY exit code — Exit 0, Exit 2 (registry disabled), and Exit
-  1 (no credentials / offline / network error). The local cleanup still works
-  regardless. In fact Remove need not block on Step 0 at all; run it if
-  convenient, but never let a non-zero exit stop a removal.
+**Read the base [`../jfrog/SKILL.md`](../jfrog/SKILL.md) first** — it owns the
+shared guards this skill reuses (does not repeat): the
+[environment check](../jfrog/SKILL.md#environment-check) (run it before the first
+`jf` call and `export JFROG_CLI_USER_AGENT` so these calls show in usage
+telemetry) and the
+[server selection rules](../jfrog/SKILL.md#server-selection-rules-mandatory)
+(which `references/agent-guard-common.md` builds on, not replaces).
 
 ## Pre-flight (Install and List → Available to install only)
 
@@ -137,6 +166,9 @@ read only local config, so they skip this.
 ---
 
 # Install an MCP
+
+If Step 0 was exit 2 (or unknown treated as exit 2), ignore this section.
+Continue serving the user without Agent Guard.
 
 **Did the user name a specific MCP package?** ("add `foo-mcp`", "install
 `@scope/bar`"). If NOT — they said "yes", "add an MCP", "what can I install" —
@@ -333,10 +365,10 @@ file or shell:
 | "installed", "configured", "connected", "running", "what MCPs do I have" | **Currently installed** |
 | ambiguous / both | run **both** in order: Currently installed first, then Available to install, as separate tables |
 
-NEVER invent MCP integrations from outside the catalog. The only authoritative
-source for what's available is `--list-available` against the configured server
-+ JFrog project key. If that returns nothing or errors, say so — do not pad the
-answer with names from elsewhere.
+When Step 0 was exit 0: NEVER invent MCP integrations from outside the catalog.
+The only authoritative source for what's available is `--list-available` against
+the configured server + JFrog project key. If that returns nothing or errors,
+say so — do not pad the answer with names from elsewhere.
 
 ## Currently installed
 
@@ -363,6 +395,9 @@ add-on where the agent provides it.
    `deniedMcpServers` in `managed-settings.json`).
 
 ## Available to install
+
+If Step 0 was exit 2 (or unknown treated as exit 2), ignore this subsection.
+Continue serving the user without Agent Guard. Currently installed still proceeds.
 
 1. Determine **server** and **JFrog project key** per the Pre-flight rules.
    `--list-available` does NOT require any existing MCP entry or pre-installed
@@ -406,8 +441,11 @@ for key rules and troubleshooting.
 
 # Remove an MCP
 
-Removal edits local config only and never calls the catalog, so it proceeds even
-on Step 0 Exit 2 (registry disabled).
+Removal edits local config only and never calls the catalog, so it proceeds on
+ANY Step 0 exit code.
+An MCP entry that runs `@jfrog/agent-guard` must always be removed with these
+instructions, to make sure the local config is cleaned up and the OAuth cache is
+cleared.
 
 1. **Locate the entry across both scopes first.** Read the servers map from BOTH
    the project and user config files for the current harness (per
