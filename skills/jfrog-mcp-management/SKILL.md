@@ -14,7 +14,7 @@ compatibility: >-
   Requires network access to the JFrog Agent Guard npm registry (not public
   npm) and the JFrog platform, and ~/.jfrog/ write access for OAuth login and
   cache cleanup.
-allowed-tools: Bash(claude mcp list) Bash(cursor agent mcp list) Bash(codex mcp list) Bash(opencode mcp list) Bash(kiro-cli mcp list) Bash(kiro-cli mcp list workspace) Bash(kiro-cli mcp list global) Bash(kiro-cli mcp status) Read Edit Write
+allowed-tools: Bash(claude mcp list) Bash(cursor agent mcp list) Bash(codex mcp list) Bash(opencode mcp list) Bash(kiro-cli mcp list) Bash(kiro-cli mcp list workspace) Bash(kiro-cli mcp list global) Bash(kiro-cli mcp status --name*) Read Edit Write
 metadata:
   role: workflow
 ---

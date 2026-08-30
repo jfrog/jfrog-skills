@@ -40,7 +40,7 @@ editor UI or `mcp.json`, so it falls through to the Fallback section.
 | OpenCode | `OPENCODE` | [harness-opencode.md](harness-opencode.md) |
 | Devin | Your system prompt / system instructions identify you as **Devin** (Devin Desktop / Devin Local / Devin CLI / Cognition). | [harness-devin.md](harness-devin.md) |
 | Kiro | Your system prompt / system instructions identify you as **Kiro** (Kiro IDE / `kiro-cli`). | [harness-kiro.md](harness-kiro.md) |
-| VS Code editor | `TERM_PROGRAM=vscode` **and no `CURSOR_*` var is set** **and no `OPENCODE` var is set** **and no `CODEX_*` var is set** **and no `CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT` var is set** **and no `GEMINI_CLI` / `GOOSE_TERMINAL` / `COPILOT_CLI` var is set** **and** your system prompt / system instructions do **not** identify you as Devin or Kiro | [harness-vscode.md](harness-vscode.md) |
+| VS Code editor | `TERM_PROGRAM=vscode` **and `TERM_PROGRAM` is not `kiro`** **and no `CURSOR_*` var is set** **and no `OPENCODE` var is set** **and no `CODEX_*` var is set** **and no `CLAUDECODE`/`CLAUDE_CODE_ENTRYPOINT` var is set** **and no `GEMINI_CLI` / `GOOSE_TERMINAL` / `COPILOT_CLI` var is set** **and** your system prompt / system instructions do **not** identify you as Devin or Kiro | [harness-vscode.md](harness-vscode.md) |
 | anything else | none of the above | **Fallback** section below — no harness file exists |
 
 Once you know your harness, use ONLY these fields from its file: `Config files`
