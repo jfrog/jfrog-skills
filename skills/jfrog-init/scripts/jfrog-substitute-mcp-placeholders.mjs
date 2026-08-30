@@ -37,7 +37,7 @@
 //           server-id passed — ambiguous, caller must ask the user
 // Exit 3 -> read/write error, or jf missing
 
-import { existsSync, readFileSync, writeFileSync, renameSync, statSync, chmodSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync, renameSync, statSync, chmodSync, unlinkSync } from "node:fs";
 import { emit as emitJf, isMainModule, jfAvailable, jfConfigShow, urlForServer, normalizeJpdUrl, mcpPlaceholderRegexes, jfrogMcpEntry, jfrogMcpUrl, hasMcpPlaceholder, askServerResult, describeJfUnavailable } from "./lib/jf.mjs";
 import { resolveJfServer } from "./jfrog-resolve-jf-server.mjs";
 
@@ -110,20 +110,23 @@ export function substituteMcpPlaceholders(target, serverIdOverride) {
   jfrogMcpEntry(parsed).url = newUrl;
   const rewritten = JSON.stringify(parsed, null, 2) + "\n";
 
-  const tmp = `${target}.tmp.${process.pid}`;
+  const real = realpathSync(target);
+  const tmp = `${real}.tmp.${process.pid}`;
   try {
     // "wx" refuses to follow/overwrite anything already at tmp (e.g. a
     // pre-planted symlink) — same symlink-safe pattern as
-    // lib/project-cache.mjs's writeCachedProjectList().
-    writeFileSync(tmp, rewritten, { flag: "wx" });
+    // lib/project-cache.mjs's writeCachedProjectList(). mode: 0o600 closes
+    // the window between writeFileSync and chmodSync where sibling MCP tokens
+    // in the same file would be world-readable.
+    writeFileSync(tmp, rewritten, { flag: "wx", mode: 0o600 });
     // rename() replaces the target's inode wholesale, so without this the
     // file would silently pick up writeFileSync's default umask-derived
     // mode instead of the target's own — e.g. a 0600 mcp.json holding
     // another MCP server's secrets in its env block would come back 0644
     // (world-readable) after a substitution that has nothing to do with
     // that other entry.
-    chmodSync(tmp, statSync(target).mode & 0o777);
-    renameSync(tmp, target);
+    chmodSync(tmp, statSync(real).mode & 0o777);
+    renameSync(tmp, real);
   } catch (err) {
     // A run killed between the write and the rename (Ctrl-C, OOM, harness
     // timeout) leaves tmp behind; the name is only unique per PID, so the

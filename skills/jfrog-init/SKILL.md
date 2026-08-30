@@ -4,7 +4,7 @@ description: Set up and verify the JFrog plugin. Run on first install, to comple
 disable-model-invocation: true
 compatibility: >-
   Requires Node.js 18 or newer, and network access to the JFrog platform.
-allowed-tools: Bash(node --version) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-catalog-runtime.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jf-cli.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jf-config.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-project.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-server-ping.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-re*.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-state-file.mjs" get*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-state-file.mjs" path*) Bash(node -e "import('${CLAUDE_SKILL_DIR}/scripts/jfrog-resolve-mcp-config.mjs').then(function(m){console.log(m.detectHarness())})") Bash(npx --version) Bash(uname:*) AskUserQuestion
+allowed-tools: Bash(node --version) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-catalog-runtime.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jf-cli.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jf-config.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-project.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-server-ping.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-reinstall-jfrog-plugin.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-state-file.mjs" get*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-state-file.mjs" path*) Bash(node -e "import('${CLAUDE_SKILL_DIR}/scripts/jfrog-resolve-mcp-config.mjs').then(function(m){console.log(m.detectHarness())})") Bash(npx --version) Bash(uname:*) AskUserQuestion
 metadata:
   role: workflow
 ---
@@ -72,8 +72,9 @@ absolute path of this file's directory yourself, same as before.
   Node (Step 1) or `jf` (Step 2); `AskUserQuestion` picker for
   web-login vs. token (Step 3/4); `AskUserQuestion` picker for project
   selection (Step 6). Everything else is read-only except Step 5's
-  placeholder substitution, Step 8's `~/.netrc` write, and the Final
-  summary's state write.
+  placeholder substitution (plus, for kiro-cli, creating or merging the
+  `jfrog` entry into `~/.kiro/settings/mcp.json`), Step 8's `~/.netrc`
+  write, and the Final summary's state write.
 - **Never surface the checklist.** Run silently — no step narration, no
   raw JSON/exit codes, no branch-reasoning said out loud. See
   [Customer-facing output](#customer-facing-output).
@@ -139,6 +140,11 @@ user needs to know or act on:
   follow silently, not to summarize out loud — the field names in it are
   never user-facing. The only output the user sees at an ask point is
   the prompt itself.
+- **Do not** narrate whether the `AskUserQuestion` tool is available in
+  the current harness before falling back to the plain-text prompt
+  (e.g. "the AskUserQuestion tool isn't available here, I'll present
+  this as a plain question instead"). If it isn't available, silently
+  use the plain-text fallback already documented for that ask point.
 - **Do not** announce that you're about to run the checklist, or name
   which check comes first — not even generically ("I'll run the setup
   checklist silently, starting with the JFrog CLI check" is itself a
@@ -331,7 +337,14 @@ blocks) — required behavior, not optional background.
 
 ## Step 5: JFrog MCP plugin file has a jfrog entry?
 
+If you are Kiro or Kiro CLI, prefix the command with
+`JFROG_INIT_HARNESS=kiro` or `JFROG_INIT_HARNESS=kiro-cli` on the
+same line — no other harness needs this. Silent, like every other
+setup command in this walk.
+
 ```bash
+JFROG_INIT_HARNESS=kiro node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs" "[server-id]"; rc=$?; true
+JFROG_INIT_HARNESS=kiro-cli node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs" "[server-id]"; rc=$?; true
 node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs" "[server-id]"; rc=$?; true
 ```
 
@@ -342,7 +355,9 @@ it for the placeholder fix instead of re-resolving from scratch.
 **Read-only against the JFrog plugin's own `mcp.json` — with one
 exception: automatic placeholder substitution** of an unresolved
 `${JFROG_PLATFORM_URL}` / `${JFROG_URL}` with the real JPD URL from
-`jf config`.
+`jf config` (plus, for kiro-cli, adding the `jfrog` entry to
+`~/.kiro/settings/mcp.json` when no plugin has put one there — see
+`references/mcp-plugin-config.md`).
 
 **Stop and read `references/mcp-plugin-config.md` in full** — exactly
 how the substitution works, the per-harness plugin-config paths, and
@@ -361,24 +376,8 @@ node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-project.mjs" "[server-id]" "[proj
 the exact "reuse `<KEY>`?" `AskUserQuestion` and the jpdUrl-drift check
 this step requires, not optional background.
 
-**Where the project list comes from.** `jfrog-detect-project.mjs` fetches
-`GET <JPD>/access/api/v1/projects` (the
-[GetProjectsList](https://docs.jfrog.com/projects/reference/getprojectslist)
-endpoint, authenticated with credentials from `jf config export`) once
-per walk and caches it in memory for a short TTL (`lib/project-cache.mjs`)
-— the interactive picker re-invokes this script once per user attempt,
-and re-enumerating on every typed guess would be wasted network traffic.
-This is the list every "enumerated project list" / `candidatesWithNames`
-reference below draws from.
-
-**Name-or-key input.** The user answers with **either** the project's
-canonical key OR its display name — whichever is easier for them.
-`jfrog-detect-project.mjs` resolves it against the enumerated project
-list (exact key, exact name, then progressively fuzzier tiers — see
-`references/project-matching.md` for the exact algorithm), confirms
-existence, and emits the canonical key on green in the JSON
-`resolvedKey` field. An ambiguous input exits red with `candidates`
-listing the tied keys.
+Name-or-key input is resolved via exact match, then progressively
+fuzzier tiers — see `references/project-matching.md` for the algorithm.
 
 **Picking a project, interactively.** Whenever the detector needs the
 user to choose — no input was passed, the typed input didn't match

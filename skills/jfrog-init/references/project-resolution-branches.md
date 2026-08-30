@@ -4,6 +4,13 @@
 full whenever `jfrog-detect-project.mjs` returns anything other than a
 clean exit 0.
 
+**Everything below — exit codes, `unresolved`, and which bullet you
+land on — is reasoning for you to follow silently, never to narrate.**
+Never repeat this table's own words back to the user (e.g. "Exit 2,
+no `unresolved`" or "this is an ask with no input"). The only output
+the user sees is the resulting prompt itself, the raw detector error
+where one is shown, or the Final Summary.
+
 - **Exit 2 (`ask`) with `"unresolved": "server"`** → not a project ask
   — the server-id is ambiguous. Follow "Resolving `<server-id>` for
   Steps 4-7" in `SKILL.md` (prompt for a server from `candidates`), then

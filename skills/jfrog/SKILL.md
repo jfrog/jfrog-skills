@@ -19,7 +19,7 @@ compatibility: >-
   (CLI) and Tier 3 (jf api) operations; without it, only MCP (Tier 1) is available.
 metadata:
   role: base
-  version: "0.32.0"
+  version: "0.33.0"
 ---
 
 # JFrog Skill
