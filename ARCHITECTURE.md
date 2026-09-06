@@ -101,8 +101,8 @@ Two consumers want opposite things from the same UA:
 | Meaning | Wire | EXTRACT | Who |
 |---------|------|---------|-----|
 | Product present (Guard / mcp-management) | `tool=` / `agent=` | `ua.tool_product` | Skill `detect_harness()` (frozen). Includes a human in a Claude/Cursor IDE terminal (`CLAUDECODE`, `CURSOR_TRACE_ID`). |
-| Agent spawned `jf` | `ai-agent/<name>` | `ua.agent_session` | CLI `DetectExecutionContext` only. **No fallback** from `tool=` (old CLI + human IDE would look like an agent). |
-| Host app | `client=` / `ai-client/` | `ua.client` | Host window first (`cursor`, `vscode`, `zed`, `jetbrains`, `windsurf`, `antigravity`), then standalone `claude`, then a short terminal name from `TERM_PROGRAM` (`iterm`, `warp`, `terminal`, `tmux`, …). Never inferred from the agent name. Omit when unknown, or when the only signal is inherited `TERM_PROGRAM=vscode` (P13). |
+| Agent spawned `jf` | `ai-agent/<name>` | `ua.agent_session` | CLI `DetectExecutionContext` when present. Else `tool=` / `agent=` when `trigger=skill` or `trigger=hook`, when the CLI wrote `ai-agent/unknown`, or when CLI is missing / `< 2.118`. |
+| Host app | `client=` / `ai-client/` | `ua.client` | Host window first (`cursor`, `vscode`, `zed`, `jetbrains`, `windsurf`, `antigravity`, `codium`, `trae`, `visualstudio`), then standalone `claude`, then a short terminal name (`iterm`, `warp`, `terminal`, `tmux`, …). If that stamp is empty, copy an IDE `tool=` / `ai-agent/` name (`cursor`, `vscode`, `claude`, … — not Copilot/OpenCode, not terminals). Omit when unknown, or when the only signal is inherited `TERM_PROGRAM=vscode` (P13). |
 | Model | `model=` / `ai-model/` | `ua.model_type` | Skills only; hooks never stamp `model=`. |
 | Trigger | `trigger=skill` \| `trigger=hook` | `ua.trigger` | Skills path vs APR spawn |
 

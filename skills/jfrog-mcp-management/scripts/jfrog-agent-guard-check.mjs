@@ -23,6 +23,9 @@ import process from "node:process";
 
 const SETTINGS_PATH =
   "/ml/core/api/v1/administration/account-settings/mcp_gateway_plugin_enabled";
+// Self-hosted JPDs serve the same API behind `/bridge-client`. Tried ONLY
+// after the root path 404s, so SaaS still costs exactly one request.
+const BRIDGE_CLIENT_PREFIX = "/bridge-client";
 const REQUEST_TIMEOUT_MS = 5000;
 
 const debugEnabled = process.env.JF_AGENT_GUARD_DEBUG === "true";
@@ -173,14 +176,38 @@ function resolveFromCliConfig(serverId) {
   return { baseUrl, token, source: `JF CLI config (server '${id}')` };
 }
 
+/** Drops the internal `notFound` marker from a fetchSetting() result. */
+function strip({ notFound, ...result }) {
+  return result;
+}
+
 async function isGatewayPluginEnabled(baseUrl, token) {
   // Normalize to the platform root: drop trailing slashes and a trailing
   // `/artifactory` segment. Users commonly export JFROG_URL as
   // `https://myco.jfrog.io/artifactory`, but the settings path lives under
   // `/ml/core` off the platform root — without this, Path A would build
-  // `.../artifactory/ml/core/...` and 404 into a false "disabled" (exit 1).
+  // `.../artifactory/ml/core/...` and 404 into a false "unknown" (exit 1).
   const root = baseUrl.replace(/\/+$/, "").replace(/\/artifactory$/, "");
-  const url = root + SETTINGS_PATH;
+
+  const rootResult = await fetchSetting(root + SETTINGS_PATH, token);
+  if (!rootResult.notFound) return strip(rootResult);
+
+  // Root 404 -> possibly self-hosted. Each attempt gets its OWN timeout
+  // budget: a reused AbortController would start the retry already spent.
+  debug(`Root ${SETTINGS_PATH} returned 404; retrying behind ${BRIDGE_CLIENT_PREFIX}.`);
+  const bridgeResult = await fetchSetting(
+    root + BRIDGE_CLIENT_PREFIX + SETTINGS_PATH,
+    token,
+  );
+  // Bridge may only UPGRADE the verdict; anything else keeps the root result.
+  if (bridgeResult.ok || bridgeResult.registryOff) return strip(bridgeResult);
+  return strip(rootResult);
+}
+
+// One HTTP attempt against a fully-built settings URL. `notFound` marks the
+// 404 that triggers the `/bridge-client` retry; callers strip it before
+// returning so the result shape main() sees is unchanged.
+async function fetchSetting(url, token) {
   debug(`Fetching gateway plugin setting from ${url}`);
 
   // Trade-off: we use a direct fetch() rather than `jf api` (the pattern other
@@ -210,6 +237,7 @@ async function isGatewayPluginEnabled(baseUrl, token) {
       // claiming disabled. Only HTTP 200 + value:false is "disabled".
       return {
         ok: false,
+        notFound: response.status === 404,
         reason: `settings endpoint returned HTTP ${response.status}`,
       };
     }
