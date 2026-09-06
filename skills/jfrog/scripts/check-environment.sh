@@ -358,7 +358,7 @@ canonical_agent_name() {
     windsurf) echo "windsurf" ;;
     aider) echo "aider" ;;
     cline) echo "cline" ;;
-    opencode) echo "opencode" ;;
+    opencode|opencode-jfrog-plugin) echo "opencode" ;;
     amp) echo "amp" ;;
     augment) echo "augment" ;;
     qwen-code|qwen) echo "qwen" ;;
