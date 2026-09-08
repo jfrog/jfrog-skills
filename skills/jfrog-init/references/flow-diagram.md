@@ -68,7 +68,10 @@ flowchart TD
     ASKSRV5 --> S5
     S5 -->|missing/invalid/no entry, incl. substitution failure| F5["Note: reinstall or update the JFrog plugin, or resolve jf config (non-blocking)"]:::fixBox
     F5 --> S6
-    S5 -->|yes, valid url| S6
+    S5 -->|yes, valid url| S5R["5b. JFrog MCP server enabled on this JPD? (jfrog-detect-jfrog-mcp-responding.mjs, anonymous GET &lt;JPD&gt;/mcp — non-blocking)"]:::stepBox
+    S5R -->|not_enabled: ask admin / unreachable: couldn't confirm| F5R["Note: surface in Final Summary (non-blocking)"]:::fixBox
+    S5R -->|enabled: ✅ if signed in to this JPD, else offer sign-in AFTER Final Summary| S6
+    F5R --> S6
 
     S6["6. Project resolved?"]:::stepBox
     S6 -->|state file has current project| ASKREUSE["AskUserQuestion: reuse CURRENT or pick different"]:::fixBox

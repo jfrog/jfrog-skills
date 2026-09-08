@@ -37,7 +37,9 @@ the path by locating this SKILL.md file and using its parent directory.
 
 ## Runtime requirement
 
-Node.js on PATH — `node` runs the Step 0 check, `npx` runs `@jfrog/agent-guard`.
+Node.js 18+ on PATH — `node` runs the Step 0 check, `npx` runs
+`@jfrog/agent-guard`. On an older runtime the Step 0 check exits with
+`Unknown: requires Node.js 18 or newer`.
 
 ## Step 0: Agent Guard activation (silent, mandatory)
 
@@ -85,8 +87,10 @@ node "<skill_path>/scripts/jfrog-agent-guard-check.mjs" <SERVER_ID>
 
 If the first run fails with a network error, timeout, or other spurious issue
 (sandbox, DNS, HTTP 5xx), run the same command again with network access and use
-that second exit code. Do not retry when the reason is missing credentials or
-missing jf config.
+that second exit code. In a sandboxed harness (e.g. Cursor, Codex) such a
+failure is often the sandbox's network allowlist, not a real outage — check your
+`harness-<agent>.md` reference for a sandbox/allowlist fix. Do not retry when the
+reason is missing credentials or missing jf config.
 
 Interpret the exit code:
 
@@ -109,12 +113,35 @@ Keep reading for Install / list-available only when the user explicitly asked
 to use Agent Guard anyway (evaluating the catalog without enabling it for the
 organization is legitimate).
 
+### Exit 3 — Multiple JFrog servers, none set as default
+
+The gate could not tell which JPD to check: no complete `JFROG_URL`/`JF_URL` +
+`JFROG_ACCESS_TOKEN`/`JF_ACCESS_TOKEN` credential pair is set in the env, 
+there is no default `jf` server, and two or more servers are configured. 
+This is NOT a disabled or unknown result — the gate just needs the user to say which server to use.
+
+Do this:
+
+1. Show the user the server ids from the gate's `AmbiguousServer:` line (they
+   match `jf config show`) and let the user manually select one.
+2. Re-run Step 0 with the selected id as the `<SERVER_ID>` argument and act on
+   that exit code. Exit 0 or Exit 2 → follow that section. Any other non-zero
+   means the id is not a configured `jf` server (a typo) or was unreachable —
+   tell the user it did not resolve and have them pick a valid one (or stop); do
+   NOT fall through to "status unknown", which would bypass Agent Guard.
+
+Wait for the user's selection before continuing; the gate stays ambiguous until
+they choose.
+
+This selection is not relevant for **List → Currently installed** and **Remove**,
+which touch local config only — handle those normally, with no server selection.
+
 ### Any other non-zero exit — status unknown
 
 The check did not reach a definitive platform answer (no credentials, timeout,
 HTTP error, network/DNS). Treat it like Exit 2 for Install and List → Available
 to install (ignore those sections; keep serving the user). List → Currently
-installed and Remove still proceed.
+installed and Remove still proceed. (Exit 3 is handled above, not here.)
 
 Mention once — as a side note while continuing — what failed and that the user
 can use the `jfrog-init` command to fix any local configuration issues. Do not
@@ -327,8 +354,9 @@ with `type: "http"` AND Step 4 wrote no static auth header into `env`. Skip for
 local MCPs and for remote MCPs whose auth comes from a static token in `env`.
 
 `--login` opens the browser, runs OAuth, caches tokens in
-`~/.jfrog/jfrogmcp.conf.json`. Warn the user "I'm going to open your browser to
-sign you in to `<MCP_NAME>`" before:
+`~/.jfrog/jfrogmcp.conf.json`. In the same turn, tell the user you are about
+to open the browser to sign them in to `<MCP_NAME>` and immediately run the
+command — do not wait for confirmation or a follow-up prompt:
 
 ```
 npx --yes \

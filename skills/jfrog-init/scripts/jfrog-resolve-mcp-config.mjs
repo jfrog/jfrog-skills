@@ -22,6 +22,8 @@
 //                 Kiro's own global MCP config, so the jfrog entry is
 //                 created — or merged into an existing file — with a
 //                 placeholder url. See ensureKiroCliJfrogEntry() below.)
+//   Devin:      ~/.local/share/devin/cli/plugins/cache/<slug>/<version>/mcp.json
+//                 (glob → newest; <slug> is prefix-filtered to github.com_jfrog_devin-plugin-*.)
 //
 // NOTE (Claude): the current released Claude plugin (jfrog-beta/0.3.0-beta.1)
 // does NOT ship a .mcp.json — the source repo has one, but the packager
@@ -29,26 +31,40 @@
 // Code throws a "plugin file not installed" error, which the detector
 // converts into a clear red / "reinstall the JFrog plugin" instruction.
 //
+// OpenCode has no plugin-owned mcp.json — resolves to the user's own config.
+// ~/.config/opencode/opencode.json[c] is always loaded; $OPENCODE_CONFIG and
+// $OPENCODE_CONFIG_DIR each ADD a second file merged on top of it, never
+// replacing it (see skills/jfrog-mcp-management/references/harness-opencode.md).
+// Write target, in priority order: $OPENCODE_CONFIG (must already exist),
+// else $OPENCODE_CONFIG_DIR/opencode.json[c], else the global file. When the
+// write target isn't the global file, resolveOpencodePath() also returns the
+// global file as `layerPaths` — callers must check it for an existing
+// mcp.jfrog entry before writing a shadowing duplicate.
+//
 // Harness detection (env-var signals, in order):
 //   1. Codex        -> $CODEX_SANDBOX / $CODEX_THREAD_ID / $CODEX_CI set
 //   2. Claude Code  -> $CLAUDECODE / $CLAUDE_CODE_* set
 //   3. Cursor       -> $CURSOR_AGENT / $CURSOR_CLI / $CURSOR_TRACE_ID set,
 //                      or TERM_PROGRAM=cursor
-//   4. VS Code      -> $VSCODE_PID set, or TERM_PROGRAM=vscode
+//   4. OpenCode     -> $OPENCODE / $OPENCODE_SESSION_ID set
+//   5. VS Code      -> $VSCODE_PID set, TERM_PROGRAM=vscode. The Copilot
+//                      extension runtime may sanitize these from the plugin
+//                      subprocess; in that case Copilot self-identifies via
+//                      JFROG_INIT_HARNESS=vscode (see SKILL.md Step 5).
 // Codex is listed first because a Codex session launched from inside
 // another harness's terminal still carries that host's own signal — and
-// nesting goes both ways, so more than one signal can be present at once.
-// When that happens, detectHarness() below walks the process ancestry to
-// find which harness actually spawned this invocation.
+// nesting goes both ways (OpenCode included), so more than one signal
+// can be present at once. When that happens, detectHarness() below walks
+// the process ancestry to find which harness actually spawned this
+// invocation.
 // detectHarness() is the single JS implementation — exported and reused
 // by every other script in this skill that needs harness information.
 //
-// Kiro (IDE and CLI) has no detect signal yet — reachable only via the
-// JFROG_INIT_HARNESS=kiro / kiro-cli overrides below.
+// Kiro (IDE and CLI) and Devin have no detect signal — reachable only
+// via the JFROG_INIT_HARNESS=kiro / kiro-cli / devin overrides below.
 //
 // Overrides:
-//   - JFROG_INIT_HARNESS=claude|cursor|vscode|codex|kiro|kiro-cli  forces
-//     one specific harness.
+//   - JFROG_INIT_HARNESS  forces one specific harness (see VALID_HARNESSES below).
 //   - JFROG_INIT_MCP_CONFIG=/abs/path                forces one specific path.
 //     (Escape hatch — bypasses the plugin-path resolution entirely.)
 //   - CODEX_HOME=/abs/path                           Codex's own var, honored by
@@ -59,35 +75,44 @@
 //   Exit 0 -> path resolved
 //   Exit 1 -> could not detect the current harness
 //   Exit 2 -> harness detected, but the plugin's mcp.json is not installed
+//             (OpenCode: no config file exists yet at any of the candidate
+//             paths above — nothing to write the entry into.)
 
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { isMainModule, jfrogMcpEntry } from "./lib/jf.mjs";
+import { isMainModule } from "./lib/jf.mjs";
 
-const VALID_HARNESSES = new Set(["claude", "cursor", "vscode", "codex", "kiro", "kiro-cli"]);
+const VALID_HARNESSES = new Set(["claude", "cursor", "vscode", "codex", "opencode", "kiro", "kiro-cli", "devin"]);
 
 // One entry per harness, in priority order (see doc comment above) — used
 // both as the signal check and as the static fallback when the ancestry
-// tie-break can't resolve it. Adding a harness (OpenCode, ...) is just a
-// new entry here — Kiro has none yet, see the header note above.
+// tie-break can't resolve it.
 const HARNESS_SIGNALS = [
   { name: "codex", signaled: () => process.env.CODEX_SANDBOX || process.env.CODEX_THREAD_ID || process.env.CODEX_CI },
   { name: "claude", signaled: () => process.env.CLAUDECODE || process.env.CLAUDE_CODE_ENTRYPOINT || process.env.CLAUDE_CODE_SESSION_ID },
   // Checked before VS Code: Cursor's CLI/agent surfaces can report TERM_PROGRAM=vscode.
   { name: "cursor", signaled: () => process.env.CURSOR_AGENT || process.env.CURSOR_CLI || process.env.CURSOR_TRACE_ID || process.env.TERM_PROGRAM === "cursor" },
+  { name: "opencode", signaled: () => process.env.OPENCODE || process.env.OPENCODE_SESSION_ID },
+  // Best-effort auto-detect for VS Code. The Copilot extension runtime may
+  // sanitize these env vars from the plugin subprocess; when it does, this
+  // row won't fire and Copilot in VS Code must self-identify via
+  // `JFROG_INIT_HARNESS=vscode` (see SKILL.md Step 5).
   { name: "vscode", signaled: () => process.env.VSCODE_PID || process.env.TERM_PROGRAM === "vscode" },
 ];
 
-// Breaks ties when multiple harness signals fire at once: env vars are
-// inherited by child processes regardless of nesting direction, so
-// presence alone can't tell them apart. Walks up from the immediate
-// parent — skipping the shell/node layers each harness spawns to run a
-// command (e.g. codex -> bash -> claude -> bash -> node) — until a
-// process name matches a candidate, or maxDepth is hit. Unix-only (ps);
-// returns [] on failure (e.g. Windows), which falls through to the
-// static priority order.
+// Breaks ties when multiple harness signals fire at once. Walks process
+// ancestry until a candidate name matches, or falls back to static priority.
+// Unix-only (ps); returns [] on failure, which falls through to priority order.
+// On Windows this always returns [] (no `ps`), so a nested harness there
+// (e.g. OpenCode launched from inside Claude Code or Cursor, inheriting
+// CLAUDECODE/CURSOR_TRACE_ID) falls through to the static order below and
+// can be misidentified as claude/cursor instead of opencode — confirmed on
+// a Windows box: `ps` is only a PowerShell alias for Get-Process, invisible
+// to execFileSync, which throws ENOENT exactly as assumed here. Known gap;
+// a real fix needs a Windows-native ancestry lookup (e.g. Win32_Process via
+// Get-CimInstance), which is out of scope for this PR.
 function getAncestorChain(maxDepth = 12) {
   const chain = [];
   let pid = process.ppid;
@@ -106,20 +131,64 @@ function getAncestorChain(maxDepth = 12) {
   return chain;
 }
 
-// JFROG_INIT_HARNESS is matched case-insensitively so the documented
-// override doesn't silently fail on a case mismatch. getAncestors is
-// injectable so tests can stub the tie-break without spawning `ps`.
+// JFROG_INIT_HARNESS is matched case-insensitively (e.g. "Claude", "CURSOR").
+// getAncestors is injectable so tests can stub the tie-break without spawning `ps`.
 export function detectHarness(getAncestors = getAncestorChain) {
   if (process.env.JFROG_INIT_HARNESS) return process.env.JFROG_INIT_HARNESS.trim().toLowerCase();
   const candidates = HARNESS_SIGNALS.filter((h) => h.signaled()).map((h) => h.name);
   if (candidates.length <= 1) return candidates[0] || "";
-  // Multiple signals at once means nested harnesses — resolve via
-  // ancestry, else fall back to the static priority order.
   for (const comm of getAncestors()) {
     const match = candidates.find((name) => comm.includes(name));
     if (match) return match;
   }
   return candidates[0];
+}
+
+// Resolves the OpenCode config path to write to (see doc comment above).
+// Honors OPENCODE_CONFIG, OPENCODE_CONFIG_DIR, and XDG_CONFIG_HOME. Prefers
+// .json; falls back to .jsonc only if that already exists (OpenCode's own
+// bootstrap writes .jsonc, not .json). Verified on Windows: a fresh install
+// lands at C:\Users\<user>\.config\opencode\opencode.jsonc — no
+// %APPDATA%/%LOCALAPPDATA% equivalent.
+export function resolveOpencodePath() {
+  const isFile = (p) => { try { return statSync(p).isFile(); } catch { return false; } };
+  const pickExtension = (dir) => {
+    const jsonPath = join(dir, "opencode.json");
+    const jsoncPath = join(dir, "opencode.jsonc");
+    return isFile(jsoncPath) && !isFile(jsonPath) ? jsoncPath : jsonPath;
+  };
+  const globalPath = pickExtension(join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode"));
+
+  let p;
+  let explicitFile = false;
+  if (process.env.OPENCODE_CONFIG) {
+    p = process.env.OPENCODE_CONFIG;
+    explicitFile = true;
+    if (existsSync(p) && !statSync(p).isFile()) {
+      return { error: `OPENCODE_CONFIG=${p} is not a regular file`, code: 1 };
+    }
+  } else if (process.env.OPENCODE_CONFIG_DIR) {
+    p = pickExtension(process.env.OPENCODE_CONFIG_DIR);
+  } else {
+    p = globalPath;
+  }
+
+  if (!existsSync(p)) {
+    // OPENCODE_CONFIG names one exact file — OpenCode won't create it on
+    // startup, so the fix is pointing the var at a real file, not "start
+    // OpenCode".
+    if (explicitFile) {
+      return {
+        error: `OPENCODE_CONFIG=${p} does not exist — point it at an existing opencode.json[c], or unset it to use the default location.`,
+        code: 2,
+      };
+    }
+    return {
+      error: `No OpenCode config found at ${p} — start OpenCode at least once (or create the file yourself) so there's a config to add the jfrog MCP entry to.`,
+      code: 2,
+    };
+  }
+  return { path: p, layerPaths: p === globalPath ? [] : [globalPath] };
 }
 
 // Picks the newest file matching `<dir>/*/<...tailParts>` by mtime.
@@ -193,6 +262,51 @@ function resolveClaudePath() {
       error:
         "JFrog Claude plugin does not ship a .mcp.json at ~/.claude/plugins/cache/*/jfrog/*/.mcp.json\n" +
         "       reinstall or update the JFrog plugin so it includes the file.",
+      code: 2,
+    };
+  }
+  return { path: match };
+}
+
+// Flat cache — filter to our slug so other plugins' mcp.json can't
+// win the newest-mtime race.
+const DEVIN_JFROG_SLUG_PREFIX = "github.com_jfrog_devin-plugin-";
+function newestDevinMatch() {
+  const cacheDir = join(homedir(), ".local", "share", "devin", "cli", "plugins", "cache");
+  let slugs;
+  try {
+    slugs = readdirSync(cacheDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  let best = null;
+  let bestMtime = -Infinity;
+  for (const slug of slugs) {
+    if (!slug.isDirectory()) continue;
+    if (!slug.name.startsWith(DEVIN_JFROG_SLUG_PREFIX)) continue;
+    const candidate = newestMatch(join(cacheDir, slug.name), ["mcp.json"]);
+    if (!candidate) continue;
+    let mtime;
+    try {
+      mtime = statSync(candidate).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (mtime > bestMtime) {
+      best = candidate;
+      bestMtime = mtime;
+    }
+  }
+  return best;
+}
+
+function resolveDevinPath() {
+  const match = newestDevinMatch();
+  if (!match) {
+    return {
+      error:
+        "JFrog Devin plugin does not ship an mcp.json at ~/.local/share/devin/cli/plugins/cache/github.com_jfrog_devin-plugin-*/*/mcp.json\n" +
+        "       reinstall the JFrog plugin: devin plugins install jfrog/devin-plugin -y",
       code: 2,
     };
   }
@@ -377,8 +491,11 @@ function resolveKiroCliPath() {
 }
 
 export function resolveMcpConfig() {
+  // JFROG_INIT_MCP_CONFIG fixes the path outright, but the harness is
+  // still needed for OpenCode-specific wording — skip only the ancestry
+  // walk, not detection entirely.
   if (process.env.JFROG_INIT_MCP_CONFIG) {
-    return { path: process.env.JFROG_INIT_MCP_CONFIG };
+    return { path: process.env.JFROG_INIT_MCP_CONFIG, harness: detectHarness(() => []) };
   }
 
   const harness = detectHarness();
@@ -389,42 +506,48 @@ export function resolveMcpConfig() {
   // set the very variable they already set.
   if (process.env.JFROG_INIT_HARNESS && !VALID_HARNESSES.has(harness)) {
     return {
-      error: `JFROG_INIT_HARNESS=${process.env.JFROG_INIT_HARNESS} is not one of: claude, cursor, vscode, codex, kiro, kiro-cli.`,
+      error: `JFROG_INIT_HARNESS=${process.env.JFROG_INIT_HARNESS} is not one of: claude, cursor, vscode, codex, opencode, kiro, kiro-cli, devin.`,
       code: 1,
+      harness,
     };
   }
 
   switch (harness) {
-    case "claude":
-      return resolveClaudePath();
-    case "cursor":
-      return resolveCursorPath();
-    case "vscode":
-      return resolveVscodePath();
-    case "codex":
-      return resolveCodexPath();
-    case "kiro":
-      return resolveKiroPath();
-    case "kiro-cli":
-      return resolveKiroCliPath();
+    case "claude": return { ...resolveClaudePath(), harness };
+    case "cursor": return { ...resolveCursorPath(), harness };
+    case "vscode": return { ...resolveVscodePath(), harness };
+    case "codex": return { ...resolveCodexPath(), harness };
+    case "opencode": return { ...resolveOpencodePath(), harness };
+    case "kiro": return { ...resolveKiroPath(), harness };
+    case "kiro-cli": return { ...resolveKiroCliPath(), harness };
+    case "devin": return { ...resolveDevinPath(), harness };
     default:
       return {
         error:
-          "could not detect current harness (Claude Code / Cursor / VS Code / Codex).\n" +
-          "  Set JFROG_INIT_HARNESS=claude|cursor|vscode|codex|kiro|kiro-cli, or\n" +
+          "could not detect current harness (Claude Code / Cursor / VS Code / Codex / OpenCode / Devin).\n" +
+          "  Set JFROG_INIT_HARNESS=claude|cursor|vscode|codex|opencode|kiro|kiro-cli|devin, or\n" +
           "  JFROG_INIT_MCP_CONFIG=/absolute/path/to/mcp.json to override.",
         code: 1,
+        harness,
       };
   }
 }
 
 if (isMainModule(import.meta.url)) {
-  const result = resolveMcpConfig();
-  if (result.path) {
-    process.stdout.write(result.path + "\n");
-    process.exitCode = 0;
+  // `--harness` alone skips resolveMcpConfig() entirely — those callers
+  // only need the harness name. Also avoids the old `node -e
+  // "import(...)"` form, which broke on Windows
+  // (ERR_UNSUPPORTED_ESM_URL_SCHEME on a raw path).
+  if (process.argv[2] === "--harness") {
+    process.stdout.write(detectHarness() + "\n");
   } else {
-    process.stderr.write(`error: ${result.error}\n`);
-    process.exitCode = result.code;
+    const result = resolveMcpConfig();
+    if (result.path) {
+      process.stdout.write(result.path + "\n");
+      process.exitCode = 0;
+    } else {
+      process.stderr.write(`error: ${result.error}\n`);
+      process.exitCode = result.code;
+    }
   }
 }

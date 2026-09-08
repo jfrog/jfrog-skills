@@ -4,7 +4,7 @@ description: Set up and verify the JFrog plugin. Run on first install, to comple
 disable-model-invocation: true
 compatibility: >-
   Requires Node.js 18 or newer, and network access to the JFrog platform.
-allowed-tools: Bash(node --version) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-catalog-runtime.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jf-cli.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jf-config.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-project.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-server-ping.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-reinstall-jfrog-plugin.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-state-file.mjs" get*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-state-file.mjs" path*) Bash(node -e "import('${CLAUDE_SKILL_DIR}/scripts/jfrog-resolve-mcp-config.mjs').then(function(m){console.log(m.detectHarness())})") Bash(npx --version) Bash(uname:*) AskUserQuestion
+allowed-tools: Bash(node --version) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-catalog-runtime.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jf-cli.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jf-config.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-opencode-mcp-auth.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp-responding.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-project.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-server-ping.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-reinstall-jfrog-plugin.mjs"*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-state-file.mjs" get*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-state-file.mjs" path*) Bash(node "${CLAUDE_SKILL_DIR}/scripts/jfrog-resolve-mcp-config.mjs" --harness) Bash(npx --version) Bash(uname:*) AskUserQuestion
 metadata:
   role: workflow
 ---
@@ -13,7 +13,7 @@ metadata:
 
 **First output must be a tool call, not text.** No "I'll start..." preamble.
 
-Walks a fixed, ordered checklist and stops at the first red result, guiding
+Walks a fixed, ordered checklist and stops at the first non-passing result, guiding
 the user through the matching fix before re-checking. Every detector in
 `scripts/` is idempotent, read-only, JSON-emitting, and implemented in
 Node (`.mjs`), so the same detector runs unmodified on macOS, Linux, and
@@ -33,12 +33,11 @@ this is just the map:
 - **Project selection** — the user answers with a project name or key;
   an `AskUserQuestion` picker offers the first two enumerated projects
   plus "Other" (Step 6).
-- Everything else in the walk is read-only, except Step 5's placeholder
-  substitution (writes the plugin's `mcp.json`, unattended by design —
-  no `AskUserQuestion`, see `references/script-invocation.md`), Step 8's
-  `~/.netrc` write (also unattended, no `AskUserQuestion` — see
-  `references/marketplace-setup.md`), and the Final summary's state
-  write below.
+- Everything else is read-only, except: Step 5's placeholder
+  substitution and OpenCode-only `mcp.jfrog` write (both unattended, no
+  `AskUserQuestion` — see `references/script-invocation.md`); Step 8's
+  `~/.netrc` write (same, see `references/marketplace-setup.md`); and
+  the Final summary's state write below.
 
 Step 1's `nvm` install and `jfrog-install-jf-cli.mjs`, Step 3's
 web-login scripts, Step 8's `jfrog-add-claude-marketplace.mjs` call,
@@ -47,44 +46,68 @@ deliberately **not** in `allowed-tools` and will raise the harness's
 own approval prompt — intended, not a misconfiguration; see
 `references/script-invocation.md`.
 
-`${CLAUDE_SKILL_DIR}` below is this file's own directory. Claude Code
-substitutes it automatically, identically, in both this text and the
-`allowed-tools` Bash rules above — write it literally rather than
-resolving it yourself, so the two stay byte-for-byte consistent
-regardless of install depth (see `references/script-invocation.md`). On
-a harness that doesn't perform this substitution (e.g. Cursor or Codex,
-neither of which consults `allowed-tools` for approval — every command
-below still raises its own prompt there), replace it with the real
-absolute path of this file's directory yourself, same as before.
+## Step 0: resolve the `${CLAUDE_SKILL_DIR}` placeholder (do this FIRST)
+
+**`${CLAUDE_SKILL_DIR}` is this skill's own absolute directory** — the
+folder holding this `SKILL.md`, `scripts/`, and `references/`. Every
+`node "${CLAUDE_SKILL_DIR}/scripts/…"` command below needs it resolved
+first.
+
+- **Claude Code** — substitutes it automatically. Run commands as
+  written.
+- **Every other harness** — you MUST look it up and export it before
+  Step 1:
+  1. Look up this skill's absolute directory from wherever your
+     harness loaded this file (per-harness plugin roots are listed in
+     `references/mcp-plugin-config.md`). On OpenCode specifically, it
+     announces its own real path in its own preamble — use that value
+     directly instead of hunting for it.
+  2. Export it:
+     ```bash
+     export CLAUDE_SKILL_DIR="<absolute path to this skill's directory>"
+     ```
+  3. Verify with the sentinel — **STOP** and re-resolve if it fails:
+     ```bash
+     ls "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jf-cli.mjs"
+     ```
+  4. If your harness does not persist environment variables across
+     commands, use the resolved absolute path directly in every
+     `node` invocation instead of `${CLAUDE_SKILL_DIR}`.
+
+Skipping this fails silently rather than loudly — see
+`references/script-invocation.md` for why. Step 0 resolves *script
+paths*; Step 5's `JFROG_INIT_HARNESS` resolves *harness detection*.
+Non-Claude harnesses need both.
 
 ## At a glance (always-read core)
 
 - **Order matters.** Walk [Steps 1](#step-1-nodejs--18-installed)–[8](#step-8-claude-agent-plugin-marketplace-registered)
-  in exact order, stop at the first non-green result — except Step 5
-  red/error, Step 6's one-retry cap, Step 7's "not entitled" and
-  "catalog unreachable" outcomes, and Step 8 entirely (all four
-  non-blocking). See
+  in exact order, stop at the first non-passing result — except Step 5's
+  failure/error outcomes, Step 5b entirely, Step 6's one-retry cap, Step 7's "not
+  entitled" and "catalog unreachable" outcomes, and Step 8 entirely
+  (all five non-blocking). See
   [The checklist, in order](#the-checklist-in-order).
-- **`rc=$?` is mandatory** on every detector invocation — see
-  [Invoking scripts](#invoking-scripts-avoid-the-red-error-framing). A
-  bare `; true` hides every red/ask result as green.
+- **Capturing the exit code before forcing success is mandatory** (`;
+  rc=$?; true` bash / `; $rc=$LASTEXITCODE; exit 0` PowerShell — see
+  `references/invoking-and-output-rules.md`'s "Invoking scripts" section). A
+  bare success-forcer with no capture hides every failure/ask result as success.
 - **Approval gates:** `AskUserQuestion` Yes/No before auto-installing
   Node (Step 1) or `jf` (Step 2); `AskUserQuestion` picker for
   web-login vs. token (Step 3/4); `AskUserQuestion` picker for project
   selection (Step 6). Everything else is read-only except Step 5's
-  placeholder substitution (plus, for kiro-cli, creating or merging the
-  `jfrog` entry into `~/.kiro/settings/mcp.json`), Step 8's `~/.netrc`
-  write, and the Final summary's state write.
+  placeholder substitution (plus OpenCode `mcp.jfrog` write and kiro-cli
+  `~/.kiro/settings/mcp.json` merge), Step 8's `~/.netrc` write, and the
+  Final summary's state write.
 - **Never surface the checklist.** Run silently — no step narration, no
   raw JSON/exit codes, no branch-reasoning said out loud. See
-  [Customer-facing output](#customer-facing-output).
+  `references/invoking-and-output-rules.md`'s "Customer-facing output" section.
 - **`<server-id>` for Steps 4-7** always comes from the shared resolver
   (explicit arg → `JF_SERVER_ID` → `isDefault` → sole configured server
   → ask) — never invented, never `jf`'s own fallback. Step 8 reuses the
   same value. See
   [Resolving `<server-id>`](#resolving-server-id-for-steps-4-7).
 - **Persist state before the final summary** — run
-  `jfrog-state-file.mjs set` whenever Steps 1-4 are green, regardless of
+  `jfrog-state-file.mjs set` whenever Steps 1-4 all pass, regardless of
   Step 5/6/7. See [Final summary](#final-summary).
 - **Never store, log, or print an access token** — credentials stay
   inside `jf`'s own process or in-memory for one `fetch` call. **Step 8
@@ -120,77 +143,20 @@ Steps: [1](#step-1-nodejs--18-installed) → [2](#step-2-jfrog-cli-installed) �
   base skill's invariant — see `runJf()` in `scripts/lib/jf.mjs` for why
   (telemetry-only impact).
 
-## Customer-facing output
+## Operating rules
 
-**The user does not need to see the checklist you are walking, but does
-need to see what actually happened.** Run the detectors silently,
-capture their output for your own reasoning, and surface only what the
-user needs to know or act on:
+**Stop and read `references/invoking-and-output-rules.md` in full before running
+any command in this walk** — required behavior, not optional
+background. It covers three things:
 
-- **Do not** narrate step numbers ("Step 1…", "moving to Step 3…")
-  while the walk is in progress.
-- **Do not** paste detector JSON, exit codes, or shell command output
-  into the reply.
-- **Do not** narrate the branch-selection reasoning behind an
-  `AskUserQuestion` or plain-text prompt — e.g. explaining that
-  `unresolved` wasn't `"server"`, or that `candidatesWithNames` had two
-  or more entries, so this is "the generic ask using the first two
-  candidates." That reasoning (in `server-picker.md`, `project-picker.md`,
-  and the other reference docs' branch tables) is written for you to
-  follow silently, not to summarize out loud — the field names in it are
-  never user-facing. The only output the user sees at an ask point is
-  the prompt itself.
-- **Do not** narrate whether the `AskUserQuestion` tool is available in
-  the current harness before falling back to the plain-text prompt
-  (e.g. "the AskUserQuestion tool isn't available here, I'll present
-  this as a plain question instead"). If it isn't available, silently
-  use the plain-text fallback already documented for that ask point.
-- **Do not** announce that you're about to run the checklist, or name
-  which check comes first — not even generically ("I'll run the setup
-  checklist silently, starting with the JFrog CLI check" is itself a
-  violation: it names a step while claiming to be silent). The same
-  applies to reading reference docs: "I'll start by reading the flow
-  docs" is a preamble. Silently means no preamble message at all — not
-  before running commands, not before reading files. Say nothing until
-  you have something the user needs to act on (an ask, a red result)
-  or the final summary.
-
-Instead:
-
-- **When everything passes**, give a short recap in the final summary
-  (see "Final summary" below): a short, emoji-based checklist — JF CLI
-  & Config, JFrog MCP Plugin, Project & AI Catalog — so the user sees
-  the end state of every check at a glance, not raw step numbers and
-  not the Node.js check (an implementation detail, not user-facing).
-- **When something is red**, say *what's wrong in plain English* and
-  *what the user needs to do next*, in one or two sentences. Show the
-  exact command they need to run (they must see what they're
-  approving).
-- **On failure, the raw detector error line is fair game** to include
-  verbatim as a debugging aid — one line, without the JSON wrapper.
-
-The rest of this file documents the flow **for you (the model)**, not
-for the user.
-
-## Invoking scripts: avoid the red "Error" framing
-
-Every detector command shown below signals red/ask states via a
-non-zero exit code, by design — append `; rc=$?; true` when invoking
-any of them. **`rc=$?` is not optional**: every Step's branch table
-below keys off the exit code, and a bare `; true` throws it away, so
-every red and ask silently reads as green. **Read
-`references/script-invocation.md` in full** before running any command
-in this walk — the exact pattern and why it's required, not optional
-background.
-
-## Flow
-
-**Follow this flow literally.** Every decision node is covered by a
-detector or fix script below; every user-facing prompt uses the exact
-wording documented in the corresponding step. Do not reorder, do not
-skip, do not narrate the diagram to the user. Read
-`references/flow-diagram.md` for the full flowchart before starting a
-walk — the same logic as the Steps below, drawn as a map.
+- **Customer-facing output** — the user never sees step numbers, raw
+  JSON/exit codes, or branch-selection reasoning; only asks, failures
+  in plain English, and the final summary.
+- **Invoking scripts: exit codes are signal, not failure** — every
+  detector needs `; rc=$?; true` appended, and every Step's branch
+  table below keys off that captured exit code.
+- **Flow** — follow the flow literally, no reordering or skipping; see
+  `references/flow-diagram.md` for the full map.
 
 ## The checklist, in order
 
@@ -198,16 +164,19 @@ walk — the same logic as the Steps below, drawn as a map.
 2. **JFrog CLI (`jf`) installed?** — `scripts/jfrog-detect-jf-cli.mjs`
 3. **`jf` connected to a server?** — `scripts/jfrog-detect-jf-config.mjs`
 4. **Server reachable + credentials valid?** — `scripts/jfrog-detect-server-ping.mjs [server-id]`
-5. **JFrog MCP plugin file has a jfrog entry?** — `scripts/jfrog-detect-jfrog-mcp.mjs [server-id]`
+5. **JFrog MCP plugin file has a jfrog entry?** — `scripts/jfrog-detect-jfrog-mcp.mjs [server-id]`, then **is the JFrog MCP server enabled on this JPD?** — `scripts/jfrog-detect-jfrog-mcp-responding.mjs [server-id]` (non-blocking)
+   - **5b (OpenCode only): MCP auth token present?** —
+     `scripts/jfrog-detect-opencode-mcp-auth.mjs`, runs only when Step 5
+     exits 0 and the harness is OpenCode
 6. **Project resolved?** — `scripts/jfrog-detect-project.mjs [server-id] [project-input]`
 7. **AI Catalog reachable & user entitled?** — `scripts/jfrog-detect-catalog-runtime.mjs [server-id]`
 8. **Claude agent-plugin marketplace registered?** — `scripts/jfrog-add-claude-marketplace.mjs [server-id] [project-key]`, Claude Code only
 
-Run detectors in this exact order and stop at the first non-green
-result — except Step 5 going red/error (see Step 5), Step 6 hitting
-its one-retry cap (see Step 6), Step 7's "not entitled" and "catalog
-unreachable" outcomes (see Step 7), and Step 8 entirely (see Step 8),
-all four non-blocking. Step
+Run detectors in this exact order and stop at the first non-passing
+result — except Step 5 going into failure/error (see Step 5), Step 5b entirely
+(see Step 5b), Step 6 hitting its one-retry cap (see Step 6), Step 7's
+"not entitled" and "catalog unreachable" outcomes (see Step 7), and
+Step 8 entirely (see Step 8), all five non-blocking. Step
 1 has no script — a Node script can't verify Node exists — so every
 step after it is written in Node and can assume Node is present. The
 JPD URL is read directly from
@@ -253,20 +222,20 @@ regardless of everything else.
 
 Read the output yourself, no JSON to parse:
 
-- Either command errors (e.g. `command not found: node`) → **red**:
+- Either command errors (e.g. `command not found: node`) → **not usable**:
   Node.js (or `npx`) is not installed / the install is broken.
 - `node --version` prints a version like `v16.2.0` → parse the major
-  number yourself. `< 18` → **red**: "Node.js `<version>` is too old —
+  number yourself. `< 18` → **too old**: "Node.js `<version>` is too old —
   jfrog-init requires Node ≥ 18."
-- `node --version` ≥ 18 **and** `npx --version` succeeds → **green** →
-  proceed to Step 2.
+- `node --version` ≥ 18 **and** `npx --version` succeeds → proceed to
+  Step 2.
 
 **Never paste the raw shell output.** Translate to plain English —
 "npx is not installed" not `` `command not found` ``, "Node.js v16 is
 too old" not the version string verbatim. The raw output is for your
 reasoning, not for the user.
 
-On red, **stop and read `references/node-install-prompt.md` in full
+On failure, **stop and read `references/node-install-prompt.md` in full
 before responding to the user.** It has the exact `AskUserQuestion`
 payload, the forbidden phrases, and the install commands — required
 behavior, not optional background. Even on the install path there's no
@@ -279,15 +248,15 @@ install is a bash/PowerShell command the model runs directly.
 node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jf-cli.mjs"; rc=$?; true
 ```
 
-- **Exit 0 (green)** → proceed to Step 3.
-- **Exit 1 (red), `reason: "missing"`** → `jf` not found on PATH → **stop
+- **Exit 0** → proceed to Step 3.
+- **Exit 1, `reason: "missing"`** → `jf` not found on PATH → **stop
   and read `references/jf-cli-install-prompt.md` in full** — required
   behavior, not optional background.
-- **Exit 1 (red), `reason: "broken"`** → `jf` is on PATH but hung or
+- **Exit 1, `reason: "broken"`** → `jf` is on PATH but hung or
   failed to run → **stop and read `references/jf-cli-install-prompt.md`
   in full** — it has a separate payload for this case; required
   behavior, not optional background.
-- **Exit 1 (red), `reason: "outdated"`** → `jf` installed but below the
+- **Exit 1, `reason: "outdated"`** → `jf` installed but below the
   required minimum version → **stop and read
   `references/jf-cli-update-prompt.md` in full** — required behavior,
   not optional background.
@@ -315,8 +284,8 @@ If multiple servers are configured with none marked default, that
 ambiguity is surfaced starting at Step 4, not here — see "Resolving
 `<server-id>` for Steps 4-7" above.
 
-- **Exit 0 (green)** → proceed to Step 4.
-- **Exit 1 (red)** → `jf` is installed but not connected to any
+- **Exit 0** → proceed to Step 4.
+- **Exit 1** → `jf` is installed but not connected to any
   server. **Stop and read `references/jf-config-auth-picker.md` in
   full before responding to the user** — the Step 3 section has the
   exact web-login-vs-token `AskUserQuestion`, this skill's own local
@@ -337,33 +306,53 @@ blocks) — required behavior, not optional background.
 
 ## Step 5: JFrog MCP plugin file has a jfrog entry?
 
-If you are Kiro or Kiro CLI, prefix the command with
-`JFROG_INIT_HARNESS=kiro` or `JFROG_INIT_HARNESS=kiro-cli` on the
-same line — no other harness needs this. Silent, like every other
-setup command in this walk.
+If you are Kiro, Kiro CLI, Copilot in VS Code, or Devin, run only the matching command below. Silent, like every other setup command in this walk.
+(Devin identifies itself from system instructions; no env var carries the signal.)
 
 ```bash
 JFROG_INIT_HARNESS=kiro node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs" "[server-id]"; rc=$?; true
 JFROG_INIT_HARNESS=kiro-cli node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs" "[server-id]"; rc=$?; true
-node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs" "[server-id]"; rc=$?; true
+JFROG_INIT_HARNESS=vscode node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs" "[server-id]"; rc=$?; true
+JFROG_INIT_HARNESS=devin node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs" "[server-id]"; rc=$?; true
+  node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jfrog-mcp.mjs" "[server-id]"; rc=$?; true
 ```
 
 Pass the same `<server-id>` already resolved for Step 4 (empty string
 if Step 4 resolved silently via default/single-server) — this reuses
 it for the placeholder fix instead of re-resolving from scratch.
 
-**Read-only against the JFrog plugin's own `mcp.json` — with one
-exception: automatic placeholder substitution** of an unresolved
-`${JFROG_PLATFORM_URL}` / `${JFROG_URL}` with the real JPD URL from
-`jf config` (plus, for kiro-cli, adding the `jfrog` entry to
-`~/.kiro/settings/mcp.json` when no plugin has put one there — see
+**Read-only** against the JFrog plugin's `mcp.json`, with exceptions: substituting
+an unresolved `${JFROG_PLATFORM_URL}` / `${JFROG_URL}` placeholder (Cursor / VS Code /
+Claude Code), writing a `mcp.jfrog` entry on OpenCode (which has no plugin-owned file),
+and adding the `jfrog` entry to `~/.kiro/settings/mcp.json` for kiro-cli (see
 `references/mcp-plugin-config.md`).
 
-**Stop and read `references/mcp-plugin-config.md` in full** — exactly
-how the substitution works, the per-harness plugin-config paths, and
-the required exit-code branches (Exit 1/3 non-blocking, Exit 2 the one
-outcome that still blocks) — required behavior, not optional
-background.
+**Stop and read `references/mcp-plugin-config.md` in full** — substitution mechanics,
+per-harness paths, exit-code branches (Exit 1/3 non-blocking, Exit 2 the one that
+still blocks), and its **MCP-responding probe** (server enabled + signed in) —
+required behavior, not optional.
+
+## Step 5b (OpenCode only): MCP auth token present?
+
+Runs only when Step 5 exits **0** — the exit code, not the JSON
+`status` field — and the harness is OpenCode. Determine the harness
+the same way Step 8 does, with `detectHarness()`:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/jfrog-resolve-mcp-config.mjs" --harness
+```
+
+If it returns anything other than `opencode`, or Step 5 didn't exit 0,
+**skip this step silently** — same treatment as Step 8's preconditions
+below. Otherwise, run:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-opencode-mcp-auth.mjs"; rc=$?; true
+```
+
+**Stop and read `references/mcp-plugin-config.md` in full** for what
+this checks, why a non-empty auth-file key isn't proof of a working
+token, and the exit-code meanings.
 
 ## Step 6: Project resolved?
 
@@ -390,8 +379,8 @@ the forbidden-phrasing rules for each — this is required behavior for
 the step, not optional background.
 
 **Stop and read `references/project-resolution-branches.md` in full**
-for exactly how to branch on the detector's exit code (green / ask /
-red with the one-retry cap / error) — required behavior, not optional
+for exactly how to branch on the detector's exit code (success / ask /
+failure with the one-retry cap / error) — required behavior, not optional
 background.
 
 ## Step 7: AI Catalog reachable & user entitled?
@@ -408,14 +397,14 @@ required behavior, not optional background.
 
 ## Step 8: Claude agent-plugin marketplace registered?
 
-Two preconditions, in this order. **Step 7 must have been green** — the
+Two preconditions, in this order. **Step 7 must have passed (Exit 0)** — the
 marketplace is served by the same AI Catalog that Step 7 probes, so
-after a non-blocking red there (unreachable, or not entitled) there is
+after a non-blocking failure there (unreachable, or not entitled) there is
 nothing to register. Then, **Claude Code only** — check the current
 harness by reusing `detectHarness()` from
-`scripts/jfrog-resolve-mcp-config.mjs` (the same export Step 5 already
+`scripts/jfrog-resolve-mcp-config.mjs` (the same export Step 5b already
 uses), e.g.
-`node -e "import('${CLAUDE_SKILL_DIR}/scripts/jfrog-resolve-mcp-config.mjs').then(function(m){console.log(m.detectHarness())})"`.
+`node "${CLAUDE_SKILL_DIR}/scripts/jfrog-resolve-mcp-config.mjs" --harness`.
 
 If either precondition fails, **skip this step silently** — never run
 the script below, no `AskUserQuestion`, no note anywhere, not even in
@@ -436,16 +425,16 @@ canonical project key, or an empty string if Step 6 resolved none.
 acting on the exit code** — required behavior, not optional
 background.
 
-- **Exit 0 (green)** → success. The last stdout line is
+- **Exit 0** → success. The last stdout line is
   `Successfully added marketplace: <marketplace-name>` — extract
   `<marketplace-name>` for the Final Summary's trailing line.
-- **Exit 1 or 3 (red)** → non-blocking failure. Nothing beyond the Final
+- **Exit 1 or 3** → non-blocking failure. Nothing beyond the Final
   Summary's ⚠️ line, and never volunteer which cause it was.
 
 ## Final summary
 
 **Persist the walk's state before rendering any outcome below.**
-Whenever Steps 1-4 are green (regardless of what Step 5/6/7 reported),
+Whenever Steps 1-4 all pass (regardless of what Step 5/6/7 reported),
 run:
 
 ```bash
@@ -453,8 +442,8 @@ node "${CLAUDE_SKILL_DIR}/scripts/jfrog-state-file.mjs" set "<server-id>" "<jpdU
 ```
 
 using the server-id resolved earlier in this walk, Step 4's own
-`jpdUrl` field (present on its green JSON result), and Step 6's project
-key — its `resolvedKey` on green, or `""` if Step 6 never resolved one
+`jpdUrl` field (present in its JSON result when Step 4 passes), and Step 6's project
+key — its `resolvedKey` when Step 6 resolves one, or `""` if it never did
 (ambiguous input, 404, 403, or the one-retry cap was hit). This is the
 only thing that writes `~/.jfrog/setup.json` when the walk is followed
 step-by-step; it's the same file Step 6's "reuse `<KEY>`?" prompt
@@ -465,87 +454,9 @@ persist. (Running the whole walk via `jfrog-detect-all.mjs` instead —
 see "Running everything at once" below — does this same write itself;
 don't call both.)
 
-**Give the user a short recap, not the raw checklist.** See
-"Customer-facing output" above — no step numbers, no raw JSON. Render a
-short, emoji-based checklist, not a prose paragraph or a five-line
-plain-text list. Three grouped lines cover all five checks:
-
-- **JF CLI & Config** — Steps 2-4 (`jf` installed and connected to a
-  server). Always fully resolved here — this checklist only renders
-  once Steps 1-4 all passed (see "Anything else red" below for the
-  alternative).
-- **JFrog MCP Plugin** — Step 5.
-- **Project & AI Catalog** — Steps 6 and 7 together.
-
-Skip Node.js (Step 1) — implementation detail, not user-facing.
-
-**Rules for the checklist:**
-1. Do **not** use the word "done" anywhere in it.
-2. Keep those checks in exactly these three grouped lines — never
-   expand back out to five.
-3. All three groups fully resolved → use this exact format, verbatim:
-
-   > ✨ **JFrog initialization complete!**
-   > ✅ JF CLI & Config
-   > ✅ JFrog MCP Plugin
-   > ✅ Project & AI Catalog
-
-4. A group with something outstanding gets ⚠️ instead of ✅, plus a
-   short fact after an em dash:
-
-   > ✨ **JFrog initialization complete!**
-   > ✅ JF CLI & Config
-   > ⚠️ JFrog MCP Plugin — not configured
-   > ✅ Project & AI Catalog
-
-   For the merged **Project & AI Catalog** line, if only one of the two
-   is outstanding name just that one; if both are, separate them with a
-   semicolon: `⚠️ Project & AI Catalog — project not set up yet; catalog
-   access not entitled`.
-
-5. **Step 8 gets a fourth checklist line, but only when it ran** —
-   nothing appears when it was skipped:
-   - **Success** — `✅ JFrog Marketplace`, plus this trailing sentence
-     after the checklist block, in this exact wording:
-
-     > Added the JFrog marketplace `<marketplace-name>` to Claude Code.
-     > Browse available plugins with `/plugins`, or install directly with
-     > `claude plugin install <plugin>@<marketplace-name>`
-
-   - **Red** — `⚠️ JFrog Marketplace — not registered`, and no trailing
-     sentence.
-
-Never phrase a ⚠️ line as a failure or as something the user needs to
-fix before continuing — all of them are non-blocking by design. The
-short fact after the em dash is the same underlying cause this skill
-has always surfaced, just worded without "pending":
-
-- **Step 5 red/error (MCP plugin not configured):** `not configured`.
-  If the user asks why or how to fix it, that's when the specific cause
-  from Step 5's `detail` comes in — either run
-  `jfrog-reinstall-jfrog-plugin.mjs` (see Step 5) for the per-harness
-  reinstall remedy, or point at resolving `jf config`, matching
-  whichever cause Step 5 actually reported.
-- **Step 6 hit its retry cap (no project resolved):** `project not set
-  up yet`. If the user asks, mention they can pick one whenever they're
-  ready. The server/JPD are still recorded to the state file either way
-  (see the persistence step at the top of this section); a project
-  picked in an earlier walk, if any, is left as-is rather than cleared.
-- **Step 7 returned exit 4 (not entitled):** `catalog access not
-  entitled`. If the user asks for the fix: ask your JFrog admin for the
-  "AI Catalog Read" role to browse or install MCPs from the catalog.
-- **Step 7 returned exit 1 (catalog not hosted / unreachable):**
-  `catalog not reachable on this JPD`. No fix instruction; there may be
-  nothing to fix (this JPD may simply not host the AI Catalog).
-- **Something happened this walk** (Node.js/`jf` CLI installed, `jf
-  config` connected, a project resolved in Step 6, an MCP placeholder
-  substituted in Step 5, etc.): still the same checklist — the action
-  itself isn't called out per-line, ✅ is ✅ regardless of whether it
-  needed fixing this walk.
-- **Anything else red** (Steps 1-4 not all green): one or two sentences
-  naming what's blocking and what to do next, no checklist — there's
-  nothing to check off yet. Include the raw detector error line if it
-  helps debug, without the JSON wrapper.
+**Read `references/final-summary-rendering.md` in full** for the exact
+recap checklist format, the ⚠️ wording rule per outstanding step, and
+Step 8's extra checklist line.
 
 ## Running everything at once
 
@@ -555,38 +466,23 @@ fields, and the state-file write behavior.
 
 ## Non-goals (out of scope for this skill)
 
-- Installing the JFrog IDE plugin, or replacing its auto-config.
-- Installing the VS Code hook.
-- A first-MCP wizard for an empty catalog.
-- Persisting the picked **project key** to `JF_PROJECT` or any shell
-  profile. Step 6 asks every walk and threads the pick forward as a
-  positional argument only — nothing about project selection ever
-  touches a shell profile. (Two other, unrelated things in this walk
-  *do*: Step 1's `nvm`-based Node install, and Step 2's Plan C fallback
-  when npm itself isn't usable — both append one PATH line to the
-  user's shell rc file, disclosed up front in the install consent
-  prompts, see `node-install-prompt.md` / `jf-cli-install-prompt.md`.
-  Plans A/B of Step 2 — the common case — don't touch a shell profile
-  at all, relying on npm's own global bin directory instead.)
-- Granting AI Catalog roles/permissions — Step 7 only instructs.
-- Storing access tokens to disk, logging them, or printing them.
-  Step 4's authenticated check keeps the credential inside `jf`'s own
-  process (`jf rt ping`); Steps 6 and 7 extract it from `jf config
-  export` only in memory, for one `fetch` call. Step 3/4's token-based
-  `jf config` path (see `references/jf-config-auth-picker.md`) never
-  touches this skill or the model at all — the user runs that command
-  themselves. **Step 8 is the one deliberate exception** — it writes
-  the token to `~/.netrc`; see `references/marketplace-setup.md`.
+**Read `references/out-of-scope.md` in full** for the exact list — IDE
+plugin/VS Code hook install, first-MCP wizard, project-key
+persistence, AI Catalog role grants, and access-token handling
+(Step 8's `~/.netrc` write is the one deliberate exception).
+
 
 ## Before you run `/jfrog-init` — checklist
 
 [At a glance](#at-a-glance-always-read-core) invariants:
 
-- [ ] Walk Steps 1-8 in exact order; stop at the first non-green result
-      (Step 5 red/error, Step 6's retry cap, Step 7 "not entitled" or
-      "unreachable", and Step 8 entirely are non-blocking)
-- [ ] Every detector invocation appends `; rc=$?; true` — never a bare
-      `; true`
+- [ ] Walk Steps 1-8 in exact order; stop at the first non-passing result
+      (Step 5's failure/error outcomes, Step 5b entirely, Step 6's retry cap, Step 7
+      "not entitled" or "unreachable", and Step 8 entirely are
+      non-blocking)
+- [ ] Every detector invocation captures then forces success (`; rc=$?;
+      true` bash / `; $rc=$LASTEXITCODE; exit 0` PowerShell) — never a
+      bare success-forcer with no capture
 - [ ] `AskUserQuestion` before auto-installing Node (Step 1) or `jf`
       (Step 2); picker for web-login vs. token (Step 3/4); picker for
       project selection (Step 6)
@@ -594,7 +490,7 @@ fields, and the state-file write behavior.
       branch-reasoning surfaced to the user
 - [ ] `<server-id>` for Steps 4-8 comes only from the shared resolver —
       never invented, never `jf`'s own fallback
-- [ ] Steps 1-4 green → `jfrog-state-file.mjs set <server-id> <jpdUrl>
+- [ ] Steps 1-4 all pass → `jfrog-state-file.mjs set <server-id> <jpdUrl>
       <project-key>` before rendering the final summary
 - [ ] Never store, log, or print an access token — except Step 8's
       `~/.netrc` write

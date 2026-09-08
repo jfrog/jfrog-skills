@@ -18,6 +18,8 @@
 //   3. jf server configured -> jfrog-detect-jf-config.mjs
 //   4. server reachable     -> jfrog-detect-server-ping.mjs <server-id>
 //   5. jfrog MCP            -> jfrog-detect-jfrog-mcp.mjs
+//   5b. OpenCode MCP auth   -> jfrog-detect-opencode-mcp-auth.mjs
+//       (only when Step 5 is green AND detectHarness() === "opencode")
 //   6. project resolved     -> jfrog-detect-project.mjs
 //   7. AI Catalog + entitled -> jfrog-detect-catalog-runtime.mjs <server-id>
 //
@@ -46,6 +48,10 @@
 // still blocks — every step from here on needs a resolved server-id,
 // so there's nothing to skip ahead to.
 //
+// It also probes whether the JFrog MCP server is ENABLED on the JPD (when an
+// admin hasn't turned it on the endpoint has no OAuth challenge — a bare 403
+// on SaaS, or 404 self-managed) — non-blocking, via `mcpResponding`.
+//
 // Step 6 (project) going red (no match / not entitled / ambiguous
 // match — exit 1 only) is ALSO non-blocking here — this script makes
 // exactly one resolution attempt per invocation; the interactive walk
@@ -63,7 +69,8 @@
 // (exit 2, "ask") still blocks, same reasoning as Step 5.
 //
 // Exit 0 -> Steps 1-4 green (see catalogEntitled / mcpConfigured /
-//           projectResolved for the three non-blocking gaps)
+//           mcpAuthed / mcpResponding / projectResolved for the five
+//           non-blocking gaps)
 // Exit 1 -> a check failed / went red / requires action
 
 import { emit, jfAvailable, jfConfigShow, urlForServer, normalizeJpdUrl } from "./lib/jf.mjs";
@@ -73,6 +80,9 @@ import { detectJfCli } from "./jfrog-detect-jf-cli.mjs";
 import { detectJfConfig } from "./jfrog-detect-jf-config.mjs";
 import { detectServerPing } from "./jfrog-detect-server-ping.mjs";
 import { detectJfrogMcp } from "./jfrog-detect-jfrog-mcp.mjs";
+import { detectHarness } from "./jfrog-resolve-mcp-config.mjs";
+import { detectOpencodeMcpAuth } from "./jfrog-detect-opencode-mcp-auth.mjs";
+import { detectJfrogMcpResponding } from "./jfrog-detect-jfrog-mcp-responding.mjs";
 import { detectProject } from "./jfrog-detect-project.mjs";
 import { detectCatalogRuntime } from "./jfrog-detect-catalog-runtime.mjs";
 import { setStateForServer } from "./jfrog-state-file.mjs";
@@ -113,6 +123,9 @@ if (overall === 0 && (await detectServerPing(SERVER_ID)) !== 0) overall = 1;
 const steps1To4Passed = overall === 0;
 
 let mcpConfigured = true;
+// "not_applicable" (not a boolean) — this check never runs outside
+// OpenCode; only the OpenCode branch below sets "ok"/"missing".
+let mcpAuthed = "not_applicable";
 if (overall === 0) {
   const mcpCode = detectJfrogMcp(SERVER_ID);
   if (mcpCode === 2) {
@@ -121,6 +134,25 @@ if (overall === 0) {
     overall = 1;
   } else if (mcpCode !== 0) {
     mcpConfigured = false;
+  } else if (detectHarness() === "opencode") {
+    // Step 5b: OpenCode's `mcp.jfrog` entry also needs its own OAuth
+    // token before MCP tools work — only checked here (never blocks)
+    // once Step 5 itself has come back green.
+    mcpAuthed = detectOpencodeMcpAuth() === 0 ? "ok" : "missing";
+  }
+}
+
+// Is the JFrog MCP server enabled on this JPD? (403/404 = an admin hasn't.)
+let mcpResponding = true;
+let mcpRespondingReason;
+if (overall === 0) {
+  const respCode = await detectJfrogMcpResponding(SERVER_ID);
+  if (respCode === 4) {
+    mcpResponding = false;
+    mcpRespondingReason = "not_enabled";
+  } else if (respCode !== 0) {
+    mcpResponding = false;
+    mcpRespondingReason = "unreachable";
   }
 }
 
@@ -224,6 +256,9 @@ if (overall === 0) {
       catalogEntitled,
       ...(catalogReason ? { catalogReason } : {}),
       mcpConfigured,
+      mcpAuthed,
+      mcpResponding,
+      ...(mcpRespondingReason ? { mcpRespondingReason } : {}),
       projectResolved,
     })
   );

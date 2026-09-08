@@ -57,7 +57,11 @@ node "<skill_path>/scripts/jfrog-agent-guard-env-probe.mjs"
   chain: existing Agent Guard MCP entries (any harness config file per
   [harness-common.md](harness-common.md); `_JF_ARGS` → `project=`) →
   `JF_PROJECT` env var → ASK the user. If none resolves, STOP and ask — NEVER
-  guess, NEVER assume `default`, NEVER invent JFrog project keys.
+  guess, NEVER assume `default`, NEVER invent JFrog project keys. There is no
+  platform-wide / project-less mode: when you ask, explain a real key is
+  required, prompt once (you may suggest the resolved candidates), and never
+  offer a "no project" / "platform-wide" / "skip" option. If the key is
+  rejected, re-prompt once — do not fall back to a project-less call.
 
 - **`<SERVER_ID>` is auto-resolvable.** This extends the base skill's
   [server selection rules](../../jfrog/SKILL.md#server-selection-rules-mandatory)
