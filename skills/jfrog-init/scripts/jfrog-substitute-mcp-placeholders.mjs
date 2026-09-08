@@ -1,44 +1,18 @@
 #!/usr/bin/env node
-// Rewrites a placeholder-style env-var reference in the JFrog plugin's
-// mcp.json — specifically the `jfrog` entry's `.url` (nested under
-// `mcpServers` on every harness but Codex, which has no wrapper) — with
-// the real JPD URL from `jf config`. This is the ONLY code path in
-// /jfrog-init that writes to the plugin-owned mcp.json.
-//
-// Scoped to that one field (rather than a file-wide text replace) so an
-// unrelated MCP server entry or JSON value that happens to contain the
-// same placeholder text is never touched.
-//
-// Placeholders handled (`$VAR`, `${VAR}`, and Codex's `<VAR>` forms):
-//   - JFROG_PLATFORM_URL
-//   - JFROG_URL
-//
-// The substitution normalizes the URL to the JPD root before writing, so
-// `"url": "https://${JFROG_PLATFORM_URL}/mcp"` becomes
-// `"url": "https://acme.jfrog.io/mcp"` regardless of what shape `.url`
-// had in `jf config`.
-//
-// Idempotent: no matching placeholder = no write, exit 0. Atomic: write
-// goes to a temp file next to the target and is renamed into place.
-// Note: rewrites via JSON.parse/stringify (2-space indent), so unrelated
-// formatting in the plugin's file is not preserved byte-for-byte.
-//
-// Exported as substituteMcpPlaceholders() — a pure function, no stdout
-// writes — so jfrog-detect-jfrog-mcp.mjs can call it in-process instead of
-// shelling out to a `node` subprocess and re-parsing its stdout, the same
-// in-process pattern jfrog-resolve-jf-server.mjs/jfrog-resolve-mcp-config.mjs
-// use. The CLI entry point below is a thin wrapper around the same function.
+// Replaces $JFROG_PLATFORM_URL / $JFROG_URL placeholders in the jfrog entry's
+// url field (`mcpServers.jfrog`, bare `jfrog` on Codex, or `mcp.jfrog` on
+// OpenCode) with the real JPD URL from `jf config`. Atomic write, idempotent,
+// symlink-safe.
 //
 // Usage: node jfrog-substitute-mcp-placeholders.mjs <mcp-json-path> [server-id]
 //
-// Exit 0 -> substituted (or no substitution needed)
-// Exit 1 -> no jf server configured, or resolved server-id has no url
-// Exit 2 -> multiple jf servers configured, none marked default, no
-//           server-id passed — ambiguous, caller must ask the user
-// Exit 3 -> read/write error, or jf missing
+// Exit 0 -> substituted (or no placeholder found)
+// Exit 1 -> no jf server configured, or server-id has no url
+// Exit 2 -> ambiguous server — caller must ask
+// Exit 3 -> read/write error or jf missing
 
-import { existsSync, readFileSync, realpathSync, writeFileSync, renameSync, statSync, chmodSync, unlinkSync } from "node:fs";
-import { emit as emitJf, isMainModule, jfAvailable, jfConfigShow, urlForServer, normalizeJpdUrl, mcpPlaceholderRegexes, jfrogMcpEntry, jfrogMcpUrl, hasMcpPlaceholder, askServerResult, describeJfUnavailable } from "./lib/jf.mjs";
+import { existsSync, readFileSync, writeFileSync, renameSync, statSync, chmodSync, unlinkSync, realpathSync } from "node:fs";
+import { emit as emitJf, isMainModule, jfAvailable, jfConfigShow, urlForServer, normalizeJpdUrl, mcpPlaceholderRegexes, jfrogMcpEntry, hasMcpPlaceholder, askServerResult, describeJfUnavailable } from "./lib/jf.mjs";
 import { resolveJfServer } from "./jfrog-resolve-jf-server.mjs";
 
 // Result shape: { exitCode, status, detail, candidates? } — mirrors the
@@ -67,15 +41,13 @@ export function substituteMcpPlaceholders(target, serverIdOverride) {
     return { exitCode: 3, status: "error", detail: "target file is not valid JSON — refusing to modify" };
   }
 
-  const currentUrl = jfrogMcpUrl(parsed);
+  const entry = jfrogMcpEntry(parsed);
+  const currentUrl = entry !== null && typeof entry?.url === "string" ? entry.url : null;
 
   if (currentUrl === null) {
     return { exitCode: 0, status: "green", detail: "no jfrog entry url present — nothing to substitute" };
   }
 
-  // Checked before resolving a jf server at all — an unresolvable/ambiguous
-  // server shouldn't turn a jfrog.url that has no placeholder into a red/ask
-  // result; there's nothing here that needs the server to fix.
   if (!hasMcpPlaceholder(currentUrl)) {
     return { exitCode: 0, status: "green", detail: "no placeholder found — nothing to substitute" };
   }
@@ -100,14 +72,10 @@ export function substituteMcpPlaceholders(target, serverIdOverride) {
 
   const { withScheme, bare } = mcpPlaceholderRegexes();
 
-  // Both forms replace the full match with jpdUrl itself (which already
-  // carries the correct scheme) rather than preserving whatever scheme
-  // literally preceded the placeholder in the plugin's mcp.json — that text
-  // reflects the plugin's shipped template, not the real JPD's scheme.
   let newUrl = currentUrl.replace(withScheme, () => jpdUrl);
   newUrl = newUrl.replace(bare, () => jpdUrl);
 
-  jfrogMcpEntry(parsed).url = newUrl;
+  entry.url = newUrl;
   const rewritten = JSON.stringify(parsed, null, 2) + "\n";
 
   const real = realpathSync(target);
@@ -128,15 +96,7 @@ export function substituteMcpPlaceholders(target, serverIdOverride) {
     chmodSync(tmp, statSync(real).mode & 0o777);
     renameSync(tmp, real);
   } catch (err) {
-    // A run killed between the write and the rename (Ctrl-C, OOM, harness
-    // timeout) leaves tmp behind; the name is only unique per PID, so the
-    // next run to reuse that PID would otherwise hit EEXIST here forever.
-    // Same cleanup as jfrog-install-jf-cli.mjs's direct-download temp write.
-    try {
-      unlinkSync(tmp);
-    } catch {
-      // Never created, already renamed, or not ours to remove.
-    }
+    try { unlinkSync(tmp); } catch { /* not created, already renamed, or not ours */ }
     return { exitCode: 3, status: "error", detail: `could not write ${target}: ${err.message}` };
   }
 
@@ -154,8 +114,5 @@ if (isMainModule(import.meta.url)) {
     detail: result.detail,
     ...(result.candidates ? { candidates: result.candidates } : {}),
   });
-  // Sets process.exitCode rather than calling process.exit() — a forced
-  // exit can truncate a still-draining stdout write, same reason every
-  // other script in this skill was already fixed this way.
   process.exitCode = result.exitCode;
 }

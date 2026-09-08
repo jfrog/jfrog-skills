@@ -82,7 +82,18 @@ export function resolveCommand(command) {
 // message; execFileSync discards stdout on failure. A killed child leaves status
 // null and both streams empty, so the reason goes into `out`.
 export function runCommand({ command, target, shell }, args, { timeoutMs }) {
-  const result = spawnSync(target, args, { encoding: "utf8", timeout: timeoutMs, shell });
+  // DEP0190 fires on every shell:true spawn with an args array. This
+  // function has no screening of its own — it's each caller's
+  // responsibility to validate its own args first (see claude.mjs's
+  // SHELL_UNSAFE check before calling this). Scoped to just this call.
+  const prevNoDeprecation = process.noDeprecation;
+  process.noDeprecation = true;
+  let result;
+  try {
+    result = spawnSync(target, args, { encoding: "utf8", timeout: timeoutMs, shell });
+  } finally {
+    process.noDeprecation = prevNoDeprecation;
+  }
   let out = `${result.stdout || ""}${result.stderr || ""}`;
   if (result.error) {
     out += result.error.code === "ETIMEDOUT"

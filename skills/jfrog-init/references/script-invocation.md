@@ -40,13 +40,40 @@ node --version; true
 npx --version; true
 ```
 
+## PowerShell hosts
+
+Some harnesses run Bash-tool commands through native PowerShell, not a
+POSIX shell (OpenCode on Windows is one) — there, `$?` isn't a numeric
+exit code and bare `true` doesn't exist, so `; rc=$?; true` throws
+`CommandNotFoundException`. Use the PowerShell equivalent instead:
+
+```powershell
+node "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-jf-cli.mjs"; $rc=$LASTEXITCODE; exit 0
+```
+
+`$LASTEXITCODE` is PowerShell's `$?`; `exit 0` plays `true`'s role.
+Swap this suffix in for every detector call when the Bash tool is
+PowerShell-backed — this is a shell property, not an OS one (Claude
+Code's Bash tool is a real POSIX shell even on Windows).
+
+The bare-`; true` commands above (`node --version`, `npx --version`, and
+`jfrog-reinstall-jfrog-plugin.mjs`) hit the same `true`-doesn't-exist
+problem, since nothing there needs `$rc` captured — swap in a bare `;
+exit 0` instead:
+
+```powershell
+node --version; exit 0
+npx --version; exit 0
+```
+
 ## What's deliberately not pre-approved
 
-`allowed-tools` in `SKILL.md` covers `node --version`, the six read-only
+`allowed-tools` in `SKILL.md` covers `node --version`, the seven read-only
 detectors named individually — `node
 "${CLAUDE_SKILL_DIR}/scripts/jfrog-detect-catalog-runtime.mjs"`,
 `jfrog-detect-jf-cli.mjs`, `jfrog-detect-jf-config.mjs`,
-`jfrog-detect-jfrog-mcp.mjs`, `jfrog-detect-project.mjs`, and
+`jfrog-detect-jfrog-mcp.mjs`, `jfrog-detect-jfrog-mcp-responding.mjs`,
+`jfrog-detect-opencode-mcp-auth.mjs`, `jfrog-detect-project.mjs`, and
 `jfrog-detect-server-ping.mjs` — and `node
 "${CLAUDE_SKILL_DIR}/scripts/jfrog-re*.mjs"` (the purely diagnostic
 `jfrog-reinstall-jfrog-plugin.mjs` and the two `jfrog-resolve-*.mjs`
@@ -70,18 +97,18 @@ lookups), `node
   itself writes `~/.jfrog/setup.json` on overall green (see the Final
   summary in `SKILL.md`), the same mutation `jfrog-state-file.mjs set`
   is excluded below for. PR review caught this; the fix was to enumerate
-  the six read-only detectors by exact filename instead of a wildcard,
+  the seven read-only detectors by exact filename instead of a wildcard,
   which also closes a path-traversal-shaped concern with the wildcard
   form (`jfrog-detect-*.mjs` has no anchor stopping `*` from matching
   path separators, unlike an exact filename).
-- `jfrog-substitute-mcp-placeholders.mjs` (the one script that edits the
-  plugin's `mcp.json` in place — see `mcp-plugin-config.md`). **Unlike
-  every other entry in this list, this exclusion is theoretical, not
-  operative**: `SKILL.md` never invokes this script as a standalone
+- `jfrog-substitute-mcp-placeholders.mjs` (edits the plugin's `mcp.json`
+  in place — see `mcp-plugin-config.md`). **Unlike every other entry in
+  this list, this exclusion is theoretical, not operative**: `SKILL.md`
+  never invokes this script as a standalone
   `node "${CLAUDE_SKILL_DIR}/scripts/jfrog-substitute-mcp-placeholders.mjs"`
   Bash command, so its absence from `allowed-tools` never actually
   gates anything. Its only real call site is the in-process import in
-  `jfrog-detect-jfrog-mcp.mjs` (itself one of the six explicitly-named
+  `jfrog-detect-jfrog-mcp.mjs` (itself one of the seven explicitly-named
   detectors above) — the harness's permission system approves Bash
   commands, not the function calls a pre-approved script makes once
   running, so the mutation executes with no prompt whenever Step 5 finds
@@ -113,12 +140,15 @@ and web-login already sit behind their own `AskUserQuestion` consent
 prompt, so the user has agreed before either runs.
 
 `jfrog-install-jf-cli.mjs`, `jfrog-substitute-mcp-placeholders.mjs`,
-`jfrog-state-file.mjs set`, and `jfrog-add-claude-marketplace.mjs` are
-excluded for a related but distinct reason: they're the four scripts in
-this directory that mutate something outside their own process (a
-downloaded binary made executable and run, the plugin's `mcp.json`, the
-setup state file, and `~/.netrc` plus Claude Code's own marketplace
-config, respectively) rather than just reading state and emitting JSON.
+`jfrog-write-opencode-mcp.mjs`, `jfrog-state-file.mjs set`, and
+`jfrog-add-claude-marketplace.mjs` are excluded for a related but
+distinct reason: they're the five scripts in this directory that mutate
+something outside their own process (a downloaded binary made executable
+and run, the plugin's `mcp.json`, the user's own OpenCode config — the
+first mutation targeting a personal file rather than a plugin-owned one
+— the setup state file, and `~/.netrc` plus Claude Code's own
+marketplace config, respectively) rather than just reading state and
+emitting JSON.
 A prior version of this grant covered every `*.mjs` in `scripts/`
 indiscriminately — PR review on this same branch pointed out that
 pre-approves running any of these without the model (or a
@@ -153,7 +183,13 @@ either is used — so the two are guaranteed byte-for-byte identical
 regardless of how deep the real install path is
 (`~/.agents/skills/jfrog-init`, several directories deeper under a
 Cursor plugin cache path, a `dev/dev-symlinks.sh` dev symlink, etc.),
-never something the model has to resolve itself.
+never something the model has to resolve itself. On a harness that
+doesn't substitute it (Cursor, Codex, OpenCode), a model that forgets
+to replace it fails silently rather than loudly: both bash and
+PowerShell expand an unset `${CLAUDE_SKILL_DIR}` to `""`, so the
+command's path quietly collapses to a wrong one (e.g. `Cannot find
+module '/scripts/jfrog-detect-jf-cli.mjs'`) instead of erroring on the
+substitution itself.
 
 That guarantee is also why each pattern below anchors on a literal
 `node "${CLAUDE_SKILL_DIR}` immediately, e.g. `Bash(node
@@ -191,18 +227,18 @@ Bash patterns are inherently fragile in general and recommend
 PreToolUse hooks for anything that needs a hard guarantee — not
 available to a skill shipped as a plain directory. Treat this anchor as
 a real improvement, not a proof of soundness against every possible
-`node` flag combination. And treat it as Claude-Code-specific: Cursor
-doesn't consult `allowed-tools` for Bash approval at all (a separate
-mechanism, `.cursor/cli.json`'s own `Shell(...)` rules), so every
-command in this file still raises its own prompt there regardless of
-how this pattern is written.
+`node` flag combination. And treat it as Claude-Code-specific: neither
+Cursor nor Codex consults `allowed-tools` for Bash approval at all
+(Cursor has its own separate mechanism, `.cursor/cli.json`'s
+`Shell(...)` rules), so every command in this file still raises its
+own prompt there regardless of how this pattern is written.
 
 So expect the harness to raise its own approval prompt for every case
-listed at the top of this section — **except `jfrog-substitute-mcp-placeholders.mjs`**,
-whose mutation runs unattended via the in-process call from
-`jfrog-detect-jfrog-mcp.mjs` as documented above. Both outcomes are
-intended. Do not treat either as a misconfiguration, and do not suggest
-widening `allowed-tools` to silence the prompts, or adding a standalone
-`allowed-tools` entry for the substituter to "fix" its silence — that
-would just pre-approve a second, redundant call path into the same
-mutation.
+listed at the top of this section — **except `jfrog-substitute-mcp-placeholders.mjs`
+and `jfrog-write-opencode-mcp.mjs`**, both of which run unattended via
+in-process calls from `jfrog-detect-jfrog-mcp.mjs` as documented above.
+All outcomes are intended. Do not treat any of them as a misconfiguration,
+and do not suggest widening `allowed-tools` to silence the prompts, or
+adding standalone `allowed-tools` entries for the substituter or writer
+to "fix" their silence — that would just pre-approve a second, redundant
+call path into the same mutations.

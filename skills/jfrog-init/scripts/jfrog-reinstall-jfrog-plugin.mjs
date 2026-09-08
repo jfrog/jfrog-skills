@@ -9,6 +9,9 @@
 // in this skill that does edit the file in place; this script is only
 // reached when that auto-fix isn't applicable.)
 //
+// OpenCode has no plugin-owned mcp.json — remedy differs: add the JFrog
+// plugin or paste the mcp.jfrog entry manually (see mcp-plugin-config.md).
+//
 // Usage: node jfrog-reinstall-jfrog-plugin.mjs
 // Always exits 0 after printing.
 
@@ -25,7 +28,31 @@ const resolved =
     ? { path: join(homedir(), ".kiro", "settings", "mcp.json") }
     : resolveMcpConfig();
 
-console.log(`The JFrog MCP entry lives inside the JFrog plugin's own mcp.json file.
+if (harness === "opencode") {
+  console.log(`OpenCode has no plugin-owned mcp.json — its JFrog plugin injects the
+mcp.jfrog entry into OpenCode's own config at startup. /jfrog-init writes
+that entry directly into your opencode.json[c] instead, sourced from
+\`jf config\`.
+
+If /jfrog-init sent you here, either:
+
+1. The JFrog OpenCode plugin itself isn't installed yet. Add it to your
+   opencode.json's "plugin" array:
+
+     {"plugin": ["@jfrog/opencode-jfrog-plugin"]}
+
+   Restart OpenCode, then re-run /jfrog-init.
+
+2. Your opencode.json[c] has no mcp.jfrog entry and /jfrog-init could not
+   write one automatically (most often because the file has comments and
+   isn't strict JSON). Add this yourself, using the real URL of your JPD:
+
+     {"mcp": {"jfrog": {"type": "remote", "url": "https://<your-jpd>/mcp", "enabled": true}}}
+
+   Restart OpenCode, then re-run /jfrog-init.
+`);
+} else {
+  console.log(`The JFrog MCP entry lives inside the JFrog plugin's own mcp.json file.
 This script never writes to it — it only diagnoses and prints the fix.
 
 If /jfrog-init sent you here, the plugin's mcp.json is missing, empty,
@@ -33,36 +60,36 @@ or otherwise invalid, and the fix is to reinstall or update the JFrog
 plugin in your IDE.
 `);
 
-switch (harness) {
-  case "claude":
-    console.log(`Claude Code:
+  switch (harness) {
+    case "claude":
+      console.log(`Claude Code:
   claude plugin uninstall jfrog-beta/jfrog   # if already installed
   claude plugin install jfrog-beta/jfrog
 
 After install, restart Claude Code, then re-run /jfrog-init.`);
-    break;
-  case "cursor":
-    console.log(`Cursor:
+      break;
+    case "cursor":
+      console.log(`Cursor:
   Open Cursor → Settings → Plugins (or Extensions) → search "JFrog" →
   Uninstall (if present) → Install. Restart Cursor.
   Then re-run /jfrog-init.`);
-    break;
-  case "vscode":
-    console.log(`VS Code:
+      break;
+    case "vscode":
+      console.log(`VS Code:
   code --uninstall-extension JFrog.jfrog-vscode-extension || true
   code --install-extension JFrog.jfrog-vscode-extension --force
 
 Restart VS Code, then re-run /jfrog-init.`);
-    break;
-  case "codex":
-    console.log(`Codex:
+      break;
+    case "codex":
+      console.log(`Codex:
   codex plugin remove jfrog@codex-plugin            # if already installed
   codex plugin marketplace add jfrog/codex-plugin   # skip if already configured
   codex plugin marketplace upgrade codex-plugin
   codex plugin add jfrog@codex-plugin
 
 Restart Codex, then re-run /jfrog-init.`);
-    break;
+      break;
   case "kiro":
     console.log(`Kiro IDE:
   Open the Powers panel → Add Custom Power → Import from GitHub →
@@ -76,6 +103,13 @@ Restart Codex, then re-run /jfrog-init.`);
   If /jfrog-init reports the file is invalid, open ~/.kiro/settings/mcp.json,
   fix the JSON (keep the other MCP server entries), then re-run /jfrog-init.`);
     break;
+  case "devin":
+    console.log(`Devin CLI:
+  devin plugins uninstall jfrog -y   # if already installed
+  devin plugins install jfrog/devin-plugin -y
+
+Restart the Devin session, then re-run /jfrog-init.`);
+    break;
   default:
     console.log(`Reinstall the JFrog plugin in whichever IDE you're using:
   Cursor:      Settings → Plugins → search "JFrog" → reinstall.
@@ -84,11 +118,12 @@ Restart Codex, then re-run /jfrog-init.`);
   Codex:       codex plugin marketplace add jfrog/codex-plugin && codex plugin add jfrog@codex-plugin
   Kiro:        Powers panel → Add Custom Power → Import from GitHub.
   Kiro CLI:    no reinstall needed — entry is created automatically by /jfrog-init.
+  Devin:       devin plugins install jfrog/devin-plugin -y
 
 Restart the IDE afterwards, then re-run /jfrog-init.`);
-}
+  }
 
-console.log(`
+  console.log(`
 Expected plugin-owned paths (for reference):
 
   Cursor:  ~/.cursor/plugins/cache/cursor-public/jfrog/<sha>/mcp.json
@@ -98,13 +133,18 @@ Expected plugin-owned paths (for reference):
            ($CODEX_HOME defaults to ~/.codex)
   Kiro:    ~/.kiro/powers/installed/jfrog-kiro-power/mcp.json
   Kiro CLI: ~/.kiro/settings/mcp.json (not plugin-owned; created by /jfrog-init)
+  Devin:   ~/.local/share/devin/cli/plugins/cache/<slug>/<version>/mcp.json
 `);
+}
+
+const configLabel = harness === "opencode" ? "Config" : "Plugin's mcp.json";
 
 if (resolved.path && existsSync(resolved.path)) {
-  console.log(`Plugin's mcp.json currently resolves to: ${resolved.path}`);
+  console.log(`${configLabel} currently resolves to: ${resolved.path}`);
 } else if (resolved.path) {
-  console.log(`Plugin's mcp.json is expected at ${resolved.path}, but nothing is there right now.`);
+  console.log(`${configLabel} is expected at ${resolved.path}, but nothing is there right now.`);
 } else {
-  console.log("Plugin's mcp.json is not on disk right now:");
+  console.log(`${configLabel} is not on disk right now:`);
   console.log(`  ${resolved.error}`);
 }
+

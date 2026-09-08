@@ -136,7 +136,10 @@ row in [harness-common.md](harness-common.md).
 - **Network / proxy / DNS error** — outside the agent guard's scope; tell the
   user and stop. This is package-unreachable per
   [Classify npx @jfrog/agent-guard failures](#classify-npx-jfrogagent-guard-failures)
-  — never install the MCP by any other means as a workaround.
+  — never install the MCP by any other means as a workaround. Before stopping,
+  though: in a Cursor sandbox agent a `403` on a JFrog host is the sandbox
+  allowlist and has a concrete fix — see the "403 … in a Cursor sandbox agent"
+  entry below.
 - **npx package fetch returns 403 or 404** — usually a corporate proxy/VPN, a
   blocked or wrong registry, the JFrog registry being unreachable, or a
   curation policy — not a missing package. The default
@@ -147,3 +150,10 @@ row in [harness-common.md](harness-common.md).
   the access token is valid for that repo). Same hard-stop rule applies: do
   not fall back to the usual MCP install routes that skip the approved catalog
   and Agent Guard as the MCP proxy.
+- **403 (or a Step 0 network failure) in a Cursor sandbox agent (Agents
+  Window)** — Cursor's network allowlist. Retry once with
+  `required_permissions: ["full_network"]`; if it still 403s, has no effect, or
+  the param isn't on the Shell tool, create `~/.cursor/sandbox.json` (or the
+  project `.cursor/sandbox.json`) per the "Sandbox network allowlist" section in
+  [harness-cursor.md](harness-cursor.md). Do NOT keep retrying `full_network`
+  or punt to a manual/out-of-sandbox run.
