@@ -144,22 +144,12 @@ described above. If there is no usable `jf` server, ask the user to add one
 If credentials cannot be resolved (no `--server` and either zero or multiple `jf`
 servers), the entry fails to start with `connection closed: initialize response`.
 
-## Step 0 activation check under Codex's sandbox
+## Codex's sandbox
 
-Codex runs shell commands in a sandbox with **no outbound network by default**,
-and the skill's Step 0 check (`scripts/jfrog-agent-guard-check.mjs`) probes the
-JFrog settings endpoint over the network. So the first run can report `Disabled:
-settings endpoint unreachable (fetch failed)` even when the `jf` credentials are
-valid - that is the sandbox blocking the request, NOT a missing or unreachable
-server. On Codex, treat a first-run `unreachable (fetch failed)` as
-**inconclusive, not a Disabled result** - do NOT apply the Step 0 "silently
-abort" handling from
-[agent-guard-activation.md](agent-guard-activation.md) yet. First re-run the SAME
-check with network access (approve the escalated command, or run it outside the
-sandbox); only treat the platform as unreachable if it STILL fails with network.
-A follow-up `Enabled: via JF CLI config (server '<id>')` confirms it was only the
-sandbox. Credentials resolve from the on-disk `jf` config regardless - only the
-reachability probe needs network.
+Codex sandboxes shell with no outbound network by default. Step 0 already
+requires a second run with network, the same is relevant for all commands that
+run into network issues in codex. Approve the escalated command or run it
+outside the sandbox, then re-run.
 
 ## Enable
 

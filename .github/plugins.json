@@ -48,16 +48,6 @@
       ]
     },
     {
-      "name": "jfrog-devin-extension",
-      "dest_prefix": "",
-      "version_bumps": [
-        { "file": "package.json", "path": "version" }
-      ],
-      "pin_updates": [
-        { "file": ".github/scripts/sync-skills-vendor.json", "path": "pin" }
-      ]
-    },
-    {
       "name": "jfrog-kiro-power",
       "dest_prefix": "",
       "version_bumps": [

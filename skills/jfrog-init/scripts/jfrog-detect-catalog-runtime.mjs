@@ -2,7 +2,9 @@
 // AI Catalog readiness check for the current user + JPD, against
 // <JPD>/ml/core/api/v1/mcp-registry/ml-projects?pageSize=1 — this skill
 // does NOT read a separate JFROG_PLATFORM_URL / JFROG_URL env var; the
-// source of truth is what `jf` itself is configured with.
+// source of truth is what `jf` itself is configured with. A 404 there is
+// retried once behind <JPD>/bridge-client, where self-hosted JPDs serve
+// the same API (see BRIDGE_CLIENT_PREFIX below).
 //
 // Two sub-checks, both must pass (mirrors jfrog-detect-server-ping.mjs's
 // reachability/credentials split):
@@ -51,6 +53,17 @@ import { emit, isMainModule, resolveCreds, urlForServer, normalizeJpdUrl, authed
 import { resolveServerOrEmit } from "./jfrog-resolve-jf-server.mjs";
 
 const CATALOG_PATH = "/ml/core/api/v1/mcp-registry/ml-projects?pageSize=1";
+// Self-hosted JPDs serve the same API behind `/bridge-client`. Tried ONLY
+// after the root path 404s, so SaaS still costs one request per part.
+const BRIDGE_CLIENT_PREFIX = "/bridge-client";
+
+// The anonymous codes that let Part A proceed to Part B. Shared by the Part A
+// gate and its `/bridge-client` fallback so the two can't drift.
+const partAReachable = (code) => /^[23]/.test(code) || ["401", "403", "405", "406"].includes(code);
+
+// A 2xx alone isn't proof this is the AI Catalog — a captive portal or
+// misrouted network can answer 200 too. Require the expected shape.
+const looksLikeCatalog = (body) => Boolean(body) && typeof body === "object" && Array.isArray(body.projectKeys);
 
 // Shared by both Part A (anonymous) and Part B (authenticated) below — each
 // probe can independently come back "000" (connection failed) or "404"
@@ -95,10 +108,28 @@ export async function detectCatalogRuntime(serverIdArg) {
     emit({ check: "catalog", status: "red", detail: `no url found in jf config for server-id=${serverId}` });
     return 1;
   }
-  const endpoint = `${url}${CATALOG_PATH}`;
+  // Which prefix this JPD serves the catalog under: "" for SaaS,
+  // `/bridge-client` for self-hosted. Part A resolves it when it can; Part B
+  // otherwise, since a JPD answering 401 anonymously at the root passes Part
+  // A without revealing that the authenticated call 404s there.
+  let prefix = "";
+  let endpoint = `${url}${CATALOG_PATH}`;
 
   // ---------- Part A: anonymous reachability ----------
-  const anonCode = await anonymousFetchStatus(endpoint);
+  let anonCode = await anonymousFetchStatus(endpoint);
+
+  // Adopt the fallback only when it evidences a deployed catalog. Anything
+  // else (a proxy's 400/501, a 5xx, a failed connection) leaves the root 404
+  // verdict — and its non-blocking exit 1 — exactly as it was.
+  if (anonCode === "404") {
+    const bridgeEndpoint = `${url}${BRIDGE_CLIENT_PREFIX}${CATALOG_PATH}`;
+    const bridgeCode = await anonymousFetchStatus(bridgeEndpoint);
+    if (partAReachable(bridgeCode)) {
+      prefix = BRIDGE_CLIENT_PREFIX;
+      endpoint = bridgeEndpoint;
+      anonCode = bridgeCode;
+    }
+  }
 
   if (anonCode === "000") {
     return emitUnreachable(endpoint);
@@ -109,7 +140,7 @@ export async function detectCatalogRuntime(serverIdArg) {
   if (/^5/.test(anonCode)) {
     return emitServerError(endpoint, anonCode);
   }
-  if (!/^2/.test(anonCode) && !/^3/.test(anonCode) && !["401", "403", "405", "406"].includes(anonCode)) {
+  if (!partAReachable(anonCode)) {
     emit({ check: "catalog", status: "error", detail: `catalog probe returned unexpected HTTP ${anonCode} at ${endpoint}` });
     return 3;
   }
@@ -126,19 +157,31 @@ export async function detectCatalogRuntime(serverIdArg) {
     return 1;
   }
 
-  const { code, body } = await authedFetch(creds, CATALOG_PATH);
-  const httpCode = code === 0 ? "000" : String(code);
+  const authed = await authedFetch(creds, `${prefix}${CATALOG_PATH}`);
+  let body = authed.body;
+  let httpCode = authed.code === 0 ? "000" : String(authed.code);
 
-  // A 2xx status alone isn't proof this is really the AI Catalog endpoint —
-  // a captive portal or misrouted network can also answer 200. Require the
-  // expected shape (an object with a `projectKeys` array) too.
-  const looksLikeCatalog = body && typeof body === "object" && Array.isArray(body.projectKeys);
+  // Part A passed at the root (e.g. an anonymous 401) but the authenticated
+  // call 404s there — the same self-hosted layout, one part later. Adopted
+  // only on proof of a catalog: a 2xx of the right shape, or the 403 that
+  // means "deployed, this user isn't entitled". A WAF's 401 or a captive 200
+  // must NOT win, or a fine set of credentials gets reported as rejected.
+  // Adopting leaves only the green and not_entitled branches reachable, and
+  // neither reports `endpoint`, so it stays the root path it was built from.
+  if (httpCode === "404" && !prefix) {
+    const retry = await authedFetch(creds, `${BRIDGE_CLIENT_PREFIX}${CATALOG_PATH}`);
+    const retryCode = retry.code === 0 ? "000" : String(retry.code);
+    if ((/^2/.test(retryCode) && looksLikeCatalog(retry.body)) || retryCode === "403") {
+      body = retry.body;
+      httpCode = retryCode;
+    }
+  }
 
-  if (httpCode.startsWith("2") && looksLikeCatalog) {
+  if (httpCode.startsWith("2") && looksLikeCatalog(body)) {
     emit({ check: "catalog", status: "green", detail: `catalog reachable, user entitled (HTTP ${httpCode})` });
     return 0;
   }
-  if (httpCode.startsWith("2") && !looksLikeCatalog) {
+  if (httpCode.startsWith("2") && !looksLikeCatalog(body)) {
     emit({ check: "catalog", status: "error", detail: `got HTTP ${httpCode} from ${endpoint} but the response wasn't the expected AI Catalog shape — this may not be the JPD's real endpoint (captive portal / proxy?)` });
     return 3;
   }

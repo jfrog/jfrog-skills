@@ -6,6 +6,8 @@ so its value takes effect. How each harness picks up the exported variable:
 - **Claude Code** — a `${VAR}` reference in the config.
 - **Cursor** — a `${env:VAR}` reference in the config.
 - **Devin Desktop / Devin CLI** — a `${env:VAR}` reference in the config.
+- **Kiro (IDE / `kiro-cli`)** — a `${VAR}` reference in the config, gated by a
+  one-time approval popup (**Mcp Approved Env Vars**).
 - **Codex** — a variable name listed in the `env_vars` allow-list; Codex forwards
   that named variable's value from the launching shell to the server (e.g. an env
   var like `Authorization`).

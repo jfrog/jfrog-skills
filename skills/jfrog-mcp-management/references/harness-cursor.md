@@ -64,3 +64,38 @@ troubleshooting in [key-rules-and-troubleshooting.md](key-rules-and-troubleshoot
 Cursor has no `enabledMcpjsonServers`-style precedence files — enable/disable is
 the UI toggle above. OAuth `--login` in a sandbox must run with `all`
 permissions (see [runtime-permissions.md](runtime-permissions.md)).
+
+## Sandbox network allowlist (Agents Window)
+
+**Trigger — do not apply this by default.** Only act on this once you actually
+see it: in a Cursor sandbox agent (`CURSOR_SANDBOX=seatbelt`, e.g. the Agents
+Window) an Agent Guard call can't reach a JFrog host — the Step 0 activation
+check can't reach the platform, and/or an `npx` / catalog call returns a `403`
+on a JFrog host. That's Cursor's sandbox network allowlist. A Step 0 network
+failure here is inconclusive — don't report the platform as disabled or abort.
+The gate uses `jf api` for a configured server and a direct request for
+environment-only credentials. After the host is allowlisted, re-run Step 0
+and follow its exit code. Do not bypass the gate.
+
+1. **Retry the same command once with `required_permissions: ["full_network"]`**
+   (see [runtime-permissions.md](runtime-permissions.md)).
+2. **If it 403s again, has no effect, or the param isn't on your Shell tool
+   (e.g. the Agents Window), go straight to the allowlist fallback below.** Do
+   NOT keep retrying `full_network`, and do NOT offer to run the command outside
+   the sandbox or ask the user to run it in their own terminal. Create or edit
+   `~/.cursor/sandbox.json` (user) or `.cursor/sandbox.json` (project)
+   yourself, adding the blocked host to the existing `allow` array if the file
+   already exists (don't overwrite it), then ask the user to reload the window.
+
+Allow whatever host the `403` names; JFrog usually also redirects the binary
+download to Amazon S3, so `*.s3.amazonaws.com` is typically needed too. SaaS:
+
+```json
+{ "networkPolicy": { "default": "deny", "allow": ["*.jfrog.io", "*.s3.amazonaws.com"] } }
+```
+
+Self-hosted (platform on your own domain):
+
+```json
+{ "networkPolicy": { "default": "deny", "allow": ["artifactory.example.com", "*.s3.amazonaws.com"] } }
+```

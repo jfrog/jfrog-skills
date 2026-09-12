@@ -65,25 +65,40 @@ export function selfHealPath() {
 // still-in-progress prompt and misreport working credentials as broken.
 export const JF_CLI_TIMEOUT_MS = 30_000;
 
+// Under `shell: true`, cmd.exe would read a metacharacter as a separator
+// (`^` escapes the next character). Tolerates a space — unlike claude.mjs's
+// SHELL_UNSAFE, a `jf` arg (e.g. a server ID) may legitimately contain one.
+export const JF_ARG_UNSAFE = /[&|;$<>`"'\\^\n]/;
+
 // The one place every `jf` spawn goes through. `timeoutMs` overrides the
 // local-operation default for a network-bound caller.
 export function runJf(args, { timeoutMs = JF_CLI_TIMEOUT_MS } = {}) {
   selfHealPath();
   const { target, shell } = resolveCommand("jf");
-  // Under `shell: true`, cmd.exe would read a metacharacter as a separator.
   if (shell) {
-    const unsafe = args.find((a) => /[&|;$<>`"'\\\n]/.test(a));
+    const unsafe = args.find((a) => JF_ARG_UNSAFE.test(a));
     if (unsafe !== undefined) {
       throw new Error(`runJf: refusing shell-unsafe argument: ${JSON.stringify(unsafe)}`);
     }
   }
   // Without this, execFileSync forwards jf's stderr to ours.
-  return execFileSync(target, args, {
-    encoding: "utf8",
-    timeout: timeoutMs,
-    shell,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  // Node's DEP0190 fires on every shell:true spawn with an args array,
+  // warning generically about unescaped-argument injection — the exact
+  // risk the unsafe-character check above already closes off. Scoped to
+  // just this call (saved/restored) so it doesn't mask an unrelated
+  // deprecation warning elsewhere in the same process.
+  const prevNoDeprecation = process.noDeprecation;
+  process.noDeprecation = true;
+  try {
+    return execFileSync(target, args, {
+      encoding: "utf8",
+      timeout: timeoutMs,
+      shell,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } finally {
+    process.noDeprecation = prevNoDeprecation;
+  }
 }
 
 // ---- in-process memoization ----
@@ -321,20 +336,24 @@ export async function authedFetch(creds, path) {
   }
 }
 
-// Anonymous GET with no auth, manual redirects, 10s timeout — the
-// reachability probe shared by every detector that needs to know whether a
-// URL is up before trying anything authenticated against it
-// (jfrog-detect-server-ping.mjs, jfrog-detect-catalog-runtime.mjs's Part
-// A). Never throws: any connection failure (DNS, TLS, timeout, refused)
-// collapses to "000" so callers can treat that one string as the uniform
-// "unreachable" case.
-export async function anonymousFetchStatus(endpoint) {
+// The uniform "unreachable" status: any connection failure (DNS, TLS,
+// timeout, refused) collapses to this so callers can treat it as one case.
+export const HTTP_UNREACHABLE = "000";
+
+// Anonymous GET (no auth, manual redirects, 10s timeout) — the shared
+// reachability probe. Returns status + headers; anonymousFetchStatus wraps it
+// for callers that only need the status. Never throws.
+export async function anonymousFetch(endpoint) {
   try {
     const res = await fetch(endpoint, { redirect: "manual", signal: AbortSignal.timeout(10_000) });
-    return String(res.status);
+    return { status: String(res.status), headers: res.headers };
   } catch {
-    return "000";
+    return { status: HTTP_UNREACHABLE, headers: new Headers() };
   }
+}
+
+export async function anonymousFetchStatus(endpoint) {
+  return (await anonymousFetch(endpoint)).status;
 }
 
 // Node's built-in fetch does not read HTTPS_PROXY/HTTP_PROXY, so telling
@@ -398,35 +417,42 @@ export function emit(obj) {
   process.stdout.write(JSON.stringify(obj) + "\n");
 }
 
-// `${VAR}`, bare `$VAR`, or Codex's `<VAR>` — strict pairing so it doesn't
-// also match malformed/unrelated text like `${JFROG_URL_SUFFIX}`. Shared
-// by the detector and substituter so both agree on what counts as one.
-const MCP_PLACEHOLDER_PATTERN = "\\$\\{(?:JFROG_PLATFORM_URL|JFROG_URL)\\}|\\$(?:JFROG_PLATFORM_URL|JFROG_URL)\\b|<(?:JFROG_PLATFORM_URL|JFROG_URL)>";
+// `${VAR}`, VS Code's `${env:VAR}`, bare `$VAR`, or Codex's `<VAR>` — strict
+// pairing so it doesn't also match malformed/unrelated text like
+// `${JFROG_URL_SUFFIX}`. The `env:` prefix is `${...}`-only; the bare `$VAR`
+// and `<VAR>` forms don't take it in any harness. Shared by the detector and
+// substituter so both agree on what counts as one.
+const MCP_PLACEHOLDER_PATTERN = "\\$\\{(?:env:)?(?:JFROG_PLATFORM_URL|JFROG_URL)\\}|\\$(?:JFROG_PLATFORM_URL|JFROG_URL)\\b|<(?:JFROG_PLATFORM_URL|JFROG_URL)>";
 
 export function hasMcpPlaceholder(text) {
   return new RegExp(MCP_PLACEHOLDER_PATTERN).test(text);
 }
 
-// Every harness but Codex nests the entry under `mcpServers.jfrog`; Codex's
-// plugin mcp.json has no wrapper — bare top-level `jfrog`. Branch keyed on
-// the KEY's presence, not truthiness, so `{ "mcpServers": null, "jfrog":
-// {...} }` isn't mistaken for Codex-shaped, and JFROG_INIT_MCP_CONFIG can
-// still point at a Codex-shaped file from any harness.
-//
-// Returns the live entry object (mutations land on `parsed`), or null.
+// Returns the live jfrog entry object (`mcpServers.jfrog`, `mcp.jfrog` on
+// OpenCode, or bare `jfrog` on Codex), or null. Callers rewriting `.url`
+// mutate in place; shared by the detector and substituter.
 export function jfrogMcpEntry(parsed) {
   if (parsed === null || typeof parsed !== "object") return null;
-  const wrapped = "mcpServers" in parsed;
-  const entry = wrapped ? parsed.mcpServers?.jfrog : parsed.jfrog;
-  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return null;
-  if (!wrapped && !("url" in entry)) return null;
-  return entry;
+  const isValidEntry = (e) => e !== null && typeof e === "object" && !Array.isArray(e) && "url" in e;
+
+  // Gated by which wrapper key is present — a bare top-level jfrog key
+  // next to an empty mcpServers/mcp is never used as a fallback.
+  const hasWrapper = "mcpServers" in parsed || "mcp" in parsed;
+  const candidates = [];
+  if ("mcpServers" in parsed) candidates.push(parsed.mcpServers?.jfrog);
+  if ("mcp" in parsed) candidates.push(parsed.mcp?.jfrog);
+  if (!hasWrapper) candidates.push(parsed.jfrog);
+
+  for (const candidate of candidates) {
+    if (isValidEntry(candidate)) return candidate;
+  }
+  return null;
 }
 
 // Returns the url string (possibly empty) on a valid entry, null otherwise.
 export function jfrogMcpUrl(parsed) {
   const entry = jfrogMcpEntry(parsed);
-  return entry && typeof entry.url === "string" ? entry.url : null;
+  return entry !== null && typeof entry.url === "string" ? entry.url : null;
 }
 
 // Fresh RegExp instances every call — a shared module-level `g`-flagged

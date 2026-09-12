@@ -68,24 +68,18 @@ flowchart TD
     ASKSRV5 --> S5
     S5 -->|missing/invalid/no entry, incl. substitution failure| F5["Note: reinstall or update the JFrog plugin, or resolve jf config (non-blocking)"]:::fixBox
     F5 --> S6
-    S5 -->|yes, valid url| S6
+    S5 -->|yes, valid url| S5R["5b. JFrog MCP server enabled on this JPD? (jfrog-detect-jfrog-mcp-responding.mjs, anonymous GET &lt;JPD&gt;/mcp — non-blocking)"]:::stepBox
+    S5R -->|not_enabled: ask admin / unreachable: couldn't confirm| F5R["Note: surface in Final Summary (non-blocking)"]:::fixBox
+    S5R -->|enabled: ✅ if signed in to this JPD, else offer sign-in AFTER Final Summary| S6
+    F5R --> S6
 
     S6["6. Project resolved?"]:::stepBox
     S6 -->|state file has current project| ASKREUSE["AskUserQuestion: reuse CURRENT or pick different"]:::fixBox
-    ASKREUSE -->|reuse| VALPROJ["Validate via authenticated GET /access/api/v1/projects/KEY"]:::stepBox
-    ASKREUSE -->|different| ASKPROJ["AskUserQuestion: first 2 projects, or Other to type one"]:::fixBox
+    ASKREUSE -->|reuse| S7
+    ASKREUSE -->|different| ASKPROJ["AskUserQuestion: first 2 projects (from enumeration), or Other to type one"]:::fixBox
     S6 -->|no state file| ASKPROJ
-    ASKPROJ --> RESOLVE["Resolve name-or-key (case-insensitive) against project list from authenticated GET /access/api/v1/projects"]:::stepBox
-    RESOLVE -->|no match, 1st attempt| ASKPROJ
-    RESOLVE -->|no match again, 2nd attempt: give up| F6
-    RESOLVE -->|matched| VALPROJ
-    VALPROJ -->|404 or 403, 1st attempt| ASKPROJ
-    VALPROJ -->|404 or 403 again, 2nd attempt: give up| F6
-    VALPROJ -->|401, credentials rejected| STOPCREDS["STOP: show raw error (re-auth via the Step 3/4 picker)"]:::stopBox
-    VALPROJ -->|2xx| S7
-
-    F6["Note: no project resolved after 1 retry — continue without one (non-blocking)"]:::fixBox
-    F6 --> S7
+    ASKPROJ -->|picked or typed — accepted verbatim, no probe, no matching| S7
+    ASKPROJ -->|enumeration failed: jf missing / credentials rejected| STOPCREDS["STOP: show raw error (re-auth via the Step 3/4 picker)"]:::stopBox
 
     S7["7. AI Catalog reachable and user entitled?"]:::stepBox
     S7 -->|anon 404 / connection failure / 5xx, exit 1| F7U["Note: catalogReason=unreachable — JPD may not host AI Catalog, or it's down right now (non-blocking)"]:::fixBox

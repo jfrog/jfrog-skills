@@ -4,7 +4,7 @@ import { resolveCommand, runCommand } from "./command.mjs";
 
 const CLAUDE_TIMEOUT_MS = 30_000;
 
-const SHELL_UNSAFE = /[&|;$<>`"'\\\s]/;
+export const SHELL_UNSAFE = /[&|;$<>`"'\\^\s]/;
 
 export const claude = resolveCommand("claude");
 
