@@ -36,58 +36,29 @@ These are **practical defaults** for internal or technical reports. Adjust if th
 :root {
   /* Accent — common on JFrog digital properties; confirm vs Media Kit / brand updates */
   --jfrog-accent: #40be46;
-  --jfrog-accent-hover: #36a63d;
-  /* Neutrals */
   --text-primary: #1a1a1a;
-  --text-muted: #5c5c5c;
   --border-subtle: #e4e4e4;
   --bg-page: #ffffff;
   --bg-muted: #f7f8f8;
 }
-
 body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
   color: var(--text-primary);
   background: var(--bg-page);
   line-height: 1.5;
-  margin: 0;
-  padding: 2rem clamp(1rem, 4vw, 3rem);
   max-width: 56rem;
 }
-
-a {
-  color: var(--jfrog-accent);
-}
-a:hover {
-  color: var(--jfrog-accent-hover);
-}
-
-h1 {
-  font-weight: 700;
-  font-size: 1.75rem;
-  border-bottom: 3px solid var(--jfrog-accent);
-  padding-bottom: 0.35rem;
-}
-
-table {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 0.95rem;
-}
-th, td {
-  border: 1px solid var(--border-subtle);
-  padding: 0.5rem 0.65rem;
-  text-align: left;
-}
-thead {
-  background: var(--bg-muted);
-}
-
-code, pre {
-  font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
-  font-size: 0.9em;
-}
+a { color: var(--jfrog-accent); }
+h1 { border-bottom: 3px solid var(--jfrog-accent); }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid var(--border-subtle); padding: 0.5rem 0.65rem; text-align: left; }
+thead { background: var(--bg-muted); }
+code, pre { font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace; }
 ```
+
+Derive the rest (spacing, hover states, font sizing) from ordinary CSS
+judgment — these tokens are the only brand-specific values worth
+pinning verbatim.
 
 ## Optional logo
 

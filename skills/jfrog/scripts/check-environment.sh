@@ -6,17 +6,19 @@
 # to avoid redundant checks. The skills-cache/ dir holds only this file and
 # the OneModel schema cache — not temp API output.
 #
-# stdout: eval-able shell exports (JFROG_CLI_USER_AGENT)
+# Usage:
+#   bash check-environment.sh [<model-slug>] [--force]
+#
+# stdout: bare JFROG_CLI_USER_AGENT value (one line) — agent captures it
+#         and runs `export JFROG_CLI_USER_AGENT='<v>'` once at the top of
+#         every bash invocation that calls jf
 # stderr: JSON state (informational, also written to cache file)
 #
 # Exit codes:
-#   0 — Cache is fresh, CLI is ready
-#   1 — Cache was stale/missing and has been refreshed
-#   2 — jf is not installed
-#   3 — jf is installed but below MIN_CLI_VERSION (required for `jf api`)
-#
-# Usage:
-#   eval "$(bash check-environment.sh [--force])"
+#   0 — cache fresh, CLI ready
+#   1 — cache refreshed, CLI ready
+#   2 — jf not installed
+#   3 — jf below MIN_CLI_VERSION (required for `jf api`)
 
 set -euo pipefail
 
@@ -33,9 +35,26 @@ FORCE=false
 # skill) landed in 2.100.0; older CLIs fail with "unknown command: api".
 MIN_CLI_VERSION="2.100.0"
 
-if [[ "${1:-}" == "--force" ]]; then
-  FORCE=true
-fi
+# CLIs >= this version emit ai-agent/ + ai-client/ + ai-model/ (Client→Agent→Model
+# via jfrog-cli-core #1602 + jfrog-cli #3645). Omit client= in the skill UA to
+# avoid double-encoding. Always emit tool= — mcp-management Step A parses it from
+# this script's stdout, which never includes the CLI's ai-agent/ token.
+#
+# MERGE / RELEASE PIN: tip `CliVersion` is still 2.119.0 while the identity code
+# is already on master. Released 2.118/2.119 only appended ai-agent/. Keep this
+# gate at the first *released* CLI that ships full Client→Agent→Model (expected
+# 2.120.0). When that release cuts, confirm the tag and update this constant if
+# the version number differs — do not lower it to tip's 2.119.0.
+AGENT_UA_MIN_CLI_VERSION="2.120.0"
+
+MODEL_SLUG=""
+for arg in "$@"; do
+  if [[ "$arg" == "--force" ]]; then
+    FORCE=true
+  elif [[ -z "$MODEL_SLUG" ]]; then
+    MODEL_SLUG="$arg"
+  fi
+done
 
 now_epoch() {
   date -u +%s
@@ -116,8 +135,44 @@ check_cli() {
     meets_minimum="false"
   fi
 
+  # Offer once per new latest. suggest_upgrade is tri-state:
+  #   true  — pending offer
+  #   false — declined (or not behind); --clear writes false
+  #   missing / non-semver prev latest — never evaluated → set true when behind
+  local prev_latest="" prev_flag="" suggest_upgrade=false
+  if [[ -f "$CACHE_FILE" ]] && command -v jq &>/dev/null; then
+    prev_latest="$(jq -r '.latest_version_available // empty' "$CACHE_FILE" 2>/dev/null || true)"
+    if jq -e '.suggest_upgrade == true' "$CACHE_FILE" >/dev/null 2>&1; then
+      prev_flag=true
+      suggest_upgrade=true
+    elif jq -e '.suggest_upgrade == false' "$CACHE_FILE" >/dev/null 2>&1; then
+      prev_flag=false
+    fi
+  fi
+  if [[ ! "$latest_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    if [[ "$prev_latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      latest_version="$prev_latest"
+    else
+      suggest_upgrade=false
+    fi
+  fi
+  if [[ "$latest_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    && [[ "$cli_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    && version_lt "$cli_version" "$latest_version"; then
+    if [[ ! "$prev_latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+      || [[ "$prev_latest" != "$latest_version" ]]; then
+      suggest_upgrade=true
+    elif [[ "$prev_flag" != "false" ]]; then
+      suggest_upgrade=true
+    else
+      suggest_upgrade=false
+    fi
+  elif [[ "$latest_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    suggest_upgrade=false
+  fi
+
   mkdir -p "$CACHE_DIR"
-  local state
+  local state tmp
   state=$(cat <<EOF
 {
   "checked_at": "$(iso_now)",
@@ -127,28 +182,307 @@ check_cli() {
   "cli_version": "$cli_version",
   "minimum_version": "$MIN_CLI_VERSION",
   "meets_minimum_version": $meets_minimum,
-  "latest_version_available": "$latest_version"
+  "latest_version_available": "$latest_version",
+  "suggest_upgrade": $suggest_upgrade
 }
 EOF
 )
-  echo "$state" > "$CACHE_FILE"
+  tmp="${CACHE_DIR}/.jfrog-skill-state.$$.tmp"
+  printf '%s\n' "$state" >"$tmp" && mv "$tmp" "$CACHE_FILE"
   echo "$state" >&2
   return 1
 }
 
+# Lowercase and keep only [a-z0-9._-], then truncate to 64 chars — mirrors the
+# Go CLI sanitizeToken (cardinality bound + no header-splitting on the wire).
+sanitize_token() {
+  local s
+  s="$(printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9._-')"
+  printf '%s' "${s:0:64}"
+}
+
+# askpass_path_contains reports whether a VS Code-fork askpass path is that
+# editor's install, not an unrelated substring (a Windows login named "cursor"
+# would otherwise match). GIT_ASKPASS is generic git and is excluded.
+# Mirrors jfrog-cli-core askpassPathContains.
+askpass_path_contains() {
+  local app="$1" p
+  for key in VSCODE_GIT_ASKPASS_MAIN VSCODE_GIT_ASKPASS_NODE; do
+    p="$(printf '%s' "${!key:-}" | tr '[:upper:]' '[:lower:]' | tr '\\' '/')"
+    [[ -z "$p" ]] && continue
+    if [[ "$p" == *"/${app}.app"* || "$p" == *"/${app}/resources"* || "$p" == *"/.$app-server"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Positive upstream VS Code install only. A non-empty VSCODE_GIT_ASKPASS_* var
+# is not enough — every fork sets those. Mirrors askpassLooksLikeStockVSCode.
+askpass_looks_like_stock_vscode() {
+  local p
+  for key in VSCODE_GIT_ASKPASS_MAIN VSCODE_GIT_ASKPASS_NODE; do
+    p="$(printf '%s' "${!key:-}" | tr '[:upper:]' '[:lower:]' | tr '\\' '/')"
+    [[ -z "$p" ]] && continue
+    if [[ "$p" == *"/visual studio code"* || "$p" == *"/microsoft vs code"* \
+      || "$p" == *"/.vscode-server"* || "$p" == *"/code/resources"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Short product names for known terminals. Unmapped values (including inherited
+# TERM_PROGRAM=vscode) stay empty so client stays on the known-app allowlist.
+canonical_terminal_name() {
+  local name
+  name="$(sanitize_token "${1:-}")"
+  case "$name" in
+    iterm.app) echo "iterm"; return ;;
+  esac
+  name="${name%.app}"
+  case "$name" in
+    "") ;;
+    iterm) echo "iterm" ;;
+    apple_terminal) echo "terminal" ;;
+    warpterminal|warp) echo "warp" ;;
+    tmux) echo "tmux" ;;
+    wezterm) echo "wezterm" ;;
+    alacritty) echo "alacritty" ;;
+    kitty) echo "kitty" ;;
+    ghostty) echo "ghostty" ;;
+    hyper) echo "hyper" ;;
+  esac
+}
+
+fallback_terminal_name() {
+  if [[ -n "${TMUX:-}" ]]; then
+    echo "tmux"
+  elif [[ -n "${WT_SESSION:-}" ]]; then
+    echo "windows-terminal"
+  elif [[ "${TERM:-}" == "xterm-ghostty" ]]; then
+    echo "ghostty"
+  elif [[ -n "${KITTY_WINDOW_ID:-}" ]]; then
+    echo "kitty"
+  elif [[ -n "${ALACRITTY_LOG:-}" ]]; then
+    echo "alacritty"
+  fi
+}
+
+host_terminal_name() {
+  local name
+  name="$(canonical_terminal_name "${TERM_PROGRAM:-}")"
+  if [[ -n "$name" ]]; then
+    echo "$name"
+  else
+    fallback_terminal_name
+  fi
+}
+
+fold_agent_name() {
+  local name
+  name="$(printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')"
+  name="${name%%@*}"
+  printf '%s' "$name"
+}
+
+is_copilot_vscode_plugin_alias() {
+  [[ "$(fold_agent_name "${AI_AGENT:-}")" == "github_copilot_vscode_agent" ]] \
+    || [[ "$(fold_agent_name "${AGENT:-}")" == "github_copilot_vscode_agent" ]]
+}
+
+# detect_host_client prints the app hosting this session. Mirrors detectClient()
+# in jfrog-cli-core/common/commands/execution_context.go — keep the two in sync.
+#
+# Deliberately NOT part of detect_harness(): that table drives Agent Guard
+# routing and mcp-management's tool= parsing and stays frozen. This only feeds
+# the client= key.
+#
+# Order matters: every VS Code fork inherits the VSCODE_* vars from upstream, so
+# a fork must resolve before anything reports vscode. CURSOR_AGENT does not
+# prove the window (standalone CLI in iTerm / CI).
+detect_host_client() {
+  local name
+  if [[ -n "${ZED_TERM:-}" ]]; then
+    echo "zed"
+  elif [[ "${TERMINAL_EMULATOR:-}" == "JetBrains-JediTerm" ]]; then
+    echo "jetbrains"
+  elif [[ -n "${CURSOR_TRACE_ID:-}" ]] || askpass_path_contains cursor; then
+    echo "cursor"
+  elif [[ -n "${WINDSURF_CASCADE_TERMINAL:-}" ]] || askpass_path_contains windsurf; then
+    echo "windsurf"
+  elif [[ -n "${ANTIGRAVITY_AGENT:-}" ]] || askpass_path_contains antigravity; then
+    echo "antigravity"
+  elif [[ -n "${TRAE_AI_SHELL_ID:-}" ]] || askpass_path_contains trae; then
+    echo "trae"
+  elif askpass_path_contains vscodium || askpass_path_contains codium; then
+    echo "codium"
+  elif [[ -n "${VisualStudioVersion:-}" ]]; then
+    echo "visualstudio"
+  elif askpass_looks_like_stock_vscode; then
+    echo "vscode"
+  elif [[ "${COPILOT_AGENT:-}" == "1" ]] || is_copilot_vscode_plugin_alias; then
+    name="$(host_terminal_name)"
+    if [[ -n "$name" ]]; then
+      echo "$name"
+    else
+      echo "vscode"
+    fi
+  elif [[ -n "${CLAUDE_CODE_CHILD_SESSION:-}" || -n "${CLAUDE_CODE_IS_COWORK:-}" ]]; then
+    echo "claude"
+  else
+    host_terminal_name
+  fi
+}
+
+# Map a generic AI_AGENT/AGENT value (agents.md proposal, @vercel/detect-agent)
+# to a canonical name. Strips a version suffix (e.g. "goose@1.2.3") and lowercases.
+# Empty input → nothing; unrecognized non-empty → "unknown".
+# Accepts both hyphenated ecosystem ids and our underscore/canonical forms so
+# AI_AGENT=roo_code / amazon_q / qwen round-trip the same as the Go CLI.
+canonical_agent_name() {
+  local raw
+  raw="$(printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  raw="${raw%%@*}"
+  raw="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+  case "$raw" in
+    "") ;;
+    claude-code|claude) echo "claude" ;;
+    gemini-cli|gemini) echo "gemini" ;;
+    goose) echo "goose" ;;
+    cursor-cli|cursor) echo "cursor" ;;
+    github-copilot|copilot-cli|copilot|github_copilot_vscode_agent) echo "copilot" ;;
+    kilocode) echo "kilocode" ;;
+    roo-code|roo_code) echo "roo_code" ;;
+    codex) echo "codex" ;;
+    windsurf) echo "windsurf" ;;
+    aider) echo "aider" ;;
+    cline) echo "cline" ;;
+    opencode|opencode-jfrog-plugin) echo "opencode" ;;
+    amp) echo "amp" ;;
+    augment) echo "augment" ;;
+    qwen-code|qwen) echo "qwen" ;;
+    antigravity) echo "antigravity" ;;
+    crush) echo "crush" ;;
+    iflow) echo "iflow" ;;
+    trae) echo "trae" ;;
+    amazon-q-cli|amazon-q|amazon_q) echo "amazon_q" ;;
+    *) echo "unknown" ;;
+  esac
+}
+
+# Detect the calling harness from environment signals. First-match order matches
+# the JFrog CLI's DetectExecutionContext() table (claude, gemini, goose, cursor,
+# …) plus v0.22.0 product envs so mcp-management Step A still sees tool=claude /
+# tool=cursor in Claude Code / Cursor IDE terminals (CLAUDECODE, CURSOR_TRACE_ID).
+# Those product envs are also set for humans; real agent skill usage is the
+# model= slug. Devin Desktop is not detected here — see harness-common.md.
+# MODEL_SLUG→unknown fallback is applied by emit_skill_env (not here).
+detect_harness() {
+  # Claude/Cursor: session markers OR the v0.22.0 product envs Agent Guard uses.
+  # Other rows stay on CLI session markers.
+  if [[ -n "${CLAUDE_CODE_CHILD_SESSION:-}" || -n "${CLAUDECODE:-}" || -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
+    echo "claude"
+  elif [[ -n "${GEMINI_CLI:-}" ]]; then
+    echo "gemini"
+  elif [[ -n "${GOOSE_TERMINAL:-}" ]]; then
+    echo "goose"
+  elif [[ -n "${CURSOR_AGENT:-}" || "${CURSOR_EXTENSION_HOST_ROLE:-}" == "agent-exec" || -n "${CURSOR_CLI:-}" || -n "${CURSOR_TRACE_ID:-}" ]]; then
+    echo "cursor"
+  elif [[ -n "${COPILOT_CLI:-}" || -n "${COPILOT_AGENT_SESSION_ID:-}" || -n "${COPILOT_AGENT:-}" ]]; then
+    echo "copilot"
+  elif [[ -n "${KILOCODE_FEATURE:-}" || -n "${KILO_PID:-}" ]]; then
+    echo "kilocode"
+  elif [[ -n "${ROO_ACTIVE:-}" || -n "${ROO_CLI_RUNTIME:-}" ]]; then
+    echo "roo_code"
+  elif [[ -n "${CODEX_CI:-}" || -n "${CODEX_THREAD_ID:-}" || -n "${CODEX_SANDBOX:-}" ]]; then
+    echo "codex"
+  elif [[ -n "${WINDSURF_CASCADE_TERMINAL:-}" ]]; then
+    echo "windsurf"
+  elif [[ -n "${CLINE_ACTIVE:-}" ]]; then
+    echo "cline"
+  elif [[ -n "${OPENCODE:-}" || -n "${OPENCODE_SESSION_ID:-}" ]]; then
+    echo "opencode"
+  elif [[ -n "${AMP_CURRENT_THREAD_ID:-}" ]]; then
+    echo "amp"
+  elif [[ -n "${AUGMENT_AGENT:-}" ]]; then
+    echo "augment"
+  elif [[ -n "${QWEN_CODE:-}" ]]; then
+    echo "qwen"
+  elif [[ -n "${ANTIGRAVITY_AGENT:-}" ]]; then
+    echo "antigravity"
+  elif [[ -n "${CRUSH:-}" ]]; then
+    echo "crush"
+  elif [[ -n "${IFLOW_CLI:-}" ]]; then
+    echo "iflow"
+  elif [[ -n "${TRAE_AI_SHELL_ID:-}" ]]; then
+    echo "trae"
+  elif [[ -n "${AI_AGENT:-}" || -n "${AGENT:-}" ]]; then
+    # aider and amazon_q have no reliable session env — AI_AGENT / AGENT only.
+    canonical_agent_name "${AI_AGENT:-${AGENT:-}}"
+  fi
+  # No match → print nothing; emitter may still apply MODEL_SLUG→unknown.
+}
+
 # Emit skill-level env vars to stdout (for eval by the caller)
 emit_skill_env() {
-  local skill_version cli_version ua
+  local skill_version cli_version ua harness harness_from_model_fallback=false
   # Parse version from SKILL.md YAML frontmatter (metadata.version)
   skill_version="$(awk '/^---$/{n++; next} n==1 && /^[[:space:]]*version:/{gsub(/["'"'"']/, "", $2); print $2; exit}' "$SKILL_ROOT/SKILL.md" 2>/dev/null | tr -d '[:space:]')"
   skill_version="${skill_version:-unknown}"
-  cli_version=$(jq -r '.cli_version // "unknown"' "$CACHE_FILE" 2>/dev/null || echo "unknown")
-  ua=""
-  if [[ -n "${JFROG_SKILL_MODEL:-}" ]]; then
-    ua="model/${JFROG_SKILL_MODEL} "
+  # Prefer a live `jf --version` so AGENT_UA_MIN omit-gate is not stuck on a
+  # stale cache for up to 24h after the user upgrades the CLI.
+  cli_version="$(jf --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+  cli_version="${cli_version:-$(jq -r '.cli_version // "unknown"' "$CACHE_FILE" 2>/dev/null || echo "unknown")}"
+  # Sanitize the model slug once so the MODEL_SLUG→unknown fallback and the
+  # wire model= key share the same cardinality-bounded, header-safe value
+  # (mirrors the CLI's sanitizeToken on JFROG_CLI_AI_MODEL).
+  MODEL_SLUG="$(sanitize_token "${MODEL_SLUG:-}")"
+  harness=$(detect_harness)
+  # Defense: re-canonicalize so alias wire values (e.g. claude-code from a
+  # hand-built AI_AGENT / future detector slip) never reach tool=. Empty stays
+  # empty; known aliases map; unrecognized non-empty → unknown.
+  if [[ -n "$harness" ]]; then
+    h2=$(canonical_agent_name "$harness")
+    [[ -n "$h2" ]] && harness=$h2
   fi
-  ua="${ua}jfrog-skills/${skill_version} jfrog-cli-go/${cli_version}"
-  echo "export JFROG_CLI_USER_AGENT='${ua}'"
+  # Agent invoked us (passed a model slug) but set no harness signal the CLI
+  # shares — CLI will not emit ai-agent/, so the skill must still carry tool=.
+  if [[ -z "$harness" && -n "$MODEL_SLUG" ]]; then
+    harness="unknown"
+    harness_from_model_fallback=true
+  fi
+  # Client: the editor window hosting the session (see detect_host_client).
+  # Omitted on new CLI when the CLI will emit ai-client/ itself (not on the
+  # model-slug fallback path).
+  local client
+  client="$(detect_host_client)"
+  local carry_client_ua="false"
+  if [[ "$cli_version" == "unknown" ]] || version_lt "$cli_version" "$AGENT_UA_MIN_CLI_VERSION" || [[ "$harness_from_model_fallback" == "true" ]]; then
+    carry_client_ua="true"
+  fi
+  # Build the parens block: semicolon-separated key=value pairs.
+  # trigger=skill always leads — this script only runs on the skill path.
+  # (APR agent-hooks set trigger=hook when they spawn jf; see eager-setup.)
+  # tool= is always emitted when known: mcp-management parses this stdout line
+  # and never sees the CLI's later ai-agent/ token.
+  local meta="trigger=skill"
+  if [[ -n "$harness" ]]; then
+    meta="${meta}; tool=${harness}"
+  fi
+  if [[ "$carry_client_ua" == "true" && -n "$harness" && -n "$client" ]]; then
+    meta="${meta}; client=${client}"
+  fi
+  # model= is emitted regardless of CLI version (not deduped like tool=/client=):
+  # the CLI's own ai-model/ token is conditional on it detecting the agent via
+  # env AND the caller exporting JFROG_CLI_AI_MODEL, so the skill can't know
+  # whether the CLI will carry it. Keeping model= here guarantees the slug is
+  # always recorded; Coralogix coalesces the two sources so it isn't counted twice.
+  if [[ -n "$MODEL_SLUG" ]]; then
+    meta="${meta}; model=${MODEL_SLUG}"
+  fi
+  ua="jfrog-skills/${skill_version} (${meta}) jfrog-cli-go/${cli_version}"
+  printf '%s\n' "$ua"
 }
 
 # Main

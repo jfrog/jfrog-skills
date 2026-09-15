@@ -649,30 +649,10 @@ query {
 
 ### Search evidence for a specific artifact
 
-```graphql
-query {
-  evidence {
-    searchEvidence(
-      where: {
-        hasSubjectWith: {
-          repositoryKey: "<repo-key>"
-          path: "<path/to>"
-          name: "<filename>"
-        }
-      }
-    ) {
-      edges {
-        node {
-          predicateSlug
-          predicateType
-          verified
-          downloadPath
-        }
-      }
-    }
-  }
-}
-```
+Same shape as above, scoped to one artifact by adding `path` and `name`
+to `hasSubjectWith`: `hasSubjectWith: { repositoryKey: "<repo-key>",
+path: "<path/to>", name: "<filename>" }` — repository-level search
+alone can't isolate a single file.
 
 ### Get evidence by location
 

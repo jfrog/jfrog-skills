@@ -4,14 +4,13 @@ When to read this file:
 
 - Working with **applications**, **application versions**, or **releasables**.
 - Querying or managing **application version promotions** through stages.
-- Understanding what **sources** (builds, release bundles, other app versions) feed into an application version.
-- Using the OneModel GraphQL API with the `applications` query root.
+- Understanding **sources** (builds, release bundles, other app versions) feeding an application version.
+- OneModel GraphQL with `applications` query root.
 
-AppTrust entities are accessed exclusively via the **OneModel GraphQL API**
-(`/onemodel/api/v1/graphql`). There are no CLI commands for this domain.
+AppTrust via **OneModel GraphQL API** (`/onemodel/api/v1/graphql`). No CLI.
 
-For the OneModel query workflow (credentials, schema fetch, validation,
-execution), read `references/onemodel-graphql.md`.
+OneModel workflow (credentials, schema fetch, validation, execution):
+`references/onemodel-graphql.md`.
 
 ## Entity relationship overview
 
@@ -31,28 +30,26 @@ erDiagram
 
 ## Application
 
-The top-level entity representing a software application registered in
-AppTrust. Applications belong to a JFrog Project and serve as the
-organizational container for tracking versions, ownership, and criticality.
+Top-level software application in AppTrust. Belongs to a JFrog Project;
+container for versions, ownership, criticality.
 
 | Field | Description |
 |-------|-------------|
-| `key` | Unique identifier (referenced as `applicationKey` or `appKey` elsewhere) |
-| `projectKey` | JFrog Project this application belongs to |
+| `key` | Unique ID (`applicationKey` / `appKey` elsewhere) |
+| `projectKey` | JFrog Project |
 | `displayName` | Human-readable name |
 | `criticality` | `unspecified`, `low`, `medium`, `high`, `critical` |
 | `maturityLevel` | `unspecified`, `experimental`, `production`, `end_of_life` |
-| `owners` | List of users or groups that own the application |
-| `labels` | Key-value pairs for custom categorization |
+| `owners` | Owning users/groups |
+| `labels` | Key-value categorization |
 
 Query: `applications.getApplication(key: "...")` or
 `applications.searchApplications(where: {...})`.
 
 ## Application version
 
-A versioned instance of an application. Each version captures a specific set
-of releasable artifacts, their sources, and a promotion history through
-lifecycle stages.
+Versioned instance of an application — releasable artifacts, sources, promotion
+history through lifecycle stages.
 
 | Field | Description |
 |-------|-------------|
@@ -61,20 +58,18 @@ lifecycle stages.
 | `tag` | Optional tag |
 | `status` | Processing status: `STARTED`, `FAILED`, `COMPLETED`, `DELETING` |
 | `releaseStatus` | Release maturity: `PRE_RELEASE`, `RELEASED`, `TRUSTED_RELEASE` |
-| `currentStageName` | Most recent stage the version has been promoted to (null if never promoted) |
+| `currentStageName` | Latest promoted stage (null if never promoted) |
 | `createdBy`, `createdAt` | Audit fields |
 | `evidenceSubject` | Evidence attestation anchor (shared across domains) |
 
-The `releaseStatus` field is distinct from `status`: `status` tracks the
-version creation process, while `releaseStatus` tracks its release maturity.
+`releaseStatus` ≠ `status`: `status` = creation process; `releaseStatus` = release maturity.
 
 Query: `applications.getApplicationVersion(applicationKey: "...", version: "...")`
 or `applications.searchApplicationVersions(where: {...})`.
 
 ## Releasable
 
-A deployable unit within an application version — either a **package version**
-or an individual **artifact**.
+Deployable unit within an application version — **package version** or individual **artifact**.
 
 | Field | Description |
 |-------|-------------|
@@ -89,14 +84,12 @@ or an individual **artifact**.
 | `packageVersionLocation` | Link to `StoredPackageVersionLocation` for package releasables |
 | `vcsCommit` | VCS commit details (for AppTrust-bound package versions) |
 
-Releasables bridge the application model to the underlying Artifactory
-storage. The `packageVersionLocation` field connects to the Stored Packages
-domain (see `stored-packages-entities.md`).
+Releasables bridge application model to Artifactory storage. `packageVersionLocation`
+→ Stored Packages domain (`stored-packages-entities.md`).
 
 ## Application version promotion
 
-Records the promotion of an application version from one stage to another.
-All promotions are recorded including failed attempts.
+Promotion of application version between stages. All attempts recorded including failures.
 
 | Field | Description |
 |-------|-------------|
@@ -107,13 +100,12 @@ All promotions are recorded including failed attempts.
 | `artifacts` | Artifacts included in this promotion (repo + path) |
 | `messages` | Error messages if the promotion failed |
 
-Promotions use the same environment/stage model as Release Bundle promotions
-(see `release-lifecycle-entities.md`) but at the application level.
+Same environment/stage model as Release Bundle promotions
+(`release-lifecycle-entities.md`), at application level.
 
 ## Sources
 
-Sources describe how releasables were assembled into an application version.
-Four types exist:
+How releasables were assembled into an application version. Four types:
 
 | Source type | Fields | Description |
 |-------------|--------|-------------|
@@ -122,8 +114,7 @@ Four types exist:
 | **ApplicationVersion** | `applicationKey`, `version` | Another application version (composition) |
 | **Direct** | (none) | Directly included without an associated build or bundle |
 
-Sources appear at both the application version level (all sources) and the
-individual releasable level (sources for that specific releasable).
+At application version level (all sources) and releasable level (per-releasable sources).
 
 ## Artifacts (within application versions)
 
@@ -139,16 +130,12 @@ Individual files within releasables.
 
 ## Cross-domain connections
 
-AppTrust entities connect to other domains via the OneModel GraphQL API:
+Via OneModel GraphQL:
 
 - **Evidence** — `ApplicationVersion.evidenceSubject` and
-  `ApplicationVersionArtifact.evidenceSubject` link to the Evidence domain
-  via `EvidenceSubject.fullPath`. This allows querying evidence attached to
-  app versions and their artifacts.
-- **Stored Packages** — `Releasable.packageVersionLocation` links to
-  `StoredPackageVersionLocation`, connecting the application model to where
-  packages physically reside in Artifactory.
-- **Release Bundles** — source type `ReleaseBundle` references release bundle
-  name/version from the Release Lifecycle domain.
-- **Builds** — source type `Build` references build-info records from
-  Artifactory.
+  `ApplicationVersionArtifact.evidenceSubject` → Evidence domain via
+  `EvidenceSubject.fullPath`.
+- **Stored Packages** — `Releasable.packageVersionLocation` →
+  `StoredPackageVersionLocation` (physical Artifactory location).
+- **Release Bundles** — source type `ReleaseBundle` → Release Lifecycle name/version.
+- **Builds** — source type `Build` → Artifactory build-info records.

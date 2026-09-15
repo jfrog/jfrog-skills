@@ -3,17 +3,25 @@
 *.swo
 *~
 .idea/
+*.iml
 .vscode/
 node_modules/
 output/
 tests/data/
 
-# WEP credentials and run artifacts
-evaluation/.credentials.local.json
-evaluation/.azure-sp.env
-evaluation/runs/
-evaluation/resolved_definitions/
-evaluation/artifact_index.json
-evaluation/version_manifest.json
-evaluation/scripts/.generated-system-prompt.txt
-.wep/
+# Python bytecode, written next to any script that gets imported: the skill
+# validation and dashboard scripts, the e2e helpers, and the pytest suites under
+# tests/. pytest drops its own .gitignore inside .pytest_cache; Python leaves
+# nothing beside __pycache__, so it has to be listed here.
+__pycache__/
+*.py[cod]
+
+# Gradle scratch state and output.
+.gradle/
+build/
+
+# Local E2E harness state (see e2e/README.md)
+e2e/.venv/
+e2e/.env
+e2e/.output/
+e2e/.pytest_cache/

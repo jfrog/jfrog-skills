@@ -1,61 +1,55 @@
 # OneModel GraphQL (JFrog Platform)
 
-Run OneModel GraphQL queries against the JFrog Platform to fetch information
-about applications, release bundles, artifacts, builds, evidence, packages,
-catalog data, and more through the unified OneModel endpoint.
+Run OneModel GraphQL against the JFrog Platform for applications, release
+bundles, artifacts, builds, evidence, packages, catalog data, and more via
+the unified endpoint.
 
-**When to read this file:** Any OneModel GraphQL query, schema discovery, or
-when the user asks to list or search platform entities via GraphQL. For
-domain-specific query shapes, read `onemodel-query-examples.md`. For
-pagination, variables, and date formatting, read `onemodel-common-patterns.md`.
+**Read when:** OneModel GraphQL query, schema discovery, or list/search
+platform entities via GraphQL. Domain shapes → `onemodel-query-examples.md`.
+Pagination / variables / dates → `onemodel-common-patterns.md`.
 
-In examples below, `<skill_path>` is this skill's directory (parent of
-`references/`).
+In examples, `<skill_path>` is this skill's directory (parent of `references/`).
 
 ## `~/.jfrog/skills-cache/` policy
 
-The skill cache lives under `${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/`
-(co-located with `jf config`, **not** inside the installed skill tree). It holds
-**only**:
+Cache: `${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/` (with `jf config`,
+**not** inside the installed skill). Holds **only**:
 
 1. **`onemodel-schema-${JFROG_SERVER_ID}.graphql`** — this workflow (supergraph
-   SDL cache). **Always** use the path in [Fetch the schema](#2-fetch-the-schema);
-   do not mirror the schema under `/tmp`.
-2. **`jfrog-skill-state.json`** — environment check (see main SKILL.md); scripts
-   manage it; do not delete or replace it casually.
+   SDL). **Always** use [Fetch the schema](#2-fetch-the-schema); never mirror
+   under `/tmp`.
+2. **`jfrog-skill-state.json`** — env check (main SKILL.md); scripts own it;
+   do not delete/replace casually.
 
-**Never** store GraphQL **query responses**, REST bodies, reports, or other
-scratch files under `skills-cache/`. For responses, use `/tmp` with a unique name
-(`$$`, `mktemp -d`) as in [Execute the query](#6-execute-the-query) — the
-example `RESPONSE_FILE` paths must stay outside `skills-cache/`.
+**Never** store GraphQL **responses**, REST bodies, reports, or scratch under
+`skills-cache/`. Responses → `/tmp` with unique name (`$$`, `mktemp -d`) as in
+[Execute the query](#6-execute-the-query). `RESPONSE_FILE` must stay outside
+`skills-cache/`.
 
 ## Prerequisites
 
-- **JFrog CLI** (`jf`) configured with at least one server — follow the main
-  SKILL.md environment check and **Server selection rules** before querying.
-- **Artifactory 7.104.1+** — OneModel GraphQL requires this minimum version.
-- **`jq`** on `PATH` (same as the base skill). HTTP calls go through
-  `jf api`; no standalone `curl` is needed.
+- **JFrog CLI** (`jf`) with ≥1 server — main SKILL.md env check + **Server
+  selection rules** before querying.
+- **Artifactory 7.104.1+** — OneModel GraphQL minimum.
+- **`jq`** on `PATH` (base skill). HTTP via `jf api`; no standalone `curl`.
 
 ## Workflow
 
-Follow these steps in order. Skipping the schema fetch (step 2) is the most
-common source of errors — queries built from assumptions or cached knowledge
-will fail on servers whose schema differs from what you expect.
+Follow in order. Skipping schema fetch (step 2) is the top error source —
+assumed/cached shapes fail when the server schema differs.
 
-1. **Resolve the target server** — derive `JFROG_SERVER_ID` from `jf config`
-2. **Fetch the schema** — always fetch the supergraph schema from the server
-3. **Understand the query intent** — map the user's request to domains and types
-4. **Construct the GraphQL query** — build from the resolved schema only
-5. **Validate the query against the schema** — verify every field and type
-6. **Execute the query** — POST to the OneModel endpoint; save response to a file
-7. **Handle the response** — paginate if needed; present results clearly
+1. **Resolve the target server** — `JFROG_SERVER_ID` from `jf config`
+2. **Fetch the schema** — always fetch supergraph from the server
+3. **Understand the query intent** — map request → domains/types
+4. **Construct the GraphQL query** — from resolved schema only
+5. **Validate against the schema** — every field and type
+6. **Execute** — POST OneModel; save response to a file
+7. **Handle the response** — paginate if needed; present clearly
 
 ### 1. Resolve the target server
 
-Authentication is handled automatically by `jf api` against the active (or
-`--server-id`-specified) server. You only need the server-id locally — for
-caching the schema file per server. Derive it from `jf config`:
+`jf api` authenticates against the active (or `--server-id`) server. You only
+need the server-id locally — for per-server schema cache. From `jf config`:
 
 ```bash
 # User-specified server:
@@ -66,40 +60,32 @@ JFROG_SERVER_ID=$(jf config show --server-id 2>/dev/null \
   || jf config export | base64 -d | jq -r '.servers[] | select(.isDefault==true).serverId')
 ```
 
-If the user named a specific server, pass `--server-id "$JFROG_SERVER_ID"` to
-every `jf api` invocation in steps 2 and 6 so the query hits that server
-(see SKILL.md § *Server selection rules*).
+If the user named a server, pass `--server-id "$JFROG_SERVER_ID"` on every
+`jf api` in steps 2 and 6 (SKILL.md § *Server selection rules*).
 
 ### 2. Fetch the schema
 
-**This step is mandatory for custom or novel queries.** You need the supergraph
-schema from the specific JFrog server you are working with.
+**Mandatory for custom/novel queries.** Need the supergraph from this server.
 
 #### Shortcut for well-known query patterns
 
-When using a query shape that comes directly from `onemodel-query-examples.md`
-**without modifications** (same fields, same filters, same argument types), you
-may skip the full schema fetch and execute immediately. The example queries in
-that file are maintained against real servers and are unlikely to drift for
-stable domains like `publicPackages`, `storedPackages`, and `evidence`.
+Query shape from `onemodel-query-examples.md` **without modifications** (same
+fields, filters, arg types) → may skip full schema fetch and execute. Those
+examples track real servers; stable domains (`publicPackages`,
+`storedPackages`, `evidence`) rarely drift.
 
-**Fallback rule:** If the query returns `GRAPHQL_VALIDATION_FAILED` or
-unexpected empty results, fetch the schema (as described below), verify the
-query against it, and retry. Do not attempt more than one execution without
-schema verification.
+**Fallback:** `GRAPHQL_VALIDATION_FAILED` or unexpected empty → fetch schema
+(below), verify, retry. Never more than one execution without schema check.
 
-The schema is large. Cache it under the skill cache directory (the JFrog CLI
-home — outside the installed skill tree) keyed by the concrete
-`JFROG_SERVER_ID` from step 1 (the CLI `serverId`, never a placeholder like
-`default`).
+Schema is large. Cache under skill cache (CLI home, outside installed skill),
+keyed by concrete `JFROG_SERVER_ID` from step 1 (CLI `serverId`, never a
+placeholder like `default`).
 
-**Always use this exact path** — do not save the schema to `/tmp/` or any other
-location. The cache path is:
+**Always this exact path** — not `/tmp/` or elsewhere:
 
 `${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/onemodel-schema-${JFROG_SERVER_ID}.graphql`
 
-Run the following block as-is. It checks for an existing cached file and only
-fetches when missing:
+Run as-is — uses cache when present, fetches when missing:
 
 ```bash
 SCHEMA_FILE="${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/onemodel-schema-${JFROG_SERVER_ID}.graphql"
@@ -114,133 +100,115 @@ else
 fi
 ```
 
-(Omit `--server-id "$JFROG_SERVER_ID"` to target the active default server.)
+(Omit `--server-id "$JFROG_SERVER_ID"` for the active default server.)
 
-After the block runs, **read `$SCHEMA_FILE` from disk** for all subsequent
-schema lookups — never re-fetch to a different path.
+After the block: **read `$SCHEMA_FILE` from disk** for all schema lookups —
+never re-fetch to a different path.
 
-If the fetch fails (HTTP 401/403, empty file, or network error), verify the
-access token, wildcard audience, base URL (no trailing path beyond the host), and
-server version. If the schema file is empty or contains an HTML error page,
-delete it and retry the block above.
+Fetch fails (401/403/404, network, timeout) → **stop and report**; fix
+token / wildcard audience / base URL (host only, no trailing path) / server
+version first — do not blind-retry. Retry the block only after a **successful**
+call left an empty file or HTML error page (delete it first).
 
-The schema file is SDL — namespaces, types, fields, arguments, enums, and
-directives for **this** server.
+Schema is SDL — namespaces, types, fields, args, enums, directives for **this**
+server.
 
 #### Navigating the schema
 
-The schema is large (typically 10,000+ lines). Do not read it in full. Use
-targeted searches:
+Large (typically 10,000+ lines). Do not read in full. Targeted search:
 
-1. **Find available namespaces** — search for lines matching `: ...Queries!`
-   near the root `Query` definition (e.g. `applications: ApplicationsQueries!`).
-2. **Find operations for a namespace** — search for the `...Queries` type name
-   to see `get...` and `search...` methods.
-3. **Find input/filter types** — from the operation signature, look up the
-   `WhereInput` type to see available filters.
-4. **Find output fields** — look up the node type to see which fields you can
-   request.
+1. **Namespaces** — lines matching `: ...Queries!` near root `Query`
+   (e.g. `applications: ApplicationsQueries!`).
+2. **Operations** — search `...Queries` type for `get...` / `search...`.
+3. **Input/filter types** — from op signature, look up `WhereInput`.
+4. **Output fields** — look up node type for selectable fields.
 
-When reading the schema, **ignore types and fields annotated with
-`@inaccessible`.** These are internal federation artifacts and are not queryable
-through the OneModel endpoint.
+**Ignore `@inaccessible`** — internal federation; not queryable via OneModel.
 
 #### Never assume — always verify in the schema
 
-Before constructing any query, look up every type you intend to use. Common
-mistakes:
+Before constructing, look up every type you will use. Common mistakes:
 
-- **Scalars vs enums** — A name like `FooType` may be a `scalar` (string)
-  or an `enum`. Search for `scalar FooType` vs `enum FooType` to know
-  whether to pass a quoted string (`"something"`) or a bare identifier.
-- **Connection fields vs plain fields** — Look for `...Connection` naming;
-  verify exact field names and required arguments on the parent type.
-- **Nested types** — When a field returns a complex type, look up that type's
-  definition for subfields; do not guess names.
+- **Scalars vs enums** — `FooType` may be `scalar` (quoted string) or `enum`
+  (bare id). Search `scalar FooType` vs `enum FooType`.
+- **Connection vs plain** — look for `...Connection`; verify field names and
+  required args on the parent.
+- **Nested types** — look up returned complex types for subfields; do not guess.
 
 #### Read the descriptions
 
-Schema descriptions (`"""..."""` above types, fields, and arguments) encode
-accepted values, matching behavior, and constraints. Read a few lines above
-each definition you use.
+Schema `"""..."""` above types/fields/args encode accepted values, matching,
+constraints. Read a few lines above each definition you use.
 
-**Why this matters:** The OneModel supergraph is composed per server from
-products, entitlements, and license. Different servers expose different domains.
-The resolved schema is the only reliable source of truth.
+**Why:** Supergraph is per-server (products, entitlements, license). Domains
+differ. Resolved schema is the only reliable source of truth.
 
 **Do NOT rely on:**
 
-- Public documentation alone — it may not list every domain on your server.
-- Hardcoded examples without schema verification — see
-  `onemodel-query-examples.md` as patterns only.
+- Public docs alone — may omit domains on your server.
+- Hardcoded examples without schema check — `onemodel-query-examples.md` =
+  patterns only.
 - Legacy metadata GraphiQL (`/metadata/api/v1/query/graphiql`) — deprecated;
-  it does not reflect the OneModel schema.
+  not OneModel.
 
 ### 3. Understand the query intent
 
-Using the schema from step 2, map the user's request to available domains.
-Search for root `Query` and `: ...Queries!` lines to see namespaces on this
-server.
+From step-2 schema, map the request to domains. Search root `Query` and
+`: ...Queries!` for namespaces on this server.
 
-Common domains you **may** find (always verify in the schema):
+Domains you **may** find (always verify):
 
-- **Applications** — applications, versions, bound package versions
+- **Applications** — apps, versions, bound package versions
 - **Release lifecycle** — release bundle versions, artifacts, source builds
 - **Evidence** — evidence on artifacts, repos, or release bundles
-- **Stored packages** — packages and versions in Artifactory repos
+- **Stored packages** — packages/versions in Artifactory repos
 - **Public / custom catalog** — public registry metadata, catalog packages,
   security/legal/operational info
 
-If no matching types exist, tell the user the capability is not exposed on this
-server.
+No matching types → tell the user the capability is not on this server.
 
 **Note:** Legacy metadata GraphQL (`packages` at `/metadata/api/v1/query`) is
-deprecated and **not** part of OneModel. Use `/onemodel/api/v1/graphql` only.
+deprecated and **not** OneModel. Use `/onemodel/api/v1/graphql` only.
 
 ### 4. Construct the GraphQL query
 
-Build the query using **only** types, fields, and arguments from the resolved
-schema.
+Build using **only** types, fields, and args from the resolved schema.
 
 #### Pre-construction checklist
 
-1. Look up every argument type (`where`, `orderBy`, etc.).
-2. Look up every output type and required subfield selections for object types.
+1. Look up every argument type (`where`, `orderBy`, …).
+2. Look up every output type and required subfield selections for objects.
 3. Look up every `WhereInput` and nested filter shape.
-4. Trace the full path from root to leaf and confirm each hop exists.
+4. Trace root→leaf; confirm each hop exists.
 
 #### Principles
 
-- Prefer **one query** that returns what the user needs (nested fields,
-  filters) to minimize round-trips.
+- Prefer **one query** with nested fields/filters (fewer round-trips).
 - Request **only needed fields**.
-- On validation errors, **simplify** the query (e.g. one scalar field per
-  connection) to isolate the bad filter or field. Request `totalCount` only if
-  that connection type defines it in the schema (many metadata connections do
-  not).
-- Use **`where`** in the query instead of fetching everything client-side.
-- Use **pagination** — include `first` (or `last`) and
-  `pageInfo { hasNextPage endCursor }` for large sets.
-- Use **GraphQL variables** for dynamic values (see `onemodel-common-patterns.md`).
+- On validation errors, **simplify** (e.g. one scalar per connection) to
+  isolate the bad filter/field. Request `totalCount` only if the connection
+  type defines it (many metadata connections do not).
+- Prefer **`where`** over fetch-all + client filter.
+- **Pagination** — `first`/`last` + `pageInfo { hasNextPage endCursor }` for
+  large sets.
+- **GraphQL variables** for dynamic values (`onemodel-common-patterns.md`).
 
 #### Naming convention
 
 - `get...` — single item
-- `search...` — list / connection-style results
+- `search...` — list / connection-style
 
 ### 5. Validate the query against the schema
 
-Before executing, verify:
+Before execute, verify:
 
-1. Every field name matches the schema (casing, suffixes like `...Connection`).
+1. Every field name matches schema (casing, `...Connection` suffixes).
 2. Every object-typed field has a subfield selection.
-3. Every argument value matches scalar vs enum vs input rules.
-4. Nested `where` paths exist end-to-end on the corresponding input types.
-5. Connection fields include pagination arguments as required.
-6. **Brace balance** — every `{` in the document (selection sets and input
-   objects) has exactly one matching `}`. Deep nesting is easy to get wrong in
-   a single-line shell string; prefer a `.graphql` file or heredoc so structure
-   is visible (see below).
+3. Every arg value matches scalar vs enum vs input rules.
+4. Nested `where` paths exist end-to-end on input types.
+5. Connection fields include required pagination args.
+6. **Brace balance** — every `{` has one matching `}`. Prefer `.graphql` file
+   or heredoc over a single-line shell string (see below).
 
 ### 6. Execute the query
 
@@ -256,15 +224,13 @@ jf api /onemodel/api/v1/graphql \
 
 #### Always save the response to a file
 
-Redirect `jf api`'s stdout to `$RESPONSE_FILE` so you can re-`jq` without
-re-querying. **Do not pipe `jf api` directly to `jq`** — a wrong filter
-loses the response. **Do not** set `RESPONSE_FILE` under
-`~/.jfrog/skills-cache/` — that directory is only for the schema cache and
-`jfrog-skill-state.json` (see [`~/.jfrog/skills-cache/` policy](#jfrogskills-cache-policy)
-above).
+Redirect `jf api` stdout → `$RESPONSE_FILE` so you can re-`jq` without
+re-querying. **Do not pipe `jf api` to `jq`** — wrong filter loses the
+response. **Do not** put `RESPONSE_FILE` under `~/.jfrog/skills-cache/` —
+schema + `jfrog-skill-state.json` only (see
+[`~/.jfrog/skills-cache/` policy](#jfrogskills-cache-policy)).
 
-For multiple queries in one shell session, use a temp directory under `/tmp` and
-sequential names:
+Multiple queries in one shell → temp dir under `/tmp` + sequential names:
 
 ```bash
 ONEMODEL_TMPDIR=$(mktemp -d)
@@ -280,19 +246,16 @@ RESPONSE_FILE="$ONEMODEL_TMPDIR/response-$ONEMODEL_QUERY_NUM.json"
 
 #### Always use `jq` to build the JSON payload
 
-Do **not** hand-embed the GraphQL string inside a JSON literal — escaping breaks
-easily. Build the payload JSON with `jq`, write it to a **file**, and pass the
-file to `jf api` with `--input`. `jf api` does not accept stdin for `--data`;
-`--input` expects a file path.
+Do **not** hand-embed GraphQL inside a JSON literal — escaping breaks easily.
+Build payload with `jq` → **file** → `jf api --input`. `jf api` has no stdin
+`--data`; `--input` expects a path.
 
 ##### Avoid `PARSING_ERROR` (broken GraphQL documents)
 
-A response with `extensions.code: PARSING_ERROR` (often `expected a StringValue,
-Name or OperationDefinition` at **line 1, column N**) means the **document
-text** is invalid — usually **too many or too few `}`** — before the server
-checks fields against the schema. This happens most often when a long query is
-pasted into `QUERY='...'` as **one bash line**: braces are hard to count, and a
-typo near the end surfaces as an error at a **high column number**.
+`extensions.code: PARSING_ERROR` (often `expected a StringValue, Name or
+OperationDefinition` at **line 1, column N**) → **document text** invalid —
+usually **too many/few `}`** — before schema field checks. Common with long
+`QUERY='...'` one-liners: braces hard to count; typo near end → high column.
 
 **Do this instead:**
 
@@ -333,15 +296,15 @@ jf api /onemodel/api/v1/graphql \
   > "$RESPONSE_FILE"
 ```
 
-Strip `#` comments and collapse whitespace only if you need a single-line
-payload; often you can pass the file content as-is if it has no comments.
+Strip `#` comments / collapse whitespace only if you need a single-line
+payload; often pass file content as-is when comment-free.
 
-With variables, add more `--arg` flags and a `variables` object (see
-`onemodel-common-patterns.md`).
+With variables: more `--arg` flags + `variables` object
+(`onemodel-common-patterns.md`).
 
 ### 7. Handle the response
 
-Always read from `$RESPONSE_FILE` for further extraction or formatting.
+Always read `$RESPONSE_FILE` for further extraction/formatting.
 
 #### Success shape
 
@@ -357,7 +320,7 @@ Always read from `$RESPONSE_FILE` for further extraction or formatting.
 
 #### Errors
 
-Errors appear in an `errors` array. Partial data may coexist with errors.
+Errors in `errors` array. Partial data may coexist.
 
 | Symptom | Likely cause | Action |
 |--------|---------------|--------|
@@ -369,32 +332,29 @@ Errors appear in an `errors` array. Partial data may coexist with errors.
 
 #### Pagination
 
-If `pageInfo.hasNextPage` is true, pass `endCursor` as `after` on the next
-request. Save each page to a new `response-N.json`. Details:
-`onemodel-common-patterns.md`.
+`pageInfo.hasNextPage` → pass `endCursor` as `after`. Save each page to a new
+`response-N.json`. Details: `onemodel-common-patterns.md`.
 
 ## GraphQL Playground
 
-The Platform UI includes a GraphQL Playground: **Integrations > GraphQL
-Playground**, or:
+Platform UI: **Integrations > GraphQL Playground**, or
+`$JFROG_URL/ui/onemodel/playground`.
 
-`$JFROG_URL/ui/onemodel/playground`
+Suggest when:
 
-Suggest it when:
-
-- Queries are deeply nested or cross-domain and hard to get right in one turn
-- Multiple attempts failed and autocomplete would help
-- The user wants to explore capabilities rather than run one fixed query
-- The user asks for a UI or visual GraphQL explorer
+- Deep/cross-domain queries hard to get right in one turn
+- Multiple failed attempts; autocomplete would help
+- User wants to explore capabilities, not one fixed query
+- User asks for a UI / visual GraphQL explorer
 
 Include the resolved base URL so they can open it immediately.
 
 ### Official documentation
 
-- [JFrog OneModel GraphQL](https://jfrog.com/help/r/jfrog-rest-apis/jfrog-one-model-graphql)
-- [OneModel common patterns](https://jfrog.com/help/r/jfrog-rest-apis/one-model-graphql-common-patterns-and-conventions)
-- [Release lifecycle GraphQL examples](https://jfrog.com/help/r/jfrog-rest-apis/get-release-bundle-v2-version-graphql-use-cases-examples)
-- [GraphQL introduction](https://graphql.org/learn/)
+- https://jfrog.com/help/r/jfrog-rest-apis/jfrog-one-model-graphql
+- https://jfrog.com/help/r/jfrog-rest-apis/one-model-graphql-common-patterns-and-conventions
+- https://jfrog.com/help/r/jfrog-rest-apis/get-release-bundle-v2-version-graphql-use-cases-examples
+- https://graphql.org/learn/
 
 ## Gotchas
 
@@ -440,7 +400,6 @@ Include the resolved base URL so they can open it immediately.
 
 ## Related reference files
 
-- `onemodel-query-examples.md` — illustrative templates per domain (verify
-  against schema before use).
-- `onemodel-common-patterns.md` — Relay-style pagination, filters, variables,
-  date formatting, response shapes.
+- `onemodel-query-examples.md` — domain templates (verify against schema).
+- `onemodel-common-patterns.md` — Relay pagination, filters, variables, dates,
+  response shapes.

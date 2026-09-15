@@ -1,9 +1,8 @@
 # Artifactory API Gaps
 
-Operations available through REST API but not through CLI commands.
-Invoke them via `jf api <path> [flags]` (authentication is handled
-automatically against the active `jf config` server; see the base skill's
-*Invoking platform APIs with `jf api`* section).
+REST operations without CLI commands. Invoke via `jf api <path> [flags]`
+(auth automatic against active `jf config` server; see base skill
+*Invoking platform APIs with `jf api`*).
 
 ## Repository management
 
@@ -11,8 +10,7 @@ automatically against the active `jf config` server; see the base skill's
 ```bash
 jf api /artifactory/api/repositories/<repo-key>
 ```
-Returns the full JSON configuration of a repository. Useful as a template
-for creating similar repos.
+Full JSON repo config. Useful as template for similar repos.
 
 ### List all repositories
 ```bash
@@ -89,7 +87,7 @@ jf api /artifactory/api/search/aql \
   -d 'items.find({"repo":"my-repo","name":{"$match":"*.jar"}})'
 ```
 
-For remote repository content, query the `-cache` suffixed repo:
+Remote repo content — query `-cache` suffixed repo:
 ```bash
 jf api /artifactory/api/search/aql \
   -X POST -H "Content-Type: text/plain" \
@@ -113,8 +111,8 @@ jf api "/artifactory/api/search/gavc?g=com.example&a=mylib&v=1.0"
 
 ## User and group management
 
-User and group operations are handled by the Access service. See
-`platform-admin-api-gaps.md` (Users / Groups sections) for the full set.
+User/group operations via Access service. See
+`platform-admin-api-gaps.md` (Users / Groups sections).
 
 ## Metadata calculation
 
@@ -172,10 +170,9 @@ jf api "/artifactory/api/federation/fullSyncAll/<repo-key>" -X POST
 
 ### List builds (prefer scoped queries)
 
-**Unscoped** `GET /artifactory/api/build` (no query parameters) can **time
-out** on busy instances. Prefer **project-scoped** or **repo-scoped**
-listing, then detail GETs. Full flow: read `artifactory-operations.md`
-§ *Listing builds when the project key is known*.
+**Unscoped** `GET /artifactory/api/build` can **time out** on busy instances.
+Prefer project- or repo-scoped listing + detail GETs. Flow: `artifactory-operations.md`
+§ *Listing build names*.
 
 ```bash
 # Project scope — build names (latest per name)

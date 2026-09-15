@@ -5,7 +5,10 @@
 This repository ships AI agent skills for the JFrog Platform: 
 
 - **`jfrog`** (required): The base skill covering CLI setup, artifact operations, security queries, AQL, and GraphQL. All other skills depend on it.
-- **`jfrog-package-safety-and-download`**: A workflow skill for package safety checks and curation-aware downloads. Requires `jfrog`.
+- **`jfrog-package-curation`**: A workflow skill for package safety checks, curation-aware downloads, and root-causing package install/resolve/download failures caused by JFrog Curation — correlating index-time (CVS) and download-time audits via the JFrog MCP curation tools for the troubleshooting path (MCP only — no `jf` CLI). Requires `jfrog`.
+- **`jfrog-ai-catalog`**: A workflow skill to discover, install, update, and publish agent skills and agent plugins in the JFrog AI Catalog. Requires `jfrog`.
+- **`jfrog-reference-architecture`**: A workflow skill for topology, sizing, deployment patterns, and use-case selection using the [JFrog Platform Reference Architecture](https://jfrog.com/reference-architecture/) (live `WebFetch`, primarily [llms-full.txt](https://jfrog.com/reference-architecture/llms-full.txt)). Requires `jfrog` for vocabulary only; no CLI needed for planning.
+- **`jfrog-setup-package-managers`**: A workflow skill that binds local package managers (npm, pip, maven, go, docker, …) to Artifactory via `jf setup` and records the workspace binding in `.jfrog/local/package-resolution.json`. Requires `jfrog`.
 
 Install them in your AI coding agent and interact with JFrog through natural language. The `jfrog` skill must always be installed — workflow skills build on top of it.
 
@@ -19,13 +22,23 @@ Install them in your AI coding agent and interact with JFrog through natural lan
 From remote repository:
 
 ```bash
-npx skills add git@github.com:jfrog/jfrog-skills.git -g --skill jfrog --skill jfrog-package-safety-and-download
+npx skills add git@github.com:jfrog/jfrog-skills.git -g \
+    --skill jfrog \
+    --skill jfrog-package-curation \
+    --skill jfrog-ai-catalog \
+    --skill jfrog-reference-architecture \
+    --skill jfrog-setup-package-managers
 ```
 
 From a local clone:
 
 ```bash
-npx skills add . -g --skill jfrog --skill jfrog-package-safety-and-download
+npx skills add . -g \
+    --skill jfrog \
+    --skill jfrog-package-curation \
+    --skill jfrog-ai-catalog \
+    --skill jfrog-reference-architecture \
+    --skill jfrog-setup-package-managers
 ```
 
 The `-g` flag installs into the global scope (recommended). Drop it to install into the current project only. Run `npx skills --help` for more usage information.
@@ -99,6 +112,10 @@ Try asking:
 
 > Summarize curation activity this month: how many packages were blocked and why?
 
+> `npm install` fails with ETARGET for *package-name*@*X.Y.Z* — is Curation removing that version from the index?
+
+> Why do I get a 403 on *package-name*@*X.Y.Z* even though the version is in the registry?
+
 ### Examine Builds and Provenance
 
 Build info, artifact-to-build tracing, checksum verification.
@@ -149,6 +166,66 @@ Try asking:
 
 CLI setup, multi-instance management, access tokens.
 
+### Discover and Install AI Catalog Skills and Plugins
+
+Browse, install, update, and publish agent skills and agent plugins hosted in the JFrog AI Catalog.
+
+Try asking:
+
+> What skills are available in my JFrog AI Catalog project *project-name*?
+
+> Install the *skill-name* skill from my JFrog AI Catalog project *project-name*
+
+> What skills do I have installed from the JFrog AI Catalog?
+
+> Show me the versions of *skill-name* in my JFrog AI Catalog project *project-name*
+
+> Update the *skill-name* skill from the JFrog AI Catalog to the latest version
+
+> Publish the skill at *path* to my JFrog AI Catalog project *project-name*
+
+> What plugins are available in my JFrog AI Catalog project *project-name*?
+
+> Install the *plugin-name* plugin from my JFrog AI Catalog project *project-name*
+
+> What plugins do I have installed from the JFrog AI Catalog?
+
+> Show me the versions of *plugin-name* in my JFrog AI Catalog project *project-name*
+
+> Update the *plugin-name* plugin from the JFrog AI Catalog to the latest version
+
+> Publish the plugin at *path* to my JFrog AI Catalog project *project-name*
+
+### Plan topology, sizing, and deployment
+
+Uses the [JFrog reference architecture](https://jfrog.com/reference-architecture/) site (live fetch). Install `jfrog-reference-architecture`.
+
+Try asking:
+
+> What sizing should I set for Artifactory given our peak traffic?
+
+> Should we use JFrog SaaS or self-managed for a single-site production setup?
+
+> We need disaster recovery across two regions — which documented use case fits?
+
+> List all documented reference-architecture use cases for multi-site
+
+> How should I deploy Artifactory on EKS with the official Helm chart?
+
+> Active-active vs active-passive — which pattern matches our needs?
+
+### Bind Package Managers to Artifactory
+
+Configure npm, pip, maven, go, docker, and more to resolve from Artifactory via `jf setup`. Install `jfrog-setup-package-managers`.
+
+Try asking:
+
+> Set up npm to resolve from Artifactory
+
+> Configure my package managers to use JFrog
+
+> Bind pip and maven to my JFrog repositories
+
 ### Execute Multi-Step Workflows
 
 The skill also handles real-world scenarios that span multiple capabilities:
@@ -171,7 +248,7 @@ The skill also handles real-world scenarios that span multiple capabilities:
 
 ## How It Works
 
-When your agent receives a JFrog-related request, it reads the skill and matches the task to the appropriate reference files. It loads only the context needed for the current operation, typically 1-3 reference files, keeping the agent focused and efficient. All operations execute through the `jf` CLI or REST/GraphQL APIs.
+When your agent receives a JFrog-related request, it reads the skill and matches the task to the appropriate reference files. It loads only the context needed for the current operation, typically 1-3 reference files, keeping the agent focused and efficient. Most operations execute through the `jf` CLI or REST/GraphQL APIs; a few workflows (e.g. `jfrog-package-curation`'s curation-troubleshooting path) are MCP-only.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for architecture details.
 

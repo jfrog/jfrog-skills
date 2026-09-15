@@ -3,40 +3,36 @@
 When to read this file:
 
 - Querying **public package metadata** (descriptions, vulnerabilities, licenses, operational info).
-- Working with the **Custom Catalog** (org-specific labels, package views, federation).
-- Looking up **vulnerability details** beyond what Xray provides (advisories, EPSS, CWE, known exploits).
+- Working with **Custom Catalog** (org-specific labels, package views, federation).
+- Looking up **vulnerability details** beyond Xray (advisories, EPSS, CWE, known exploits).
 - Querying **OpenSSF scorecards**, **ML model metadata**, or **MCP service** registries.
-- Using the OneModel GraphQL API with `publicPackages`, `customPackages`,
+- Using OneModel GraphQL with `publicPackages`, `customPackages`,
   `publicSecurityInfo`, `publicLegalInfo`, `publicOperationalInfo`,
   `publicCatalogLabels`, or `publicRemoteServices` query roots.
 
-Catalog entities are accessed via the **OneModel GraphQL API**
-(`/onemodel/api/v1/graphql`).
+Catalog entities via **OneModel GraphQL API** (`/onemodel/api/v1/graphql`).
 
-For the OneModel query workflow (credentials, schema fetch, validation,
-execution), read `references/onemodel-graphql.md`.
+OneModel query workflow (credentials, schema fetch, validation, execution): `references/onemodel-graphql.md`.
 
 ## Two catalog layers
 
 | Layer | Scope | Description |
 |-------|-------|-------------|
-| **Public Catalog** | Global | JFrog's curated package database — security, legal, and operational metadata for public packages across ecosystems |
-| **Custom Catalog** | Organization | Org-specific overlay — custom labels, per-org package views, federation config |
+| **Public Catalog** | Global | JFrog global package DB — security, legal, operational metadata across ecosystems |
+| **Custom Catalog** | Organization | Org overlay: custom labels, per-org views, federation config |
 
-The Custom Catalog builds on top of the Public Catalog. A public package
-can be enriched with org-specific labels and metadata through the Custom
-Catalog without altering the underlying public data.
+Custom Catalog overlays Public Catalog — org labels/metadata without changing public data.
 
 ## Public Catalog entities
 
 ### PublicPackage
 
-A package as known to JFrog's global package database.
+Package in JFrog global package database.
 
 | Field | Description |
 |-------|-------------|
-| `name` | Package name (e.g. `lodash`, `spring-boot-starter-web`) |
-| `type` | Package type (e.g. `npm`, `maven`, `pypi`) |
+| `name` | Package name (`lodash`, `spring-boot-starter-web`) |
+| `type` | Package type (`npm`, `maven`, `pypi`) |
 | `ecosystem` | Ecosystem identifier |
 | `description` | Rich-text description |
 | `homepage`, `vcsUrl` | Package URLs |
@@ -53,12 +49,12 @@ Query: `publicPackages.searchPackages(where: {...})`.
 
 ### PublicPackageVersion
 
-A specific version with security, legal, and operational analysis.
+Specific version with security, legal, operational analysis.
 
 | Field | Description |
 |-------|-------------|
 | `version` | Version string |
-| `isLatest` | Whether this is the latest version |
+| `isLatest` | Whether latest version |
 | `isListedVersion` | Whether visible in Catalog UI |
 | `publishedAt`, `modifiedAt` | Timestamps |
 | `trendingScore` | Version-level popularity |
@@ -72,76 +68,71 @@ Each version carries three info blocks:
 
 ### PublicVulnerability
 
-Vulnerability data richer than what Xray violations expose. Useful for
-deep-dive security analysis and advisory lookups.
+Richer vulnerability data than Xray violations — deep-dive analysis + advisory lookups.
 
 | Field | Description |
 |-------|-------------|
-| `name` | CVE identifier (e.g. `CVE-2021-44228`) |
+| `name` | CVE id (`CVE-2021-44228`) |
 | `ecosystem` | Affected ecosystem |
 | `severity` | `CRITICAL`, `HIGH`, `MEDIUM`, `LOW` |
 | `description` | Detailed impact description |
 | `cvss` | CVSS scores — v2, v3, **and v4** |
-| `epss` | EPSS (Exploit Prediction Scoring System) — exploit likelihood |
-| `knownExploit` | Known exploit information |
-| `withdrawn` | Whether the CVE has been retracted |
+| `epss` | EPSS exploit likelihood |
+| `knownExploit` | Known exploit info |
+| `withdrawn` | CVE retracted |
 | `aliases` | Alternative identifiers |
 | `references` | Advisory URLs |
 | `publishedAt`, `modifiedAt` | Timestamps |
 
-Advisory sources (via `advisories` connection):
-- **NVD** — NIST National Vulnerability Database
+Advisory sources (`advisories` connection):
+- **NVD** — NIST vulnerability DB
 - **GHSA** — GitHub Security Advisory
-- **JFrog Advisory** — JFrog's own research (includes impact reasons)
+- **JFrog Advisory** — JFrog research (impact reasons)
 - **Debian Security Tracker**
 - **RedHat OVAL**
 
 Additional connections: `cwesConnection` (CWE entries), `cpesConnection`
-(CPE entries), `publicPackageInfo` (affected packages and versions).
+(CPE entries), `publicPackageInfo` (affected packages + versions).
 
 Query: `publicSecurityInfo.searchVulnerabilities(where: {...})`.
 
 #### Filtering limitations
 
-`searchVulnerabilities` can filter by CVE name, ecosystem, severity, CVSS,
-EPSS, known exploit status, and publication date — but **not** by affected
-package name. There is no `hasPublicPackageInfoWith` or similar filter on
-`PublicVulnerabilityWhereInput`. To find vulnerabilities affecting a specific
-package, use one of these alternatives:
+`searchVulnerabilities` filters by CVE name, ecosystem, severity, CVSS,
+EPSS, known exploit status, publication date — but **not** by affected
+package name. No `hasPublicPackageInfoWith` or similar filter on
+`PublicVulnerabilityWhereInput`. To find vulnerabilities affecting specific
+package, use alternatives:
 
 - **Version-level security info** (GraphQL): query
-  `publicPackages.getPackage(type, name)` and navigate to
-  `versionsConnection → securityInfo → vulnerabilitiesConnection` to get
+  `publicPackages.getPackage(type, name)` →
+  `versionsConnection → securityInfo → vulnerabilitiesConnection` for
   CVEs affecting specific versions.
-- **Individual CVE lookup**: use `searchVulnerabilities(where: { name: "<CVE>" })`
-  and inspect `publicPackageInfo.vulnerablePublicPackagesConnection` on the
+- **Individual CVE lookup**: `searchVulnerabilities(where: { name: "<CVE>" })`
+  → inspect `publicPackageInfo.vulnerablePublicPackagesConnection` on
   `generic` ecosystem entry.
 
 #### Ecosystem multiplicity
 
-A single CVE appears as multiple `PublicVulnerability` entries — one per
-ecosystem. The `ecosystem` field determines which entry you see:
+Single CVE → multiple `PublicVulnerability` entries (one per ecosystem). `ecosystem` field determines entry:
 
 | Ecosystem | Contains |
 |-----------|----------|
-| `generic` | Non-OS package-level data (npm, maven, pypi, go, etc.) — includes `publicPackageInfo` with vulnerable versions and fix versions |
-| `debian`, `redhat`, `ubuntu`, etc. | OS-specific advisory data — severity may differ from NVD; `publicPackageInfo` is typically empty (OS packages are tracked separately) |
+| `generic` | Non-OS package-level data (npm, maven, pypi, go, etc.) — includes `publicPackageInfo` with vulnerable + fix versions |
+| `debian`, `redhat`, `ubuntu`, etc. | OS-specific advisory data — severity may differ from NVD; `publicPackageInfo` typically empty (OS packages tracked separately) |
 
-When looking up a CVE by name, `searchVulnerabilities(where: { name: "<CVE>" })`
-returns all ecosystem entries. To get affected packages and fix versions for
-libraries like npm or maven, filter for or focus on the `generic` ecosystem
-entry. `getVulnerability` requires both `name` and `ecosystem` — use
-`searchVulnerabilities` when the ecosystem is unknown.
+CVE lookup by name: `searchVulnerabilities(where: { name: "<CVE>" })`
+returns all ecosystem entries. For npm/maven library affected packages + fix versions → filter/focus on `generic` entry. `getVulnerability` requires `name` + `ecosystem` — use `searchVulnerabilities` when ecosystem unknown.
 
 ### PublicLicense
 
-License metadata with permission, condition, and limitation details.
+License metadata with permission, condition, limitation details.
 
 | Field | Description |
 |-------|-------------|
-| `name` | License name (e.g. `Apache-2.0`, `MIT`) |
+| `name` | License name (`Apache-2.0`, `MIT`) |
 | `spdxId` | SPDX identifier |
-| `permissions` | What the license permits |
+| `permissions` | What license permits |
 | `limitations` | Restrictions imposed |
 | `patentConditions` | Patent grant conditions |
 | `noticeFiles` | Required notices |
@@ -150,23 +141,23 @@ Query: `publicLegalInfo.searchLicenses(where: {...})`.
 
 ### PublicPackageOperationalInfo
 
-Operational risk assessment for packages and versions.
+Operational risk assessment for packages + versions.
 
 | Entity | Key data |
 |--------|----------|
-| **OpenSSF scorecard** | Overall score, individual checks with scores and pass/fail |
-| **End-of-life** | Whether the package or version is EOL, justification |
-| **Popularity** | JFrog popularity by segment and subscription tier, download counts |
+| **OpenSSF scorecard** | Overall score + check scores/pass-fail |
+| **End-of-life** | Package/version EOL status + justification |
+| **Popularity** | JFrog popularity by segment/tier, download counts |
 
 ### MCP services and tools
 
-The Public Catalog also indexes MCP (Model Context Protocol) services:
+Public Catalog also indexes MCP (Model Context Protocol) services:
 
 | Entity | Description |
 |--------|-------------|
-| `PublicMcpService` | An MCP service with name, description, version |
-| `PublicMcpTool` | A tool exposed by an MCP service with arguments |
-| `PublicMcpRemote` | Remote MCP server configuration |
+| `PublicMcpService` | MCP service: name, description, version |
+| `PublicMcpTool` | MCP service tool + arguments |
+| `PublicMcpRemote` | Remote MCP server config |
 
 Query: `publicRemoteServices.searchMcpServices(where: {...})`.
 
@@ -174,7 +165,7 @@ Query: `publicRemoteServices.searchMcpServices(where: {...})`.
 
 ### CustomPackage
 
-A package in the organization's private catalog view.
+Package in org private catalog view.
 
 | Field | Description |
 |-------|-------------|
@@ -188,27 +179,25 @@ Connections: `versionsConnection`, `legalInfo`,
 
 ### CustomCatalogLabel
 
-Organization-defined labels for categorizing packages.
+Org-defined labels for categorizing packages.
 
 | Field | Description |
 |-------|-------------|
 | `name` | Label name |
-| `description` | What the label represents |
+| `description` | What label represents |
 | `color` | Display color |
 | `labelType` | `MANUAL` or `AUTOMATIC` |
-| `assignmentInfo` | How and when the label was assigned |
+| `assignmentInfo` | How/when label assigned |
 
-Labels can be assigned to both custom packages and public packages/versions
-within the org's catalog scope. The Custom Catalog mutations allow
-creating, updating, and deleting labels.
+Labels assignable to custom packages + public packages/versions within org catalog scope. Custom Catalog mutations: create, update, delete labels.
 
 ### CustomCatalogFederation
 
-Configuration for federating catalog data across JFrog deployments.
+Config for federating catalog data across JFrog deployments.
 
 ## Catalog vs. Xray vs. Stored Packages
 
-These three domains provide different views of package and security data:
+Three domains, different views of package + security data:
 
 | Aspect | Catalog | Xray | Stored Packages |
 |--------|---------|------|-----------------|

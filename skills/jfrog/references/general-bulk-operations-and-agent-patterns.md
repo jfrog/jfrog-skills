@@ -1,70 +1,55 @@
 # Bulk operations and agent execution patterns
 
-Platform-wide guidance for agents that gather data from multiple JFrog products
-(Artifactory, Xray, Access, Distribution, etc.), run long shell
-sequences, or parallelize work. Product-specific field names and endpoints live
-in the other `references/*` files; this document describes **patterns**, not
-one workflow.
+Platform-wide guidance for agents gathering data from multiple JFrog products
+(Artifactory, Xray, Access, Distribution, etc.), long shell sequences, or
+parallel work. Product field names/endpoints in other `references/*` files;
+this document = **patterns**, not one workflow.
 
 ## List vs detail responses
 
-Many REST surfaces expose a **light list** (keys, names, minimal fields) and a
-**richer GET by id or key**. Fields needed for audits, reporting, joins, or
-permission checks may appear **only** on the detail response. Before building a
-multi-step flow on a single list call, confirm in API docs or with a sample GET
-whether the fields you need are present.
+REST: **light list** + **detail GET**. Audit/join/permission fields often
+detail-only — confirm via docs or sample GET before building on list alone.
 
 ## Volume, batching, and timeouts
 
-- Estimate **N** round-trips (list + per-item GETs, paginated APIs, etc.) before
-  starting so execution time and tool timeouts stay predictable.
-- Prefer batching independent reads in one Shell invocation when credentials and
-  tier match (see SKILL.md **Batch and parallel execution**).
-- Split very large work across chunks, parallel Shell calls, or subagents when
-  the skill's tiering guidance says so.
-- Before starting an N+1 loop (list + per-item detail), **estimate wall time**
-  as roughly `N * 1.5s` for sequential calls. Set `block_until_ms` to at
-  least that estimate plus a 30-second buffer.
-- For loops exceeding ~60 items, prefer a single Shell invocation that writes
-  progress to a log file (`>> /tmp/jf-progress-$$.log`) so partial results
-  are visible even if the job is interrupted.
-- If the task is read-only and items are independent, consider Tier 2 or
-  Tier 3 parallelism (see `general-parallel-execution.md`) to reduce total time —
-  but respect rate limits and keep concurrency modest (4-8 parallel calls).
+- Estimate **N** round-trips before starting.
+- Batch independent reads in one Shell when credentials/tier match (SKILL.md
+  **Batch and parallel execution**).
+- Large work → chunks, parallel Shell, or subagents per tiering.
+- N+1 loop: wall time ≈ `N * 1.5s`; `block_until_ms` ≥ estimate + 30s.
+- > ~60 items: Shell + progress log (`>> /tmp/jf-progress-$$.log`).
+- Read-only independent items: Tier 2/3 (`general-parallel-execution.md`);
+  rate limits; 4-8 parallel calls.
 
 ## Parallelism and shared files
 
-**Unsafe:** Multiple concurrent processes appending lines to the **same** file
-(JSONL, logs, ndjson) without synchronization. Output can interleave on one
-line and break parsers (e.g. JSON "Extra data" errors).
+**Unsafe:** Concurrent processes appending to **same** file (JSONL, logs, ndjson)
+without sync → interleaved lines, broken parsers (JSON "Extra data" errors).
 
 **Safer:**
 
 - Write sequentially to one file; or
 - One temp file per worker or chunk, then concatenate; or
-- Use advisory locking (`flock`) if one file must be shared.
+- Advisory locking (`flock`) if one file must be shared.
 
-For bulk API or CLI output files, use `/tmp` or `mktemp`; do not use
-`~/.jfrog/skills-cache/` except for `jfrog-skill-state.json` and the OneModel
-schema file (see main SKILL.md).
+Bulk API/CLI output: `/tmp` or `mktemp`; not `~/.jfrog/skills-cache/` except
+`jfrog-skill-state.json` and OneModel schema (main SKILL.md).
 
 ## Shell hygiene
 
-- Use `set -euo pipefail` in non-trivial scripts so failures are not silent.
-- Use unique temp paths (e.g. `$$` in the filename) and **echo the expanded
-  path** so it can be reused across Shell calls (see SKILL.md **Preserving
-  command output** for the `$$` + echo, session ID, and hardcoded patterns).
-- Parse CLI and API JSON with **`jq`**.
+- `set -euo pipefail` in non-trivial scripts — failures not silent.
+- Unique temp paths (`$$` in filename) + **echo expanded path** for cross-call
+  reuse (SKILL.md **Preserving command output** — `$$` + echo, session ID, hardcoded patterns).
+- Parse CLI/API JSON with **`jq`**.
 
 ## Safe multi-response collection
 
-When looping over items (repos, builds, users) and fetching detail for each:
+Looping items (repos, builds, users) + per-item detail:
 
-1. Save each response to a variable or per-item file.
+1. Save each response to variable or per-item file.
 2. Validate with `jq -e . >/dev/null 2>&1` before appending.
-3. On validation failure, write a structured error line so the caller can
-   report partial results instead of crashing.
-4. After the loop, `jq -s '.' results.ndjson` to produce a single array.
+3. On validation failure, structured error line → partial results without crash.
+4. After loop, `jq -s '.' results.ndjson` → single array.
 
 ```bash
 : >results.ndjson
@@ -79,8 +64,7 @@ done < <(jq -r '.[].key' list.json)
 jq -s '.' results.ndjson > details.json
 ```
 
-Never pipe a loop of `jf api` calls directly into `jq -s` without
-per-body validation.
+Never pipe loop of `jf api` calls directly into `jq -s` without per-body validation.
 
 ## Where to find product specifics
 

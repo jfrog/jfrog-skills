@@ -1,5 +1,13 @@
 # JFrog CLI Install & Upgrade
 
+## Minimum version for skills
+
+Skills that call `jf api` require JFrog CLI **2.100.0** or later. On an older CLI
+`jf api` is an unknown command, so the login flow stops as a prerequisite failure
+rather than reaching the platform. Web login itself needs **2.86.0** or later.
+
+Check with `jf --version`, and upgrade below that floor using the steps below.
+
 ## Installing the JFrog CLI
 
 If `jf` is not installed (environment check exits with code 2), guide the user:
@@ -12,7 +20,8 @@ brew install jfrog-cli
 curl -fL https://install-cli.jfrog.io | sh
 ```
 
-After installation, run `jf --version` to confirm and refresh the cache.
+After installation, run `jf --version` to confirm, then
+`bash <skill_path>/scripts/check-environment.sh <model-slug> --force`.
 
 ## Upgrading the JFrog CLI
 
@@ -27,4 +36,5 @@ brew upgrade jfrog-cli
 curl -fL https://install-cli.jfrog.io | sh
 ```
 
-After upgrading, run `jf --version` to confirm and refresh the cache.
+After upgrading, run `jf --version` to confirm, then
+`bash <skill_path>/scripts/check-environment.sh <model-slug> --force`.

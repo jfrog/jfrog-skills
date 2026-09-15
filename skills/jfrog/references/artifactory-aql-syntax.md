@@ -18,14 +18,14 @@ jf api /artifactory/api/search/aql \
   .distinct(<boolean>)
 ```
 
-Only `.find()` is required. The others are optional and chainable.
-**The chain order above is enforced by the server.** `.include()` must come
-before `.sort()`, `.sort()` before `.offset()`, etc. Putting them out of
-order (e.g. `.sort()` before `.include()`) produces a parse error.
+Only `.find()` is required; others optional and chainable.
+**Server enforces the chain order above.** `.include()` before `.sort()`,
+`.sort()` before `.offset()`, etc. Out of order (e.g. `.sort()` before
+`.include()`) → parse error.
 
-**Mandatory include fields:** `items` requires `"repo","path","name"`;
-`builds` requires `"name","number","repo"`. Always include these even when
-you only need a subset — narrow results with `jq` post-query instead:
+**Mandatory include fields:** `items` → `"repo","path","name"`; `builds` →
+`"name","number","repo"`. Always include these even when you need a subset —
+narrow with `jq` post-query:
 
 ```
 items.find({"name":"commons-lang3-3.12.0.jar"})
@@ -35,9 +35,7 @@ items.find({"name":"commons-lang3-3.12.0.jar"})
 
 ## Domains
 
-AQL has 13 queryable domains. Each domain represents a different entity type
-and has its own set of fields.
-
+13 queryable domains — each entity type has its own fields.
 
 | Domain               | Query name          | Description                                    |
 | -------------------- | ------------------- | ---------------------------------------------- |
@@ -55,12 +53,10 @@ and has its own set of fields.
 | Release bundles      | `releases`          | Release bundle records                         |
 | Release bundle files | `release_artifacts` | Files within a release bundle                  |
 
-
 ## Domain relationships
 
-Domains connect through the following join paths. Cross-domain queries
-traverse these links — fields from related domains can appear in criteria
-and include clauses by prefixing the domain path.
+Join paths below. Cross-domain queries traverse these links — related-domain
+fields in criteria/includes use a prefixed domain path.
 
 ```mermaid
 erDiagram
@@ -79,15 +75,12 @@ erDiagram
     release_artifacts }o--|| releases : "belongs to"
 ```
 
-
-
-**Key:** Items connect to build artifacts and dependencies through SHA-1
-checksum matching, not a direct key. This means a cross-domain query from
-items to builds traverses: items → artifacts → modules → builds.
+**Key:** Items ↔ build artifacts/dependencies via SHA-1 checksum match (not
+a direct key). Path items → builds: items → artifacts → modules → builds.
 
 ### Cross-domain field paths
 
-To reference a field from a related domain, use dot-separated domain paths:
+Related-domain field → dot-separated domain path:
 
 ```
 items.find({"artifact.module.build.name":"my-build"})
@@ -108,11 +101,10 @@ From builds:
 
 ## Fields by domain
 
-Field types: `string`, `date`, `int`, `long`, `itemType` (`file`, `folder`,
-or `any`). Fields marked "default" are returned without explicit `.include()`.
+Types: `string`, `date`, `int`, `long`, `itemType` (`file`, `folder`, `any`).
+"Default" = returned without explicit `.include()`.
 
 ### items
-
 
 | Field           | Type     | Default |
 | --------------- | -------- | ------- |
@@ -133,22 +125,18 @@ or `any`). Fields marked "default" are returned without explicit `.include()`.
 | `original_md5`  | string   | no      |
 | `original_sha1` | string   | no      |
 
-
-Computed field: `virtual_repos` — returns virtual repositories that include
-the item's actual repository. Must use `.include("virtual_repos")` explicitly;
-requires `repo`, `path`, `name` in the result set.
+Computed: `virtual_repos` — virtual repos that include the item's actual
+repo. Requires `.include("virtual_repos")` plus `repo`,`path`,`name` in
+the result set.
 
 ### properties
-
 
 | Field   | Type   | Default |
 | ------- | ------ | ------- |
 | `key`   | string | yes     |
 | `value` | string | yes     |
 
-
 ### stats
-
 
 | Field                  | Type   | Default |
 | ---------------------- | ------ | ------- |
@@ -161,9 +149,7 @@ requires `repo`, `path`, `name` in the result set.
 | `remote_origin`        | string | yes     |
 | `remote_path`          | string | yes     |
 
-
 ### item.infos
-
 
 | Field               | Type   | Default |
 | ------------------- | ------ | ------- |
@@ -171,9 +157,7 @@ requires `repo`, `path`, `name` in the result set.
 | `props_modified_by` | string | yes     |
 | `props_md5`         | string | yes     |
 
-
 ### builds
-
 
 | Field         | Type   | Default |
 | ------------- | ------ | ------- |
@@ -187,17 +171,13 @@ requires `repo`, `path`, `name` in the result set.
 | `modified_by` | string | yes     |
 | `repo`        | string | no      |
 
-
 ### modules
-
 
 | Field  | Type   | Default |
 | ------ | ------ | ------- |
 | `name` | string | yes     |
 
-
 ### artifacts
-
 
 | Field  | Type   | Default |
 | ------ | ------ | ------- |
@@ -206,9 +186,7 @@ requires `repo`, `path`, `name` in the result set.
 | `sha1` | string | yes     |
 | `md5`  | string | yes     |
 
-
 ### dependencies
-
 
 | Field   | Type   | Default |
 | ------- | ------ | ------- |
@@ -218,18 +196,14 @@ requires `repo`, `path`, `name` in the result set.
 | `sha1`  | string | yes     |
 | `md5`   | string | yes     |
 
-
 ### build.properties
-
 
 | Field   | Type   | Default |
 | ------- | ------ | ------- |
 | `key`   | string | yes     |
 | `value` | string | yes     |
 
-
 ### build.promotions
-
 
 | Field        | Type   | Default |
 | ------------ | ------ | ------- |
@@ -240,18 +214,14 @@ requires `repo`, `path`, `name` in the result set.
 | `comment`    | string | yes     |
 | `user`       | string | yes     |
 
-
 ### module.properties
-
 
 | Field   | Type   | Default |
 | ------- | ------ | ------- |
 | `key`   | string | yes     |
 | `value` | string | yes     |
 
-
 ### releases
-
 
 | Field          | Type                        | Default |
 | -------------- | --------------------------- | ------- |
@@ -263,17 +233,13 @@ requires `repo`, `path`, `name` in the result set.
 | `type`         | string (`SOURCE`, `TARGET`) | yes     |
 | `storing_repo` | string                      | yes     |
 
-
 ### release_artifacts
-
 
 | Field  | Type   | Default |
 | ------ | ------ | ------- |
 | `path` | string | yes     |
 
-
 ## Comparators
-
 
 | Operator   | Meaning                          | Example                              |
 | ---------- | -------------------------------- | ------------------------------------ |
@@ -288,15 +254,12 @@ requires `repo`, `path`, `name` in the result set.
 | `$lt`      | Less than                        | `{"size":{"$lt":"5000"}}`            |
 | `$lte`     | Less than or equal               | `{"modified":{"$lte":"2025-01-01"}}` |
 
-
 ### Boolean operators
-
 
 | Operator | Description                                                            |
 | -------- | ---------------------------------------------------------------------- |
 | `$and`   | All conditions must match (implicit when fields are at the same level) |
 | `$or`    | Any condition must match                                               |
-
 
 ```
 items.find({"$and":[
@@ -310,22 +273,18 @@ items.find({"$and":[
 
 ### Relative date comparators
 
-AQL supports relative date queries with `$last` and `$before`:
-
+`$last` / `$before` for relative dates:
 
 | Operator  | Meaning                                                 | Example                         |
 | --------- | ------------------------------------------------------- | ------------------------------- |
 | `$last`   | Within the last N period (equivalent to `$gt` from now) | `{"modified":{"$last":"7d"}}`   |
 | `$before` | Before the last N period (equivalent to `$lt` from now) | `{"created":{"$before":"3mo"}}` |
 
-
-Supported units: `d` (days), `w` (weeks), `mo` (months), `y` (years),
-`s` (seconds), `mi` (minutes), `ms` (milliseconds).
+Units: `d`, `w`, `mo`, `y`, `s`, `mi`, `ms`.
 
 ### Multi-property AND
 
-To match items that have property A=1 **and** property B=2 (different
-property rows), use `$and` with `@` shorthand:
+Match property A=1 **and** B=2 (different property rows) with `$and` + `@`:
 
 ```
 items.find({"$and":[
@@ -334,20 +293,18 @@ items.find({"$and":[
 ]})
 ```
 
-AQL also documents a `$msp` (multi-set property) operator for this purpose,
-but `$msp` is **unreliable in practice** — it returns 0 results on many
-server versions even when matching items exist. Prefer `$and` with `@`
-shorthand, which is verified to work correctly.
+`$msp` (multi-set property) is **unreliable in practice** — often 0 results
+even when matches exist. Prefer `$and` + `@` (verified).
 
 ## Date queries
 
-Dates use ISO 8601 format for absolute dates:
+Absolute dates → ISO 8601:
 
 ```
 items.find({"modified":{"$gt":"2025-06-01T00:00:00.000Z"}})
 ```
 
-Or use relative dates (preferred — avoids hardcoding timestamps):
+Or relative dates (preferred — no hardcoded timestamps):
 
 ```
 items.find({"modified":{"$last":"30d"}})
@@ -356,9 +313,9 @@ items.find({"created":{"$before":"6mo"}})
 
 ## Property queries
 
-Two equivalent syntaxes for property filtering:
+Two equivalent property-filter syntaxes:
 
-**`@key` shorthand** — concise, works for single property conditions:
+**`@key` shorthand** — concise, single property conditions:
 
 ```
 items.find({"repo":"my-repo","@build.name":"my-build","type":"file"})
@@ -374,15 +331,8 @@ items.find({
 })
 ```
 
-**Multi-property AND** — use `$and` with `@` shorthand to match across
-different property rows:
-
-```
-items.find({"$and":[
-  {"@build.name":"my-build"},
-  {"@build.number":"42"}
-]})
-```
+**Multi-property AND** — same `$and` + `@` pattern as
+[Multi-property AND](#multi-property-and) above (do not re-copy here).
 
 > **Note:** The `@key` shorthand works inside `$and`. For `$or`, use the
 > explicit `property.key`/`property.value` form if the shorthand does not
@@ -390,15 +340,12 @@ items.find({"$and":[
 
 ## Include
 
-Select which fields to return. Without `.include()`, AQL returns each
-domain's default field set.
+Fields to return. No `.include()` → domain defaults.
 
-**When you use `.include()`, you replace the defaults — so you must
-explicitly list any required fields:**
+**`.include()` replaces defaults — list every required field:**
 
-- `items` domain: always include `"repo","path","name"` (server rejects
-the query otherwise)
-- `builds` domain: always include `"name","number","repo"`
+- `items`: always `"repo","path","name"` (else server rejects)
+- `builds`: always `"name","number","repo"`
 
 ```
 items.find({"repo":"my-repo"})
@@ -421,14 +368,14 @@ items.find({"repo":"my-repo"})
   .limit(50)
 ```
 
-Sort directions: `$asc`, `$desc`. Sort fields must also appear in the result
-set (explicit `.include()` or default fields). See
+Sort: `$asc` / `$desc`. Sort fields must appear in the result set
+(explicit `.include()` or defaults). See
 [Before constructing a query](#before-constructing-a-query) for sort
 performance rules.
 
 ## Distinct
 
-Deduplicate result rows:
+Deduplicate rows:
 
 ```
 items.find({"repo":"my-repo"}).distinct(true)
@@ -436,41 +383,37 @@ items.find({"repo":"my-repo"}).distinct(true)
 
 ## Validation rules
 
-The server enforces these constraints — violating them produces an error:
+Server constraints — violations → error:
 
-**Non-admin users:**
+**Non-admin:**
 
-- `items` domain queries must include `repo`, `path`, `name` in results
-(needed for permission filtering)
-- `builds` domain queries must include `name`, `number`, `repo` in results
+- `items` results must include `repo`, `path`, `name` (permission filtering)
+- `builds` results must include `name`, `number`, `repo`
 
-**Transitive mode** (`.transitive()` for querying through virtual repos):
+**Transitive** (`.transitive()` through virtual repos):
 
-- Only works with `items` domain
+- `items` domain only
 - Include subdomains limited to `items` and `properties`
-- Repo criteria must use `$eq` (exact match) with a single repository
-- No `offset` or `sort` allowed
+- Repo criteria: `$eq` only, single repository
+- No `offset` or `sort`
 
 ## Before constructing a query
 
-Run through these checks before writing any AQL query:
+Checks before writing AQL:
 
-1. **Never `.sort()` without a `repo` filter** — forces a full table scan
-   across all repositories. Sort client-side with `jq` instead. Also,
-   `.sort()` on cross-domain fields (e.g. `stat.downloads` in `items.find()`)
-   is silently ignored — fetch all rows and sort client-side.
-2. **Always set `.limit()`** — no built-in default limit; unbounded queries
-   can time out or OOM. Broad queries without a `repo` filter are especially
-   expensive.
-3. **`range.total` = returned count, not total matching** — AQL has no
-   count-only mode. To find the true total, paginate with `.offset()` until
-   a page returns fewer results than the limit.
-4. **AQL has no repo-type field** — to restrict to local repos, either
-   pre-query `GET /api/repositories?type=local` and add repo names to
-   criteria (practical when count is small), or query without a repo filter
-   and exclude `-cache` / `-virtual` suffixed repos client-side with `jq`.
+1. **Never `.sort()` without a `repo` filter** — full table scan. Sort
+   client-side with `jq`. Cross-domain sort fields (e.g. `stat.downloads` in
+   `items.find()`) are silently ignored — fetch all + sort client-side.
+2. **Always `.limit()`** — no default; unbounded queries can time out / OOM.
+   Broad queries without `repo` are especially expensive.
+3. **`range.total` = returned count, not total matching** — no count-only
+   mode. True total → paginate `.offset()` until a page returns fewer than
+   the limit.
+4. **No repo-type field** — local-only: pre-query
+   `GET /api/repositories?type=local` and add names to criteria (small lists),
+   or query without repo filter and drop `-cache`/`-virtual` via `jq`.
 5. **Narrow server-side first** — add every applicable filter (`created_by`,
-   `created`, `type`, `name`) before relying on client-side `jq` filtering.
+   `created`, `type`, `name`) before client-side `jq`.
 
 ## Common query patterns
 
@@ -488,8 +431,8 @@ items.find({"repo":"my-repo","size":{"$gt":"104857600"},"type":"file"})
 
 ### Find Maven SNAPSHOT JARs
 
-Use `*-SNAPSHOT*.jar` (not `*-SNAPSHOT.jar`) to also match classifier
-artifacts like `-sources.jar` and `-javadoc.jar`:
+Use `*-SNAPSHOT*.jar` (not `*-SNAPSHOT.jar`) to also match classifiers
+(`-sources.jar`, `-javadoc.jar`):
 
 ```
 items.find({"repo":"libs-snapshot","name":{"$match":"*-SNAPSHOT*.jar"},"type":"file"})
@@ -505,9 +448,9 @@ items.find({"repo":"my-repo","modified":{"$last":"7d"},"type":"file"})
 
 ### Docker queries
 
-Use `"name":"manifest.json"` to **list tags** (one per tag). Use
-`"name":{"$match":"*manifest.json"}` to **query all manifests** (includes
-`list.manifest.json` for multi-arch tags — see [Gotchas](#gotchas)).
+`"name":"manifest.json"` → **list tags** (one per tag).
+`"name":{"$match":"*manifest.json"}` → **all manifests** (includes
+`list.manifest.json` for multi-arch — see [Gotchas](#gotchas)).
 
 ```
 items.find({"repo":"docker-local","path":{"$match":"my-image/*"},"name":"manifest.json"})
@@ -523,18 +466,16 @@ jf api "/artifactory/api/docker/<repo>/v2/<image>/manifests/<tag>" \
   -H "Accept: application/vnd.docker.distribution.manifest.v2+json"
 ```
 
-For multi-arch images the response is an image index; fetch each platform
-manifest by digest to get its layers.
+For multi-arch: response is an image index — fetch each platform manifest
+by digest for layers.
 
 ### Find artifacts with a specific property
 
-```
-items.find({"repo":"my-repo","@build.name":"my-build","type":"file"})
-```
+See [Property queries](#property-queries) (`@key` shorthand and explicit form).
 
 ### Find never-downloaded files (zero download count)
 
-Zero-download items lack a stats row — filter client-side instead
+Zero-download items lack a stats row — filter client-side
 (see [Gotchas](#gotchas)):
 
 ```bash
@@ -547,8 +488,8 @@ items.find({"repo":"my-repo","type":"file"})
 
 ### Find artifacts not downloaded in 90 days
 
-Only matches previously-downloaded items (see [Gotchas](#gotchas)).
-Combine with the never-downloaded pattern above for full coverage.
+Only previously-downloaded items (see [Gotchas](#gotchas)). Combine with
+never-downloaded pattern above for full coverage.
 
 ```
 items.find({
@@ -569,8 +510,7 @@ items.find({"artifact.module.build.name":"my-service"})
 
 ### Find builds by name
 
-Non-admin users must include `name`, `number`, `repo` — omitting any
-produces an error.
+Non-admin must include `name`, `number`, `repo` — omit any → error.
 
 ```
 builds.find({"name":{"$match":"*my-service*"}})
@@ -595,8 +535,8 @@ dependencies.find({"module.build.name":"my-service","module.build.number":"42"})
 
 ### Remote repository content
 
-Remote repo artifacts are stored in a `-cache` suffixed repo. Always query
-the cache repo, not the remote repo itself:
+Remote artifacts live in a `-cache` suffixed repo. Query the cache, not the
+remote itself:
 
 ```
 items.find({"repo":"npm-remote-cache","name":{"$match":"*.tgz"}})
@@ -644,13 +584,13 @@ repo name you queried.
 
 ## Official documentation
 
-- [Artifactory Query Language](https://docs.jfrog.com/artifactory/docs/artifactory-query-language) — overview and architecture
-- [Query Structure and Syntax](https://docs.jfrog.com/artifactory/docs/aql-syntax) — domain queries, field references, JSON-like syntax rules
-- [Search Criteria and Operators](https://docs.jfrog.com/artifactory/docs/aql-search-criteria) — comparators, wildcards, `$msp`, relative time
-- [AQL Entities and Fields Reference](https://docs.jfrog.com/artifactory/docs/aql-entities-fields-reference) — complete field list for all domains
-- [Query Output and Modifiers](https://docs.jfrog.com/artifactory/docs/aql-query-output) — `.include()`, `.sort()`, `.offset()`, `.limit()`, `.distinct()`
-- [Query Execution and Permissions](https://docs.jfrog.com/artifactory/docs/aql-query-execution) — authentication, scoped tokens, HTTP errors, streaming
-- [AQL Examples and Common Patterns](https://docs.jfrog.com/artifactory/docs/aql-examples) — ready-to-use queries by use case
-- [Repository-Specific Queries](https://docs.jfrog.com/artifactory/docs/aql-repository-queries) — `.transitive()`, virtual repos, remote search
-- [Performance and Operational Controls](https://docs.jfrog.com/artifactory/docs/aql-performance) — result limits, timeouts, rate limiting, optimization
+- https://docs.jfrog.com/artifactory/docs/artifactory-query-language
+- https://docs.jfrog.com/artifactory/docs/aql-syntax
+- https://docs.jfrog.com/artifactory/docs/aql-search-criteria
+- https://docs.jfrog.com/artifactory/docs/aql-entities-fields-reference
+- https://docs.jfrog.com/artifactory/docs/aql-query-output
+- https://docs.jfrog.com/artifactory/docs/aql-query-execution
+- https://docs.jfrog.com/artifactory/docs/aql-examples
+- https://docs.jfrog.com/artifactory/docs/aql-repository-queries
+- https://docs.jfrog.com/artifactory/docs/aql-performance
 

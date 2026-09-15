@@ -34,16 +34,11 @@
 
 set -euo pipefail
 
-jf_api_http_status() {
-  local err_file="$1"
-  local line
-  line=$(grep -F 'Http Status:' "$err_file" 2>/dev/null | tail -1 || true)
-  if [[ "$line" =~ Http\ Status:\ ([0-9]+) ]]; then
-    echo "${BASH_REMATCH[1]}"
-  else
-    echo "0"
-  fi
-}
+# Parameter expansion so a stripped PATH (tests) still resolves this file.
+_this="${BASH_SOURCE[0]}"
+SCRIPT_DIR="${_this%/*}"
+[[ "$SCRIPT_DIR" == "$_this" ]] && SCRIPT_DIR="."
+unset _this
 
 JFROG_PLATFORM_URL="${1:-}"
 SESSION_UUID="${2:-}"
@@ -62,6 +57,9 @@ for cmd in jq jf; do
   fi
 done
 
+# shellcheck source=lib/jf-api-http-status.sh
+. "$SCRIPT_DIR/lib/jf-api-http-status.sh"
+
 # Derive server ID from URL
 # SaaS:        https://mycompany.jfrog.io  → mycompany
 # Self-hosted:  https://artifactory.internal.corp → artifactory-internal-corp
@@ -75,8 +73,9 @@ trap 'rm -f "$RESP_FILE" "$STDERR_FILE"' EXIT
 
 : >"$STDERR_FILE"
 set +e
-jf api "/access/api/v2/authentication/jfrog_client_login/token/${SESSION_UUID}" \
-  --url "$JFROG_PLATFORM_URL" \
+# Flags before the path — jf api 2.120+ rejects `jf api <path> --url …`.
+jf api --url "$JFROG_PLATFORM_URL" \
+  "/access/api/v2/authentication/jfrog_client_login/token/${SESSION_UUID}" \
   >"$RESP_FILE" 2>"$STDERR_FILE"
 api_exit=$?
 set -e
@@ -101,6 +100,17 @@ if [[ -z "$ACCESS_TOKEN" ]]; then
   exit 3
 fi
 
+# A derived server ID drops the scheme, port and path, so it can collide
+# with an unrelated server already configured under the same name — the
+# remove/add below would delete that entry's credentials silently. Kept in
+# Node (not bash) per repo convention; see jfrog-check-server-collision.mjs.
+if ! EXISTING_URL=$(node "${SCRIPT_DIR}/jfrog-check-server-collision.mjs" "$JFROG_HOST" "$JFROG_PLATFORM_URL"); then
+  if [[ -n "$EXISTING_URL" ]]; then
+    echo "ERROR: jf server '${JFROG_HOST}' already points at ${EXISTING_URL} — refusing to overwrite it." >&2
+    exit 4
+  fi
+fi
+
 # Save credentials to jf config (writes to ~/.jfrog/, needs unrestricted filesystem)
 jf config remove "$JFROG_HOST" --quiet 2>/dev/null || true
 
@@ -116,7 +126,7 @@ fi
 echo "SERVER_ID=${JFROG_HOST}"
 
 echo "--- Verifying authentication ---"
-if ! jf api "/artifactory/api/system/version" --server-id="$JFROG_HOST"; then
+if ! jf api --server-id="$JFROG_HOST" /artifactory/api/system/version; then
   echo "ERROR: Authentication verification failed. Token may not have saved correctly." >&2
   exit 4
 fi
