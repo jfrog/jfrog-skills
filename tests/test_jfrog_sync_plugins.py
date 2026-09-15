@@ -173,5 +173,35 @@ class TestCopyPinUpdates(unittest.TestCase):
             sync.copy_skills_folder()
 
 
+class TestSyncPluginsWorkflowKiroSteering(unittest.TestCase):
+    """AX-2253: Kiro sync PRs must regenerate steering/ after the skills copy."""
+
+    def test_kiro_regen_steering_between_copy_and_pr(self):
+        text = (REPO_ROOT / ".github" / "workflows" / "sync-plugins.yml").read_text()
+        copy = text.index("name: Copy skills into plugin")
+        setup = text.index("actions/setup-node@v5")
+        regen = text.index("name: Regenerate Kiro steering")
+        pr = text.index("peter-evans/create-pull-request")
+        self.assertLess(copy, setup)
+        self.assertLess(setup, regen)
+        self.assertLess(regen, pr)
+
+        setup_block = text[setup:regen]
+        regen_block = text[regen:pr]
+        self.assertIn("matrix.name == 'jfrog-kiro-power'", setup_block)
+        self.assertIn('node-version: "22"', setup_block)
+        self.assertIn("matrix.name == 'jfrog-kiro-power'", regen_block)
+        self.assertIn("working-directory: plugin", regen_block)
+        self.assertIn("npm run gen-steering", regen_block)
+        self.assertNotIn("npm run revendor", regen_block)
+        self.assertNotIn("npm run sync-skills", regen_block)
+
+    def test_kiro_dest_prefix_is_repo_root(self):
+        """gen-steering reads plugin/skills; a non-empty dest_prefix would miss it."""
+        data = json.loads((REPO_ROOT / ".github" / "plugins.json").read_text())
+        by_name = {p["name"]: p for p in data["plugins"]}
+        self.assertEqual(by_name["jfrog-kiro-power"]["dest_prefix"], "")
+
+
 if __name__ == "__main__":
     unittest.main()

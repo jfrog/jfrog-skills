@@ -2,7 +2,8 @@ name: Sync Plugins
 
 # When a v* tag is pushed, open a PR in every plugin
 # listed in .github/plugins.json. Each PR vendors this repo's skills/
-# at the tag into the plugin repo.
+# at the tag into the plugin repo. jfrog-kiro-power also regenerates
+# steering/ from that copy so Kiro CI's drift check stays green.
 #
 # Auth: jfrog-agentic-release-bot GitHub App → short-lived installation token.
 #   vars.PUBLIC_REPO_CLIENT_ID + secrets.PUBLIC_REPO_APP_PRIVATE_KEY
@@ -126,6 +127,20 @@ jobs:
           VERSION_BUMPS: ${{ toJson(matrix.version_bumps) }}
           PIN_UPDATES: ${{ toJson(matrix.pin_updates) }}
         run: python3 .github/scripts/jfrog-sync-plugins.py copy
+
+      # Kiro ships generated steering/ from skills/. Its CI fails if that tree
+      # is stale (jfrog-kiro-power#22 / AX-2253). Other plugins only need the
+      # skills copy. gen-steering is dependency-free Node ESM — do not run
+      # `npm run revendor` here (that re-fetches skills and fights the copy).
+      - uses: actions/setup-node@v5
+        if: matrix.name == 'jfrog-kiro-power'
+        with:
+          node-version: "22"
+
+      - name: Regenerate Kiro steering
+        if: matrix.name == 'jfrog-kiro-power'
+        working-directory: plugin
+        run: npm run gen-steering
 
       - uses: peter-evans/create-pull-request@v8
         with:
