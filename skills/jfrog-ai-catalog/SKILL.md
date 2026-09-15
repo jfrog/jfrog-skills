@@ -26,6 +26,7 @@ Pick the row matching the user's intent and read that reference file.
 | Intent | Read |
 |--------|------|
 | "What skills are available?" / browse the catalog / list versions / search by name | [references/discovering-skills.md](references/discovering-skills.md) |
+| "What policies apply to skills in this project?" / what would block a skill before trying it | [references/listing-policies.md](references/listing-policies.md) |
 | Install or update a skill (latest or a pinned version), or a download is blocked | [references/installing-skills.md](references/installing-skills.md) |
 | "What's installed?" / remove an installed skill | [references/managing-installed-skills.md](references/managing-installed-skills.md) |
 | Publish / upload / release a skill to the catalog | [references/publishing-skills.md](references/publishing-skills.md) |
@@ -98,6 +99,7 @@ flowchart TD
     B -->|Yes| D{Intent}
     C --> D
     D -->|List all skills / versions| E[npx @jfrog/agent-guard --list-skills]
+    D -->|List policies for skills| M[Check entitlement, then jf api Unified Policy]
     D -->|Install / update skill| F[Resolve slug + version, then jf skills install/update]
     D -->|List installed skills / remove| G[jf skills list / rm -rf install dir]
     D -->|Publish skill| H[Resolve/provision repo, validate bundle, jf skills publish]
