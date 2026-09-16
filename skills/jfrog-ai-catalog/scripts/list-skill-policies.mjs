@@ -15,13 +15,17 @@
 //   node list-skill-policies.mjs --project <PROJECT> --server-id <SID>
 //
 // stdout (exit 0): finished text to present verbatim — either the intro line
-//   plus markdown table, or the one-line "no policies" fallback. Never raw
-//   JSON; the caller does no parsing.
-// stderr + exit 1: the call, or the response it returned, could not be used.
-//   stderr is one line, already safe to present verbatim — the internal
-//   service name, its path, the query string, and any Trace ID are always
-//   scrubbed before this script ever prints an error. Every failure path
-//   goes through fail(), so scrubbing lives in exactly one place.
+//   plus markdown table (possibly with a trailing truncation note — still
+//   part of the same verbatim block), or the one-line "no policies"
+//   fallback. Never raw JSON; the caller does no parsing.
+// stderr + exit 1: nothing usable could be produced at all (the very first
+//   page failed, or the response was fundamentally unreadable). stderr is
+//   one line, already safe to present verbatim — the internal service
+//   name, its path, the query string, and any Trace ID are always scrubbed
+//   before this script ever prints an error. Every failure path goes
+//   through fail(), so scrubbing lives in exactly one place. A failure on
+//   a LATER page, once at least one page already succeeded, is NOT
+//   reported this way — see the pagination loop below.
 // exit 2: usage error (missing --project/--server-id).
 //
 // Calls the AI Catalog policy engine by shelling out to `jf api`, on the
@@ -38,6 +42,18 @@
 // instead of calling process.exit() directly, mirroring the established
 // pattern in skills/jfrog-mcp-management/scripts/jfrog-agent-guard-check.mjs
 // (its GATE_DONE symbol) — this lets Node drain pending writes naturally.
+//
+// Windows / jf as a .cmd or .bat shim: deliberately NOT handled the way
+// jfrog-agent-guard-check.mjs's runJf() does (needsShell + cmd.exe
+// quoting). Checked directly: this repo's own canonical Windows install
+// (skills/jfrog-init/scripts/jfrog-install-jf-cli.mjs) places a native
+// jf.exe, never a .cmd/.bat wrapper, and the simpler, more directly
+// comparable existing precedent for a plain `jf api`-style call
+// (skills/jfrog/scripts/jfrog-check-server-collision.mjs) also spawns `jf`
+// bare, with no shell handling at all. jfrog-agent-guard-check.mjs's extra
+// defensiveness there is for its own reasons (an early, load-bearing
+// security gate that must tolerate any install method); this script
+// matches the simpler, already-working precedent instead.
 
 import { spawnSync } from 'node:child_process';
 
@@ -47,9 +63,13 @@ const PAGE_LIMIT = 250;
 // time. If the cap is ever actually hit, that's flagged, not silently
 // presented as the complete list.
 const MAX_PAGES = 8;
-// Aggregate budget across ALL pages, independent of each call's own 30s
-// timeout — 8 sequential calls could otherwise compound to several minutes
-// with no overall bound for what is framed as a quick lookup.
+// A soft aggregate budget across all paginated calls, independent of each
+// call's own 30s timeout — checked only between pages (not sub-page), so it
+// bounds fetches from STARTING rather than guaranteeing a hard ceiling: two
+// pages just under the budget can still be followed by one more before the
+// check next runs. Still meaningfully better than no aggregate bound at all
+// (which would let MAX_PAGES sequential slow-but-not-hung calls compound to
+// several minutes for what is framed as a quick lookup).
 const OVERALL_BUDGET_MS = 60_000;
 
 const DONE = Symbol('list-skill-policies:done');
@@ -91,31 +111,39 @@ function httpStatus(text) {
   return status;
 }
 
+// scrubServiceName replaces any mention of the internal service — a URL/path
+// shape, or the plain-English name itself — with the customer-facing name.
+// Used on BOTH the failure path (jf's stderr) and the success path (a rule's
+// own name/description text is backend- or admin-authored and could
+// legitimately contain the internal name; the guarantee in
+// references/listing-policies.md is "never expose this," not "never expose
+// this in errors").
+function scrubServiceName(text) {
+  return String(text || '')
+    .replace(/https?:\/\/\S*\/unifiedpolicy\/\S*/g, 'the AI Catalog policy engine')
+    .replace(/\/unifiedpolicy\/\S*/g, 'the AI Catalog policy engine')
+    .replace(/unified[\s-]?policy/gi, 'AI Catalog policy engine');
+}
+
 // cleanErrorLine reduces jf's (possibly multi-line) stderr to one line safe
 // to present verbatim: drop every line mentioning a Trace ID, take the last
-// remaining non-empty line, then scrub any URL/path or plain-English mention
-// naming the internal service. Never throws — undefined/empty input yields
-// ''.
+// remaining non-empty line, then scrub it. Never throws — undefined/empty
+// input yields ''.
 function cleanErrorLine(stderrText) {
   const lines = (stderrText || '')
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l && !l.includes('Trace ID'));
-  let last = lines.length ? lines[lines.length - 1] : '';
-  last = last
-    .replace(/https?:\/\/\S*\/unifiedpolicy\/\S*/g, 'the AI Catalog policy engine')
-    .replace(/\/unifiedpolicy\/\S*/g, 'the AI Catalog policy engine')
-    // A backend error BODY (not just a URL/path) can name the internal
-    // service in plain English (e.g. "Unified Policy entitlement
-    // required") — the two replacements above only catch URL/path-shaped
-    // occurrences, so this catches the phrase itself, case-insensitively.
-    .replace(/unified[\s-]?policy/gi, 'AI Catalog policy engine');
-  return last;
+  const last = lines.length ? lines[lines.length - 1] : '';
+  return scrubServiceName(last);
 }
 
-// fail is the ONLY way this script reports a runtime (non-usage) failure, so
+// fail is the ONLY place that WRITES a runtime failure to stderr, so
 // scrubbing lives in exactly one place. stderrText, if given, is jf's own
 // stderr — used only to extract an HTTP status, never re-printed raw.
+// Deliberately does not decide whether a failure is reportable at all —
+// see PageFailure below for why fetchPage/the pagination loop never call
+// this directly.
 function fail(reason, stderrText) {
   const status = httpStatus(stderrText);
   const prefix = status
@@ -126,14 +154,52 @@ function fail(reason, stderrText) {
   throw DONE;
 }
 
+// PageFailure carries a page-level failure WITHOUT writing anything yet.
+// This matters: a failure on a later page, once earlier pages already
+// succeeded, is meant to degrade gracefully into a truncated (but still
+// reported as successful) result — if fetchPage's own checks called fail()
+// directly, the stderr write and exitCode would already have happened
+// before the pagination loop ever gets a chance to decide to recover,
+// leaving a stray failure line on stderr alongside a "successful" table on
+// stdout. Only the pagination loop, which knows whether recovery is
+// possible, is allowed to turn this into an actual fail().
+class PageFailure extends Error {
+  constructor(reason, stderrText) {
+    super(reason);
+    this.reason = reason;
+    this.stderrText = stderrText;
+  }
+}
+
 // escapeCell makes a value safe as one markdown table cell: a literal `|`
 // or embedded newline in a user-authored policy name (or a custom rule's
 // name/description) would otherwise corrupt the table's row structure, and
 // a literal backtick would break out of the inline-code span the Policy
-// column wraps its value in.
+// column wraps its value in. Also scrubs the internal service name — every
+// cell goes through this, including the Scope column's "Other (<type>)"
+// fallback, which splices in an unvalidated wire value like any other field
+// here and must not be treated differently.
 function escapeCell(value) {
   const s = value === undefined || value === null || value === '' ? '—' : String(value);
-  return s.replace(/\|/g, '\\|').replace(/`/g, "'").replace(/\r?\n/g, ' ');
+  return scrubServiceName(s)
+    .replace(/\|/g, '\\|')
+    .replace(/`/g, "'")
+    .replace(/\r?\n/g, ' ');
+}
+
+// stripJfLogLines drops jf's own "[Info] ..." / "[Warn] ..." log lines from
+// a stdout capture before parsing it as JSON — matching the same defensive
+// pattern two other scripts in this repo already apply to `jf api` stdout
+// (jfrog-agent-guard-check.mjs's jsonFromJfStdout, jfrog-login-
+// save-credentials.mjs) for the same documented reason: these are supposed
+// to go to stderr only, but a mix-up would otherwise turn an entirely valid
+// response into a JSON.parse failure.
+function stripJfLogLines(text) {
+  return String(text || '')
+    .split('\n')
+    .filter((line) => !line.includes('[Info]') && !line.includes('[Warn]'))
+    .join('\n')
+    .trim();
 }
 
 function fetchPage(project, serverId, offset) {
@@ -161,35 +227,41 @@ function fetchPage(project, serverId, offset) {
 
   if (result.error) {
     // spawn itself failed (e.g. `jf` not found on PATH) — result.stderr is
-    // empty in this case, so there is nothing to scrub. `killed`/ETIMEDOUT
-    // is the actual Node contract for an exceeded `timeout` (matches
-    // jfrog-agent-guard-check.mjs's jfFailure()); everything else is a
-    // distinct, generic spawn failure.
-    if (result.error.code === 'ETIMEDOUT' || result.killed === true) {
-      fail('the AI Catalog policy engine took too long to respond');
+    // empty in this case, so there is nothing to scrub. Verified directly
+    // (node -e against a spawnSync that hits its timeout): the exceeded
+    // timeout sets result.error.code to 'ETIMEDOUT' and result.signal to
+    // 'SIGTERM'; spawnSync (unlike execFileSync/execSync) never sets a
+    // `killed` property at all — do not check for one.
+    if (result.error.code === 'ETIMEDOUT') {
+      throw new PageFailure('the AI Catalog policy engine took too long to respond');
     }
-    fail('could not run the jf CLI');
+    throw new PageFailure('could not run the jf CLI');
   }
   if (result.signal) {
-    // A signal without result.error (seen on some Node/OS combinations for
-    // a timeout kill) is reported factually, not attributed to a specific
+    // A signal without result.error (belt-and-braces for other Node/OS
+    // combinations) is reported factually, not attributed to a specific
     // cause this script cannot actually confirm (a user-sent SIGINT and an
     // OS OOM-kill both land here too, and are not "did not respond").
-    fail(`the AI Catalog policy engine call was interrupted (signal ${result.signal})`);
+    throw new PageFailure(
+      `the AI Catalog policy engine call was interrupted (signal ${result.signal})`
+    );
   }
   if (typeof result.status === 'number' && result.status !== 0) {
     const clean = cleanErrorLine(result.stderr);
-    fail(clean || 'the AI Catalog policy engine returned an error', result.stderr);
+    throw new PageFailure(
+      clean || 'the AI Catalog policy engine returned an error',
+      result.stderr
+    );
   }
 
   let parsed;
   try {
-    parsed = JSON.parse(result.stdout);
+    parsed = JSON.parse(stripJfLogLines(result.stdout));
   } catch {
-    fail('the AI Catalog policy engine returned an unreadable response');
+    throw new PageFailure('the AI Catalog policy engine returned an unreadable response');
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    fail('the AI Catalog policy engine returned an unreadable response');
+    throw new PageFailure('the AI Catalog policy engine returned an unreadable response');
   }
   return parsed;
 }
@@ -216,6 +288,15 @@ function renderAction(mode) {
   return mode ? `Other (${mode})` : '—';
 }
 
+// neutralizeJoinDelimiter replaces any literal occurrence of the delimiter
+// this function's caller is about to join multiple values WITH, inside a
+// single value, so joining several rules' text can never be confused with
+// one rule whose own name/description happens to contain that same
+// delimiter.
+function neutralizeJoinDelimiter(value) {
+  return value.replace(/;\s*/g, ', ');
+}
+
 // renderRuleTypeAndCondition lists EVERY rule's type/condition explicitly
 // (semicolon-joined) rather than the first one plus a bare "+N more" count
 // — a policy with two DIFFERENT rule types (not just multiple copies of one
@@ -235,8 +316,8 @@ function renderRuleTypeAndCondition(policy) {
         ? r.template
         : {};
     return {
-      name: template.name || '—',
-      description: template.description || '—',
+      name: neutralizeJoinDelimiter(String(template.name || '—')),
+      description: neutralizeJoinDelimiter(String(template.description || '—')),
     };
   });
   return {
@@ -269,28 +350,61 @@ function main() {
       break;
     }
 
-    const data = fetchPage(project, serverId, offset); // throws DONE on failure
-    // `items: null` (with page_size/limit: 0) is the API's own confirmed,
-    // live-verified shape for "zero results" — NOT malformed, and must be
-    // treated as an empty page, same as `items: []` or the key being
-    // absent. Anything else that isn't an array (a string, a number, an
-    // object) IS malformed: silently coercing that to empty would drop
-    // real policies with no error and no truncation flag, since a later
-    // page could still look like a normal, non-final page.
-    if (data.items !== null && data.items !== undefined && !Array.isArray(data.items)) {
-      fail('the AI Catalog policy engine returned an unreadable response');
-    }
-    const items = Array.isArray(data.items) ? data.items : [];
-    allItems = allItems.concat(items);
+    try {
+      const data = fetchPage(project, serverId, offset);
 
-    const pageSize = typeof data.page_size === 'number' ? data.page_size : items.length;
-    if (pageSize < PAGE_LIMIT) {
-      break;
+      // `items: null` (with page_size/limit: 0) is the API's own confirmed,
+      // live-verified shape for "zero results" — NOT malformed, and must be
+      // treated as an empty page, same as `items: []` or the key being
+      // absent. Anything else that isn't an array (a string, a number, an
+      // object) IS malformed: silently coercing that to empty would drop
+      // real policies with no error and no truncation flag, since a later
+      // page could still look like a normal, non-final page.
+      if (data.items !== null && data.items !== undefined && !Array.isArray(data.items)) {
+        throw new PageFailure('the AI Catalog policy engine returned an unreadable response');
+      }
+      const items = Array.isArray(data.items) ? data.items : [];
+      // A non-object element (null, a string, ...) would throw deep inside
+      // rendering later — an unreadable page, same as the items-shape check
+      // above, not a per-item omission that would silently under-report.
+      if (items.some((item) => item === null || typeof item !== 'object' || Array.isArray(item))) {
+        throw new PageFailure('the AI Catalog policy engine returned an unreadable response');
+      }
+      allItems = allItems.concat(items);
+
+      // Ground truth is the array actually returned, not the metadata field
+      // alone — if the backend's page_size ever disagrees with reality (e.g.
+      // echoing the requested limit regardless of actual count), trusting
+      // page_size alone could keep "paginating" empty pages until MAX_PAGES
+      // and wrongly report truncation. Continue only when BOTH signals agree
+      // the page was full.
+      const reportedFull =
+        typeof data.page_size === 'number' ? data.page_size >= PAGE_LIMIT : true;
+      if (items.length < PAGE_LIMIT || !reportedFull) {
+        break;
+      }
+      if (page + 1 === MAX_PAGES) {
+        truncated = true;
+      }
+      offset += PAGE_LIMIT;
+    } catch (error) {
+      if (!(error instanceof PageFailure)) {
+        throw error; // a genuine bug, not a page-level failure: propagate as-is
+      }
+      if (page > 0 && allItems.length > 0) {
+        // A later page failed, but earlier pages already succeeded — an
+        // honest partial answer (clearly flagged) serves the user better
+        // than discarding real, already-fetched data over one bad page.
+        // Nothing has been written to stderr and no exitCode has been set
+        // yet (PageFailure carries the failure without reporting it), so
+        // there is nothing to undo here — this is a clean, silent recovery.
+        truncated = true;
+        break;
+      }
+      // The very first page failed, or nothing has been recovered yet:
+      // this is a real, total failure — NOW actually report it.
+      fail(error.reason, error.stderrText);
     }
-    if (page + 1 === MAX_PAGES) {
-      truncated = true;
-    }
-    offset += PAGE_LIMIT;
   }
 
   if (allItems.length === 0) {
@@ -317,7 +431,7 @@ function main() {
     const action = renderAction(policy.mode);
     const { ruleType, condition } = renderRuleTypeAndCondition(policy);
     lines.push(
-      `| \`${escapeCell(policy.name)}\` | ${scope} | ${escapeCell(ruleType)} | ${escapeCell(action)} | ${escapeCell(condition)} |`
+      `| \`${escapeCell(policy.name)}\` | ${escapeCell(scope)} | ${escapeCell(ruleType)} | ${escapeCell(action)} | ${escapeCell(condition)} |`
     );
   }
   if (truncated) {
