@@ -128,10 +128,8 @@ jobs:
           PIN_UPDATES: ${{ toJson(matrix.pin_updates) }}
         run: python3 .github/scripts/jfrog-sync-plugins.py copy
 
-      # Kiro ships generated steering/ from skills/. Its CI fails if that tree
-      # is stale (jfrog-kiro-power#22 / AX-2253). Other plugins only need the
-      # skills copy. gen-steering is dependency-free Node ESM — do not run
-      # `npm run revendor` here (that re-fetches skills and fights the copy).
+      # Kiro ships generated steering/ from skills/. Other plugins only need
+      # the skills copy. Do not run `npm run revendor` here (fights the copy).
       - uses: actions/setup-node@v5
         if: matrix.name == 'jfrog-kiro-power'
         with:
