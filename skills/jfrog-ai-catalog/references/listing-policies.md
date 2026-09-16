@@ -14,24 +14,6 @@ family talks to. Call it an "AI Catalog policy" (or just "policy") in
 anything you say to the user, the same way the rest of this skill never
 surfaces `npx`/Agent Guard internals.
 
-## Check entitlement first
-
-Skill governance is gated on the AI Catalog entitlement. Check it before
-listing policies:
-
-```bash
-npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard --should-inject --server "<SID>"
-```
-
-Reads `true`/`false` from stdout; a disabled account also exits non-zero. If
-`false` (or the exit code signals disabled), stop and reply using **this
-exact template**:
-
-> Skill governance policies aren't available for this account — the AI
-> Catalog entitlement isn't enabled. Contact your JFrog administrator.
-
-Only proceed to the call below once entitlement is confirmed `true`.
-
 ## List the policies
 
 Resolve `<PROJECT>` per *Resolve the project* in `../SKILL.md` (never assume
@@ -58,6 +40,17 @@ that name back to the user; see above.)
 - If the response's `page_size` equals the `limit` you passed, more may
   exist: tell the user and offer to fetch the next page with `offset`. Do not
   silently page through everything.
+
+**If the call itself fails** (a non-2xx `jf api` exit, including one caused
+by the account lacking the AI Catalog entitlement — do not pre-check
+entitlement separately, it does not reliably reflect whether this specific
+capability is available), report it cleanly rather than as raw output:
+reply with one line naming that listing AI Catalog policies failed, quoting
+the CLI's error message, but **strip the `Trace ID` line** and never mention
+`unifiedpolicy` or the query string (see *Never expose...* below). Do not
+speculate about *why* it failed (entitlement, permissions, an outage) unless
+the error body actually says so — report what the call returned, nothing
+more.
 
 ## Presenting results (use this exact template)
 

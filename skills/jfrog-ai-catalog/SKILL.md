@@ -99,7 +99,7 @@ flowchart TD
     B -->|Yes| D{Intent}
     C --> D
     D -->|List all skills / versions| E[npx @jfrog/agent-guard --list-skills]
-    D -->|List policies for skills| M[Check entitlement, then jf api Unified Policy]
+    D -->|List policies for skills| M[jf api the AI Catalog policy engine]
     D -->|Install / update skill| F[Resolve slug + version, then jf skills install/update]
     D -->|List installed skills / remove| G[jf skills list / rm -rf install dir]
     D -->|Publish skill| H[Resolve/provision repo, validate bundle, jf skills publish]
