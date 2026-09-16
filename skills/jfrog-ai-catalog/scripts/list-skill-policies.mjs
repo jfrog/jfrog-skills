@@ -43,19 +43,20 @@
 // pattern in skills/jfrog-mcp-management/scripts/jfrog-agent-guard-check.mjs
 // (its GATE_DONE symbol) — this lets Node drain pending writes naturally.
 //
-// Windows / jf as a .cmd or .bat shim: deliberately NOT handled the way
-// jfrog-agent-guard-check.mjs's runJf() does (needsShell + cmd.exe
-// quoting). Checked directly: this repo's own canonical Windows install
-// (skills/jfrog-init/scripts/jfrog-install-jf-cli.mjs) places a native
-// jf.exe, never a .cmd/.bat wrapper, and the simpler, more directly
-// comparable existing precedent for a plain `jf api`-style call
-// (skills/jfrog/scripts/jfrog-check-server-collision.mjs) also spawns `jf`
-// bare, with no shell handling at all. jfrog-agent-guard-check.mjs's extra
-// defensiveness there is for its own reasons (an early, load-bearing
-// security gate that must tolerate any install method); this script
-// matches the simpler, already-working precedent instead.
+// Windows / jf as a .cmd or .bat shim: this repo's own canonical Windows
+// install (skills/jfrog-init/scripts/jfrog-install-jf-cli.mjs) places a
+// native jf.exe, but that doesn't rule out a customer's own `jf` reaching
+// PATH some other way (a corporate wrapper script, a third-party package
+// manager) that DOES produce a .cmd/.bat shim — which spawnSync cannot
+// execute without shell:true. Handled below (resolveJfPath/
+// buildJfInvocation), mirroring jfrog-agent-guard-check.mjs's runJf()/
+// needsShell — same detection, same
+// unsafe-character rejection before building a shell command string, since
+// shell:true does not array-escape arguments the way a direct spawn does.
 
 import { spawnSync } from 'node:child_process';
+import { accessSync, constants as fsConstants } from 'node:fs';
+import { delimiter, join } from 'node:path';
 
 const PAGE_LIMIT = 250;
 // Bounded, not browsable: this answer must be complete, so pages are fetched
@@ -74,20 +75,44 @@ const OVERALL_BUDGET_MS = 60_000;
 
 const DONE = Symbol('list-skill-policies:done');
 
+// takeValue consumes the token after a flag as its value, but only if that
+// token doesn't itself look like a flag — otherwise a missing value (e.g.
+// `--project --server-id abc`) would silently swallow the NEXT flag's name
+// as if it were this flag's value, and the real problem (a missing
+// --project value) would never be reported.
+function takeValue(argv, i, flagName) {
+  const next = argv[i + 1];
+  if (next === undefined || next.startsWith('--')) {
+    process.stderr.write(
+      `list-skill-policies.mjs: ${flagName} requires a value\n`
+    );
+    process.exitCode = 2;
+    throw DONE;
+  }
+  return next;
+}
+
 function parseArgs(argv) {
   const args = { project: '', serverId: '' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--project') {
-      args.project = argv[++i] ?? '';
+      args.project = takeValue(argv, i, '--project');
+      i++;
     } else if (a === '--server-id') {
-      args.serverId = argv[++i] ?? '';
+      args.serverId = takeValue(argv, i, '--server-id');
+      i++;
     } else {
       process.stderr.write(`list-skill-policies.mjs: unknown argument: ${a}\n`);
       process.exitCode = 2;
       throw DONE;
     }
   }
+  // Trim: a whitespace-only value (e.g. an upstream templating bug passing
+  // "--server-id \" \"") is truthy in JS and must not slip past the usage
+  // check below as if it were a real value.
+  args.project = args.project.trim();
+  args.serverId = args.serverId.trim();
   return args;
 }
 
@@ -129,6 +154,14 @@ function scrubServiceName(text) {
 // to present verbatim: drop every line mentioning a Trace ID, take the last
 // remaining non-empty line, then scrub it. Never throws — undefined/empty
 // input yields ''.
+//
+// Deliberately "last line" only, not a search for "the most informative
+// line": every real failure observed live (400/403/500, a retry-exhausted
+// timeout) had its most specific, actionable text on the LAST line. Trying
+// to be smarter about which line is "the real reason" — or presenting more
+// than one line — risks re-exposing raw multi-line body content (a JSON
+// error blob, an internal stack fragment) that scrubbing isn't guaranteed
+// to fully sanitize; one bounded, scrubbed line is the safer tradeoff.
 function cleanErrorLine(stderrText) {
   const lines = (stderrText || '')
     .split('\n')
@@ -202,6 +235,63 @@ function stripJfLogLines(text) {
     .trim();
 }
 
+// resolveJfPath finds `jf` on PATH the way the OS itself would, checking
+// every PATHEXT-listed extension on Windows (bare "jf" is never directly
+// executable there) so a .cmd/.bat shim is detected rather than silently
+// missed. Returns '' if not found (fetchPage's spawnSync then reports its
+// own ENOENT-style failure exactly as before).
+function resolveJfPath() {
+  const dirs = (process.env.PATH || '').split(delimiter).filter(Boolean);
+  const names =
+    process.platform === 'win32'
+      ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD')
+          .split(';')
+          .map((ext) => 'jf' + ext.toLowerCase())
+      : ['jf'];
+  for (const dir of dirs) {
+    for (const name of names) {
+      const full = join(dir, name);
+      try {
+        accessSync(
+          full,
+          process.platform === 'win32' ? fsConstants.F_OK : fsConstants.X_OK
+        );
+        return full;
+      } catch {
+        // keep looking
+      }
+    }
+  }
+  return '';
+}
+
+// buildJfInvocation decides HOW to run `jf api ...`: a direct, safely
+// array-escaped spawn for a native binary (the common case on every
+// platform, and the only case on macOS/Linux), or — ONLY when `jf` itself
+// resolves to a .cmd/.bat file — a shell-quoted command string, since
+// spawnSync cannot execute a batch file without shell:true, and shell:true
+// does not array-escape arguments the way a direct spawn does. Args are
+// checked for shell metacharacters first and the shell path is refused
+// entirely if any are present, rather than ever passing something
+// shell-unsafe through to cmd.exe.
+function buildJfInvocation(args) {
+  const jfPath = resolveJfPath() || 'jf';
+  const needsShell = /\.(cmd|bat)$/i.test(jfPath);
+  if (!needsShell) {
+    return { command: jfPath, args, shell: false };
+  }
+  const unsafe = /[&|;$<>`"'%^!\r\n]/.test(jfPath) || args.some((a) => /[&|;$<>`"'%^!\r\n]/.test(a));
+  if (unsafe) {
+    throw new PageFailure('the AI Catalog policy engine could not be reached safely');
+  }
+  const command = [`"${jfPath}"`, ...args.map((a) => `"${a}"`)].join(' ');
+  return {
+    command,
+    args: [],
+    shell: process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : '/bin/sh',
+  };
+}
+
 function fetchPage(project, serverId, offset) {
   const path =
     '/unifiedpolicy/api/v1/policies' +
@@ -215,15 +305,13 @@ function fetchPage(project, serverId, offset) {
   // as an extra positional argument for at least one other flag on this
   // call (see jfrog-login-register-session.sh), so this order is the
   // established, defended convention, not an arbitrary choice.
-  const result = spawnSync(
-    'jf',
-    ['api', '--server-id', serverId, path],
-    {
-      encoding: 'utf8',
-      timeout: 30_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }
-  );
+  const invocation = buildJfInvocation(['api', '--server-id', serverId, path]);
+  const result = spawnSync(invocation.command, invocation.args, {
+    encoding: 'utf8',
+    timeout: 30_000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    shell: invocation.shell,
+  });
 
   if (result.error) {
     // spawn itself failed (e.g. `jf` not found on PATH) — result.stderr is
@@ -338,15 +426,16 @@ function main() {
 
   let allItems = [];
   let offset = 0;
-  let truncated = false;
+  // null | 'cap' | 'failure' — NOT just a boolean: a benign safety-cap/
+  // time-budget stop and a genuine later-page backend failure both leave
+  // the user with a partial list, but they are not the same event and must
+  // not read as identical in the final message.
+  let truncatedReason = null;
   const startedAt = Date.now();
 
   for (let page = 0; page < MAX_PAGES; page++) {
     if (page > 0 && Date.now() - startedAt > OVERALL_BUDGET_MS) {
-      // An honest partial result, not a silent one: same wording as hitting
-      // MAX_PAGES, since both mean "we stopped before confirming there was
-      // nothing more."
-      truncated = true;
+      truncatedReason = 'cap';
       break;
     }
 
@@ -372,37 +461,45 @@ function main() {
       }
       allItems = allItems.concat(items);
 
-      // Ground truth is the array actually returned, not the metadata field
-      // alone — if the backend's page_size ever disagrees with reality (e.g.
-      // echoing the requested limit regardless of actual count), trusting
-      // page_size alone could keep "paginating" empty pages until MAX_PAGES
-      // and wrongly report truncation. Continue only when BOTH signals agree
-      // the page was full.
-      const reportedFull =
-        typeof data.page_size === 'number' ? data.page_size >= PAGE_LIMIT : true;
-      if (items.length < PAGE_LIMIT || !reportedFull) {
+      // Ground truth is ONLY the array actually returned — the page_size
+      // metadata field is not trusted in either direction. Trusting it as a
+      // "the backend claims this page is full" signal (even ANDed with the
+      // actual length) previously broke the case where page_size under-
+      // reports a genuinely full page: that combination stopped pagination
+      // silently, with truncatedReason never set, even though items.length
+      // itself already proved more data existed.
+      if (items.length < PAGE_LIMIT) {
         break;
       }
       if (page + 1 === MAX_PAGES) {
-        truncated = true;
+        truncatedReason = 'cap';
       }
       offset += PAGE_LIMIT;
     } catch (error) {
       if (!(error instanceof PageFailure)) {
         throw error; // a genuine bug, not a page-level failure: propagate as-is
       }
-      if (page > 0 && allItems.length > 0) {
+      // page > 0 alone is sufficient here (not also checking
+      // allItems.length > 0): reaching page > 0 at all requires the PRIOR
+      // iteration to have completed its `items.length < PAGE_LIMIT` check
+      // above without breaking, i.e. a full PAGE_LIMIT of items was already
+      // appended to allItems — so allItems.length > 0 always already holds.
+      // Not re-checked, to avoid a second condition that looks independently
+      // load-bearing but isn't; if a future change loosens that invariant,
+      // this comment is the thing to revisit.
+      if (page > 0) {
         // A later page failed, but earlier pages already succeeded — an
-        // honest partial answer (clearly flagged) serves the user better
-        // than discarding real, already-fetched data over one bad page.
-        // Nothing has been written to stderr and no exitCode has been set
-        // yet (PageFailure carries the failure without reporting it), so
-        // there is nothing to undo here — this is a clean, silent recovery.
-        truncated = true;
+        // honest partial answer (clearly flagged, and distinguishably so —
+        // see truncatedReason) serves the user better than discarding real,
+        // already-fetched data over one bad page. Nothing has been written
+        // to stderr and no exitCode has been set yet (PageFailure carries
+        // the failure without reporting it), so there is nothing to undo
+        // here — this is a clean, silent recovery.
+        truncatedReason = 'failure';
         break;
       }
-      // The very first page failed, or nothing has been recovered yet:
-      // this is a real, total failure — NOW actually report it.
+      // The very first page failed: this is a real, total failure — NOW
+      // actually report it.
       fail(error.reason, error.stderrText);
     }
   }
@@ -434,11 +531,17 @@ function main() {
       `| \`${escapeCell(policy.name)}\` | ${escapeCell(scope)} | ${escapeCell(ruleType)} | ${escapeCell(action)} | ${escapeCell(condition)} |`
     );
   }
-  if (truncated) {
+  if (truncatedReason) {
+    // Never "first N" — the table above is sorted alphabetically for
+    // display, but that sort happens AFTER pagination stopped, so it does
+    // NOT correspond to which policies were actually fetched; "first N"
+    // would misleadingly read as an alphabetical prefix guarantee.
+    const note =
+      truncatedReason === 'failure'
+        ? `This is a partial list (${sorted.length} polic${sorted.length === 1 ? 'y' : 'ies'}) — a later page failed to load, so more may apply to this project beyond what's shown here.`
+        : `This is a partial list (${sorted.length} polic${sorted.length === 1 ? 'y' : 'ies'}) — this project has enough policies that more may apply beyond what's shown here.`;
     lines.push('');
-    lines.push(
-      `(Showing the first ${sorted.length} polic${sorted.length === 1 ? 'y' : 'ies'} found within this lookup's bounds; more may apply to this project.)`
-    );
+    lines.push(`(${note})`);
   }
   process.stdout.write(lines.join('\n') + '\n');
 }
