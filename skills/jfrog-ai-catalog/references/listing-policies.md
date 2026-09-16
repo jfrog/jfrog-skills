@@ -24,14 +24,18 @@ Resolve `<PROJECT>` per *Resolve the project* in `../SKILL.md` (never assume
 `default`, never invent one), then run:
 
 ```bash
-bash <skill_path>/scripts/list-skill-policies.sh --project "<PROJECT>" --server-id "<SID>"
+node <skill_path>/scripts/list-skill-policies.mjs --project "<PROJECT>" --server-id "<SID>"
 ```
 
-(Same `bash <path>` invocation as `check-environment.sh` in the base skill —
-never execute the script directly; that shebang doesn't run on Windows.)
+(Node, not bash — this skill already hard-requires Node/npx for every other
+flow via `npx @jfrog/agent-guard`, so this adds no new prerequisite. Never
+execute the script directly; invoke it through `node` the same way
+`check-environment.sh` in the base skill is invoked through `bash`.)
 
-- **stdout, exit 0**: finished text, ready to present **verbatim** — either
-  the intro line plus the policy table, or the one-line "no policies"
+- **stdout, exit 0**: finished text, ready to present **verbatim** — the
+  intro line plus the policy table (occasionally with one extra trailing
+  line noting the result was capped — still part of the same verbatim
+  block, not a separate case to react to), or the one-line "no policies"
   fallback. Never parse or reformat it; the script has already done that.
 - **stderr, exit 1**: the call itself failed (for any reason — including the
   account lacking the AI Catalog entitlement; the script does not pre-check
