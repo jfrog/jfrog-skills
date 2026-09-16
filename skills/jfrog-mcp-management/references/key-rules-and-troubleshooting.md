@@ -10,15 +10,19 @@ Reference for the Install and List flows of the `jfrog-mcp-management` skill.
   Capitalizing the brand (`@JFrog`) points at a different/nonexistent scope and
   breaks the command. Use the exact lowercase string in every command and config
   entry.
-- **`npx` arg order:** `--yes`, `--registry <REGISTRY_URL>`, `@jfrog/agent-guard`, then
+- **`npx` arg order:** `--yes`, `--registry "<REGISTRY_URL>"`, `@jfrog/agent-guard`, then
   agent guard flags. Canonical invocation:
-  `npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard`. Both `--yes` and
+  `npx --yes --registry "<REGISTRY_URL>" @jfrog/agent-guard`. Both `--yes` and
   `--registry` MUST precede the package name or `npx` falls back to the default
   registry (404) and may block on a no-TTY prompt.
 - **Always `"type": "stdio"`** pointing at
-  `npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard`, even for
+  `npx --yes --registry "<REGISTRY_URL>" @jfrog/agent-guard`, even for
   remote-only catalog MCPs (the agent guard proxies them). `"http"`, `"sse"`,
-  or a top-level `"url"` bypass the agent guard.
+  or a top-level `"url"` bypass the agent guard. **One exception:** when
+  `--inspect` returned `routing.target: "gateway"` with a non-empty
+  `routing.url` and your harness file defines a Gateway entry shape, write that
+  shape — it points at the tenant's own JFrog Platform, not at a third party,
+  so nothing is bypassed. Never write a remote entry on any other basis.
 - `_JF_ARGS` is **only** for the config entry the agent launches at session
   start (the `env` of the entry written when adding an MCP); MUST contain
   `project=<JFROG_PROJECT_KEY>&mcp=<PACKAGE_NAME>`. NEVER pass `_JF_ARGS` to
@@ -64,7 +68,7 @@ Show the error verbatim. Ignore `npm warn` noise — except `npm warn invalid
 config registry=…`, which names the cause of a self-inflicted E404. Match
 **one** bucket from stderr. Fingerprints below are the live strings; if a
 match fails, re-check
-`npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard --version` rather
+`npx --yes --registry "<REGISTRY_URL>" @jfrog/agent-guard --version` rather
 than assuming a pinned release. A **hard stop** means: do not fall back to
 the usual MCP install routes that skip the approved catalog and Agent Guard
 as the MCP proxy.
@@ -112,6 +116,21 @@ row in [harness-common.md](harness-common.md).
        (agent guard stderr will show the spawn error).
   2. Verify that the MCP server is still allowed. See the skill's "Available to
      install" flow.
+- **An MCP was installed as a `stdio` Agent Guard entry although Gateway
+  routing is expected** — this is the designed fallback, not a failure.
+  `--inspect` returns anything other than
+  `routing.target: "gateway"` for every non-Gateway outcome, and the skill then
+  writes the standard stdio Agent Guard entry. Which outcomes those are is
+  `--inspect`'s to decide, not this skill's. The same fallback is taken when
+  `routing.url` is empty, or when the harness file defines no Gateway entry
+  shape — an MCP whose `routing.target` is `"gateway"` still installs as stdio
+  on those harnesses. The fallback entry is an ordinary Agent Guard entry, so
+  it works **only** with its inputs: Install Steps 3 and 4a run in full on that
+  path, and the required values must be collected and exported as for any other
+  stdio install. If a developer explicitly asks
+  why, the reason is on stderr: re-run the Step 2 `--inspect` command with
+  `JF_AGENT_GUARD_LOG_LEVEL=debug` exported and read the single eligibility
+  record it prints. Never paste an access token from that output.
 - **Configured server missing from the harness's list/verify view** —
   rejected/pending. Re-run the enable/verify step (Install → Step 4a).
 - **MCP still appears as approved (or won't go away) after editing the config**

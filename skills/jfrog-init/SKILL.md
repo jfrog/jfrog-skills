@@ -95,8 +95,9 @@ Non-Claude harnesses need both.
   Node (Step 1) or `jf` (Step 2); `AskUserQuestion` picker for
   web-login vs. token (Step 3/4); `AskUserQuestion` picker for project
   selection (Step 6). Everything else is read-only except Step 5's
-  placeholder substitution (plus OpenCode `mcp.jfrog` write and kiro-cli
-  `~/.kiro/settings/mcp.json` merge), Step 8's `~/.netrc` write, and the
+  placeholder substitution (plus OpenCode `mcp.jfrog` write, and the
+  kiro-cli `~/.kiro/settings/mcp.json` / Junie `~/.junie/mcp/mcp.json`
+  merge), Step 8's `~/.netrc` write, and the
   Final summary's state write.
 - **Never surface the checklist.** Run silently — no step narration, no
   raw JSON/exit codes, no branch-reasoning said out loud. See
@@ -109,6 +110,9 @@ Non-Claude harnesses need both.
 - **Persist state before the final summary** — run
   `jfrog-state-file.mjs set` whenever Steps 1-4 all pass, regardless of
   Step 5/6/7. See [Final summary](#final-summary).
+- **Close with the Final summary.** When Steps 1-4 pass, render the
+  [Final summary](#final-summary) checklist — never end on ad-hoc
+  "Summary / Changes" status text.
 - **Never store, log, or print an access token** — credentials stay
   inside `jf`'s own process or in-memory for one `fetch` call. **Step 8
   is the one deliberate exception** (writes `~/.netrc`) — see
@@ -324,7 +328,8 @@ it for the placeholder fix instead of re-resolving from scratch.
 **Read-only** against the JFrog plugin's `mcp.json`, with exceptions: substituting
 an unresolved `${JFROG_PLATFORM_URL}` / `${JFROG_URL}` placeholder (Cursor / VS Code /
 Claude Code), writing a `mcp.jfrog` entry on OpenCode (which has no plugin-owned file),
-and adding the `jfrog` entry to `~/.kiro/settings/mcp.json` for kiro-cli (see
+and adding the `jfrog` entry to the tool's own global MCP config for kiro-cli
+(`~/.kiro/settings/mcp.json`) and Junie (`~/.junie/mcp/mcp.json`) (see
 `references/mcp-plugin-config.md`).
 
 **Stop and read `references/mcp-plugin-config.md` in full** — substitution mechanics,

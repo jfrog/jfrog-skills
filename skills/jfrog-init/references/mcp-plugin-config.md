@@ -58,8 +58,8 @@ placeholder pattern anywhere in the file, it calls
 
 This is the ONLY place `/jfrog-init` writes to the plugin-owned
 `mcp.json` for these three harnesses. Everything else in Step 5 is
-read-only for them — with two further exceptions: OpenCode and Kiro CLI
-(see below).
+read-only for them — with three further exceptions: OpenCode, Kiro CLI,
+and Junie (see below).
 
 **OpenCode is structurally different.** The JFrog OpenCode plugin
 (`@jfrog/opencode-jfrog-plugin`) ships no static `mcp.json` of its
@@ -112,6 +112,7 @@ plugin (there is no plugin-owned file for OpenCode to write to).
 | Kiro (IDE)   | `~/.kiro/powers/installed/jfrog-kiro-power/mcp.json` (stable path) |
 | Kiro CLI     | `~/.kiro/settings/mcp.json` — Kiro's own global MCP config, not shipped by any plugin, so the `jfrog` entry is **created or merged in** with a placeholder url, then substituted like every other row above |
 | Devin        | `~/.local/share/devin/cli/plugins/cache/github.com_jfrog_devin-plugin-<sha>/<version>/mcp.json` (glob → newest; the scan is restricted to slugs starting with `github.com_jfrog_devin-plugin-` so other Devin plugins that also ship an `mcp.json` can't be picked up by mistake) |
+| Junie        | `~/.junie/mcp/mcp.json` — Junie's own global MCP config; the `jfrog` entry is **created or merged in** with a placeholder url, then substituted like every other row above |
 
 **OpenCode's own config file** (not plugin-owned — this is the user's
 personal config). The global file (item 3 below) is **always** loaded by
@@ -144,7 +145,7 @@ Project-scope `opencode.json` (in the project root) is deliberately
 a `jfrog` MCP entry into a file the user might share is a different
 action than writing to a personal, git-ignored config.
 
-The Kiro CLI merge is additive and never destructive: the file normally
+The Kiro CLI / Junie merge is additive and never destructive: the file normally
 holds the user's other MCP servers, so a `jfrog` entry that already has a
 url is left untouched (a placeholder in it is the substitution step's
 job), other servers and the file's mode are preserved, a symlinked config
@@ -153,8 +154,8 @@ rewritten.
 
 Harness detection (in priority order): `CODEX_SANDBOX` / `CLAUDECODE` /
 `CURSOR_TRACE_ID` / `OPENCODE` / `OPENCODE_SESSION_ID` / `VSCODE_PID` /
-`TERM_PROGRAM`. Override with
-`JFROG_INIT_HARNESS=claude|cursor|vscode|codex|opencode|kiro|kiro-cli|devin`
+`TERM_PROGRAM` / `JUNIE_DATA` / `JUNIE_SHIM_PATH`. Override with
+`JFROG_INIT_HARNESS=claude|cursor|vscode|codex|opencode|kiro|kiro-cli|devin|junie`
 or a specific file via `JFROG_INIT_MCP_CONFIG=/abs/path`. Kiro / Kiro CLI /
 Devin have no auto-detect signal, and the Copilot extension runtime
 may sanitize VS Code's env vars from the plugin subprocess — all four
@@ -210,8 +211,9 @@ actually enabled on the JPD is a separate, network check (see
     `jf config`**) or the file isn't strict JSON (fix: **paste the
     entry in manually** — run `jfrog-reinstall-jfrog-plugin.mjs` for
     the exact JSON to paste and where).
-  - **(Kiro CLI)** Could not create or update `~/.kiro/settings/mcp.json`
-    — no plugin ships this file, so there's nothing to reinstall. The
+  - **(Kiro CLI / Junie)** Could not create or update the tool's own global
+    MCP config (`~/.kiro/settings/mcp.json` for Kiro CLI, `~/.junie/mcp/mcp.json`
+    for Junie) — no plugin ships this file, so there's nothing to reinstall. The
     detail names the actual cause. Fix: **correct the file or
     parent-directory permissions/path**, then re-run.
   - (Exit 3 only) Harness could not be detected, or the config file is
@@ -227,7 +229,7 @@ actually enabled on the JPD is a separate, network check (see
     or any other reference doc over it.
 - **Exit 2 (`ask`)** → the one outcome that still blocks: a fix needs
   the jf server-id (placeholder substitution on Cursor/VS Code/Claude
-  Code, or the initial write on OpenCode/Kiro CLI) but it's ambiguous —
+  Code, or the initial write on OpenCode/Kiro CLI/Junie) but it's ambiguous —
   every step from here on needs a resolved server-id, so there's nothing
   to skip ahead to. **Stop and read `references/server-picker.md` in
   full**, then re-invoke with the pick as the positional argument.
@@ -295,16 +297,42 @@ Summary's **JFrog MCP Plugin** line, because it is the only signal tied to
   docs link `https://docs.jfrog.com/integrations/docs/enable-the-jfrog-mcp-server`).
 - **Exit 1 (`unreachable`)** → `could not confirm it's enabled`. Often transient
   (proxy / VPN / timeout); re-run to recheck.
-- **Exit 0 (`enabled`)** → this JPD's MCP is on. Read sign-in from your session's
-  JFrog MCP tools (they count only for *this* JPD — see the note above):
-  - **Tools available and for this JPD** (same base URL) → green (signed in).
-  - **Not available, `needsAuth`, or not confirmably this JPD** → the summary
-    line is `enabled — sign in to use it`. Step 5 is non-blocking, so do **not**
-    open the browser here — offer to sign in only **after the Final Summary**
-    (the walk's one browser action, and its last). If the user accepts, trigger
-    the JFrog MCP's own sign-in through your harness's MCP auth, then follow up:
-    tools now visible → connected; still not visible → reload the window to load
-    them (expected — don't ask an already signed-in user to sign in again).
+- **Exit 0 (`enabled`)** → this JPD's MCP endpoint is on, but that's about the
+  **server**, not your **sign-in**. Decide whether *this* JPD's `jfrog` tools are
+  actually **authorized and usable this turn**, cheapest first:
+  1. **Already conclusive → ✅** (no extra call): the tools show as **connected /
+     authorized** and you can use them, or you've **already used** one
+     successfully this walk.
+  2. **Not yet conclusive, but a `jfrog` tool is callable** without starting a
+     sign-in → **make ONE cheap, read-only `jfrog` call to confirm**: it returns
+     data → **✅**; it comes back `401` / `needsAuth` → ⚠️ `enabled — sign in to
+     use it`.
+  3. **No `jfrog` tool callable this turn**, or confirming would first need a
+     sign-in → ⚠️ `enabled — sign in to use it` (the default).
+
+  Why "enabled" alone isn't ✅: an enabled endpoint answers an OAuth **Bearer
+  challenge**, so a probe `detail` of `HTTP 401` here is the *normal* signature of
+  "enabled" — not proof you're signed in. (A *bare* 401 with no challenge is
+  Exit 1 `unreachable`, a different branch.) And a tool merely **appearing in the
+  list** can show before OAuth completes — presence isn't authorization.
+
+  Re-decide every walk (even a repeat in the same session); never reuse a stale
+  result.
+
+  **Offering sign-in** — only when the status is ⚠️ `enabled — sign in to use it`:
+  - Step 5 is non-blocking → do **not** open the browser here; offer sign-in only
+    **after the Final Summary**.
+  - If the user accepts, trigger the JFrog MCP's own sign-in via your harness's
+    MCP auth, then re-check:
+      - tools now visible → connected
+      - still not visible → reload the window (don't re-ask an already signed-in user)
+  - **Junie exception** — you **can't** trigger it yourself (the `jfrog` tools
+    aren't exposed to your turn); tell the user instead, per surface:
+    - **Junie CLI** → run `/mcp`, **Authorize** the `jfrog` entry, finish the
+      browser login (tools load in the same session, no restart).
+    - **JetBrains IDE panel** → open **Settings → Tools → Junie → MCP Settings**,
+      authorize/reconnect `jfrog`, then reload the window.
+    - Either way, offer to re-check once they confirm.
 
 The result is in `jfrog-detect-all.mjs`'s summary as `mcpResponding`
 (with `mcpRespondingReason` on the non-green cases). The auth-status read

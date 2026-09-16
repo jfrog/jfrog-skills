@@ -26,6 +26,43 @@ Plain `${VAR_NAME}`, resolved from the shell that launched Claude Code. For
 launching shell (see [persisting-env-vars.md](persisting-env-vars.md)); values
 are picked up on next launch. Never write a raw secret — always `${VAR}`.
 
+## Gateway entry shape
+
+Use this shape ONLY when Step 2's `--inspect` output carried
+`routing.target: "gateway"` and a non-empty `routing.url`. In every other case,
+whatever the output looked like, write the Agent Guard entry from
+[harness-common.md](harness-common.md) instead, exactly as you would if this
+section did not exist. Never infer this from a URL that looks like a Gateway
+URL.
+
+```json
+{
+  "mcpServers": {
+    "<spec.packageName>": {
+      "type": "http",
+      "url": "<routing.url, copied verbatim>"
+    }
+  }
+}
+```
+
+- The entry **key** is the raw, unencoded `spec.packageName` — the same key the
+  Agent Guard entry uses.
+- `url` is `routing.url` copied verbatim. Never build it, never normalise it,
+  never re-encode it, never append a path. It always points at the tenant's own
+  JFrog Platform. A `%2F` in the URL is correct and must be written through
+  unchanged.
+- No `command`, no `args`, no `env`, no `${VAR}` — the Gateway holds the
+  upstream credential, so there is nothing for the user to export. A `${VAR}` in
+  a Gateway entry is a bug.
+- Skip Install Step 5 (`--login`): OAuth runs between Claude Code and the
+  Gateway on first use, not against the upstream.
+- Enable, Restart and Verify are unchanged, including the ≥1-tool criterion.
+- Write the entry in every case — never stop the add over a managed policy.
+  After writing it, tell the user: managed Claude settings must list the copied
+  `serverUrl` in `allowedMcpServers`; if that list does not include the URL,
+  Claude Code rejects the server on first use.
+
 ## Enable
 
 Pre-approve to skip the per-server prompt: edit

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Runs the detectors in dependency order and reports one JSON summary line.
 // Idempotent and safe to run repeatedly. Mostly read-only — with two
-// exceptions: (1) for the kiro-cli harness, Step 5 (detectJfrogMcp →
-// resolveMcpConfig) creates or merges ~/.kiro/settings/mcp.json when the
-// jfrog entry is absent, the same write that jfrog-detect-jfrog-mcp.mjs
-// performs; (2) on green, a state-file hint is written to ~/.jfrog/setup.json.
+// exceptions: (1) for the kiro-cli and Junie harnesses, Step 5 (detectJfrogMcp →
+// resolveMcpConfig) creates or merges the tool's own global MCP config
+// (~/.kiro/settings/mcp.json or ~/.junie/mcp/mcp.json) when the jfrog entry
+// is absent, the same write that jfrog-detect-jfrog-mcp.mjs performs;
+// (2) on green, a state-file hint is written to ~/.jfrog/setup.json.
 //
 // Usage: node jfrog-detect-all.mjs [server-id] [project-input]
 //

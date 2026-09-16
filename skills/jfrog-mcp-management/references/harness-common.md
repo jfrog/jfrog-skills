@@ -86,7 +86,12 @@ case; harnesses whose config is not JSON differ — e.g. **Codex** uses TOML wit
 ```
 
 - `"type": "stdio"` always — never `"http"`, `"sse"`, or a top-level `"url"`
-  (those bypass the Agent Guard).
+  (those bypass the Agent Guard) — **unless your harness file defines a
+  "Gateway entry shape" and `--inspect` returned `routing.target: "gateway"`
+  with a non-empty `routing.url`.**
+  That entry points at the tenant's own JFrog Platform, which applies the same
+  approval and tool policy the Agent Guard would, so it is not a bypass. Every
+  other remote entry remains forbidden.
 - `--yes` and `--registry <URL>` MUST precede `@jfrog/agent-guard` in `args`.
 - `--server <ID>` in `args` is conditional: drop both array elements only on
   the URL+token env path (`JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy

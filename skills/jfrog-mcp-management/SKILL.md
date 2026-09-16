@@ -41,6 +41,14 @@ Node.js 18+ on PATH — `node` runs the Step 0 check, `npx` runs
 `@jfrog/agent-guard`. On an older runtime the Step 0 check exits with
 `Unknown: requires Node.js 18 or newer`.
 
+## Shell quoting rule
+
+**Always double-quote every interpolated value in shell commands.**
+`<REGISTRY_URL>`, `<SERVER_ID>`, `<JFROG_PROJECT_KEY>`, `<MCP_NAME>`,
+`<spec.packageName>`, and any other substituted value must be wrapped in
+`"..."` when passed on a command line. Unquoted values let shell
+metacharacters (`;`, `|`, `$()`, etc.) execute before `npx` runs.
+
 ## Step 0: Agent Guard activation (silent, mandatory)
 
 Before anything else, run this check and WAIT for its exit code. Do not narrate
@@ -82,7 +90,7 @@ server just to run this gate.
 
 ```bash
 # Only when certain of the JFrog platform server id:
-node "<skill_path>/scripts/jfrog-agent-guard-check.mjs" <SERVER_ID>
+node "<skill_path>/scripts/jfrog-agent-guard-check.mjs" "<SERVER_ID>"
 ```
 
 If the first run fails with a network error, timeout, or other spurious issue
@@ -164,6 +172,18 @@ new agent is a new `harness-<name>.md` file, with no change to this workflow.
 Never hard-code one harness's `.mcp.json` / `mcpServers` / `claude mcp list`
 values into your actions.
 
+## Output rule: routing is internal
+
+`--inspect`'s `routing` field is plumbing. It never appears in anything the
+user reads — not in progress lines, pre-tool narration, todos, questions, or
+the closing summary. Never write "routing", "route", "gateway", "fallback",
+or "eligibility" there, and never justify an action by it ("no secrets needed
+because ..."). The only place a routing value may appear is inside the config
+entry you write. The user sees the config edit and what to do next.
+
+Good: "Added microsoft-learn to .mcp.json. Restart, then sign in on first use."
+Bad:  "Gateway route. Writing entry, no secrets needed."
+
 ## Prerequisites
 
 **Read the base [`../jfrog/SKILL.md`](../jfrog/SKILL.md) first** — it owns the
@@ -177,7 +197,7 @@ telemetry) and the
 ## Pre-flight (Install and List → Available to install only)
 
 Read [references/agent-guard-common.md](references/agent-guard-common.md) for the
-canonical invocation (`npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard`),
+canonical invocation (`npx --yes --registry "<REGISTRY_URL>" @jfrog/agent-guard`),
 the `<REGISTRY_URL>` substitution, and the rules for resolving
 `<JFROG_PROJECT_KEY>` and `<SERVER_ID>`. Removal and List → Currently installed
 read only local config, so they skip this.
@@ -247,12 +267,12 @@ curl/Python, no direct JFrog API calls:
 
 ```
 npx --yes \
-  --registry <REGISTRY_URL> \
+  --registry "<REGISTRY_URL>" \
   @jfrog/agent-guard \
   --inspect \
-  --server <SERVER_ID> \
-  --project <JFROG_PROJECT_KEY> \
-  --mcp <MCP_NAME>
+  --server "<SERVER_ID>" \
+  --project "<JFROG_PROJECT_KEY>" \
+  --mcp "<MCP_NAME>"
 ```
 
 (never omit `--registry`; URL in [agent-guard-common](references/agent-guard-common.md))
@@ -268,6 +288,45 @@ From the output JSON, extract (keep BOTH required AND optional):
   `spec.mcpServerType.local.bootParams.environmentVariables[]`; for remote MCPs
   `spec.mcpServerType.remote.endpoints[].headers[]` (via `mcpInput.mcpInputDetails`).
   Each carries `name`, `description`, `isRequired`, `isSecret`.
+- `routing` — an OPTIONAL **top-level** field, never nested inside another
+  object. Read `routing.target` and `routing.url`, and keep both for the route
+  resolution below: they are two of its three conditions, never the route
+  itself. **Anything other than `"gateway"`** in `target` — absent field,
+  absent object included — is the **Agent Guard route** on its own.
+  Never treat the mere presence of the object as an answer — read `target`.
+  The agent guard is the only source of truth for this block: never validate
+  its shape here, and never enumerate the cases it covers. Both the absent and
+  the non-`gateway` cases are normal and mean nothing is wrong: never ask about
+  them, and never work out the route any other way. See
+  [Output rule](#output-rule-routing-is-internal).
+
+**Resolve the route ONCE, here.** Steps 3, 4, 4a and 5 all read this single
+answer and never re-derive it from `routing.target` alone. The **Gateway
+route** is taken only when ALL THREE hold:
+1. `routing.target` is `"gateway"`;
+2. `routing.url` is non-empty;
+3. your one harness file (Step 1) defines a **Gateway entry shape** — if that
+   file has no such section, this harness cannot express a Gateway entry.
+
+Conditions 1 and 2 are `--inspect`'s answer and are never second-guessed;
+condition 3 is only whether this harness can express it. Any one missing →
+**Agent Guard route**: the stdio entry, with Steps 3, 4, 4a and 5 running
+exactly as they do today — inputs planned, collected and exported like any
+other Agent Guard install.
+Test them in any order: condition 3 is a property of your harness file, not of
+the `--inspect` output, so it holds or fails the same whether you read it
+before or after. A `"gateway"` target **with** a non-empty `url` on a harness
+whose file defines no Gateway entry shape therefore fails the gate — write the
+ordinary `npx --yes ... @jfrog/agent-guard` stdio entry, never a remote one.
+
+**A shape change needs a removal first.** If an entry with this exact
+`spec.packageName` already exists in the target config file — exact key match
+only, never a similar, partial, or guessed name — and it is not the shape you
+are about to add (one case: it runs `@jfrog/agent-guard` and you are adding the
+Gateway entry; the other case: it carries a `url` and no `command` and you are
+adding the Agent Guard entry), add nothing: tell the user that entry exists and
+that they must remove it before adding again. Never edit, merge, or overwrite
+it, and never remove it yourself. Every other case is unchanged.
 
 On non-zero exit, show the error verbatim, then classify per
 [key-rules](references/key-rules-and-troubleshooting.md#classify-npx-jfrogagent-guard-failures).
@@ -280,7 +339,14 @@ and Agent Guard as the MCP proxy.
 [references/harness-common.md](references/harness-common.md)). No secret is ever
 entered in chat.
 
-Split Step 2 inputs by `isRequired`:
+**Gateway route (as resolved in Step 2) — skip this step entirely.** The
+Gateway holds the upstream credential, so no header or env input is written
+into the entry and there is nothing for the user to provide.
+Do NOT ask the user about optional inputs, and do NOT write an `env` block.
+
+On the Agent Guard route — every case that is not the Gateway route, including
+a `routing.target: "gateway"` this harness cannot express or an empty
+`routing.url` — split Step 2 inputs by `isRequired`:
 1. **Required** — always include in Step 4.
 2. **Optional** — if even ONE exists, STOP and ask. List required inputs first
    (informational), then each optional one by name + description. Do NOT decide
@@ -297,12 +363,17 @@ prompts for `inputs` values on first start — no shell export.)
 
 ## Step 4: Write the config entry
 
+**Write exactly ONE entry** — the Agent Guard entry, or your harness file's
+Gateway entry shape on the Gateway route as resolved in Step 2
+(`routing.target: "gateway"` + non-empty `routing.url` + that shape existing).
+
 Write the Agent Guard entry into the target config from Step 1, following
 [references/harness-common.md](references/harness-common.md) for the **shared
 entry shape** (`type: stdio`, `command`/`args`/`_JF_ARGS`). Use your one
 harness file only for path, top-level key, value-reference syntax, and any
 "Full entry shape" override (Codex/OpenCode). Do not invent a different
-`args`/`env` layout.
+`args`/`env` layout. This is the Agent Guard entry — or your harness file's
+Gateway entry shape, on the Gateway route as resolved in Step 2.
 
 **Config vs CLI (do not mix):**
 - Config entry: project + MCP go in `env._JF_ARGS` as
@@ -314,7 +385,14 @@ harness file only for path, top-level key, value-reference syntax, and any
 Guardrails (identical everywhere):
 - `--yes` and `--registry <URL>` MUST precede `@jfrog/agent-guard` in `args`
   (else npx hits the default registry → 404 / no-TTY hang).
-- `"type": "stdio"` only — never `"http"`, `"sse"`, or a top-level `"url"`.
+- `"type": "stdio"` only — never `"http"`, `"sse"`, or a top-level `"url"` —
+  **unless** your harness file defines a **Gateway entry shape** AND Step 2's
+  `--inspect` output carried `routing.target: "gateway"` with a non-empty
+  `routing.url`. Then write that shape, with `url` copied verbatim from
+  `routing.url`. Anything else → the stdio rule applies with no exception.
+  Never infer this from a URL that looks like a Gateway URL, and never build
+  that URL yourself. These are the same three conditions resolved in Step 2 —
+  restated here, never a second, looser test.
 - `--server` in `args` is conditional (Step 1): drop it only on the URL+token
   env path (`JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy
   `JF_URL`+`JF_ACCESS_TOKEN`). When present, its value is a jf config server
@@ -338,7 +416,12 @@ Then tell the user:
    shell (Claude Code, Cursor, Kiro, Devin, Codex, OpenCode — see
    [references/persisting-env-vars.md](references/persisting-env-vars.md)), or
    supply it at the first-start `inputs` prompt (VS Code). Unset values cause
-   warnings and runtime failures.
+   warnings and runtime failures. When Step 4 wrote a **Gateway entry** there
+   is nothing to export — that entry has no `env` and no value reference. (A
+   stdio Agent Guard entry always follows this instruction, whatever
+   `routing.target` said.) Tell the user
+   instead that they will be asked to sign in to JFrog the first time the
+   server is used, and go straight to the restart.
 2. Restart per the harness's **Restart** column.
 3. Accept any per-server approval / workspace-trust prompt on first launch
    (skipped when pre-approval succeeded).
@@ -349,9 +432,14 @@ Then tell the user:
 
 ## Step 5: Authenticate OAuth MCPs (auto, after Step 4)
 
-Run ONLY for OAuth-style remote MCPs — `--inspect` showed a `remote` section
-with `type: "http"` AND Step 4 wrote no static auth header into `env`. Skip for
-local MCPs and for remote MCPs whose auth comes from a static token in `env`.
+Skip this step entirely when Step 4 wrote a Gateway entry: OAuth runs between
+the harness and the Gateway on first use, so a locally cached upstream token
+would be read by nothing.
+
+Otherwise run ONLY for OAuth-style remote MCPs — `--inspect` showed a `remote`
+section with `type: "http"` AND Step 4 wrote no static auth header into `env`.
+Skip for local MCPs and for remote MCPs whose auth comes from a static token in
+`env`.
 
 `--login` opens the browser, runs OAuth, caches tokens in
 `~/.jfrog/jfrogmcp.conf.json`. In the same turn, tell the user you are about
@@ -360,12 +448,12 @@ command — do not wait for confirmation or a follow-up prompt:
 
 ```
 npx --yes \
-  --registry <REGISTRY_URL> \
+  --registry "<REGISTRY_URL>" \
   @jfrog/agent-guard \
   --login \
-  --server <SERVER_ID> \
-  --project <JFROG_PROJECT_KEY> \
-  --mcp <spec.packageName>
+  --server "<SERVER_ID>" \
+  --project "<JFROG_PROJECT_KEY>" \
+  --mcp "<spec.packageName>"
 ```
 
 Outcomes:
@@ -413,6 +501,12 @@ add-on where the agent provides it.
    Codex — use the package from `mcp=` instead, per that harness's List
    installed), package (`mcp=` in `_JF_ARGS`), server ID (value after
    `--server`), scope (project / user).
+   **Also show each entry that carries a `url` and no `command`** — this skill
+   writes that shape too, so a filter on `@jfrog/agent-guard` alone hides
+   installs it made. Display name and package are both the entry key (the raw
+   `spec.packageName`), server ID `—`, scope as above. Never print the `url`.
+   Such an entry carries no marker of who wrote it, so list it without
+   asserting whether this skill did.
 2. **If the harness exposes an MCP status command or view** (the harness-config
    "List installed" column — e.g. Claude Code's `claude mcp list`, Cursor/VS
    Code's MCP UI), use it to add live connection status per server. If none
@@ -429,18 +523,18 @@ Continue serving the user without Agent Guard. Currently installed still proceed
 
 1. Determine **server** and **JFrog project key** per the Pre-flight rules.
    `--list-available` does NOT require any existing MCP entry or pre-installed
-   Agent Guard — `npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard`
+   Agent Guard — `npx --yes --registry "<REGISTRY_URL>" @jfrog/agent-guard`
    fetches it on demand, so this works on a fresh machine too.
 2. Run this ONCE — do not emit literal `[ ]` brackets. Append `--server
-   <SERVER_ID>` per the Step 1 rule (omit only on the URL+token env path —
+   "<SERVER_ID>"` per the Step 1 rule (omit only on the URL+token env path —
    `JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy `JF_URL`+`JF_ACCESS_TOKEN`):
 ```
 npx --yes \
-  --registry <REGISTRY_URL> \
+  --registry "<REGISTRY_URL>" \
   @jfrog/agent-guard \
   --list-available \
-  --project <JFROG_PROJECT_KEY> \
-  --server <SERVER_ID>
+  --project "<JFROG_PROJECT_KEY>" \
+  --server "<SERVER_ID>"
 ```
 
 On non-zero exit, classify per
@@ -459,8 +553,10 @@ is the install identifier (passed to `--inspect --mcp`) and resolves to
 
 3. **Mark rows already installed rather than dropping them.** For local MCPs the
    catalog `name` and the installed `spec.packageName` can differ, so mark a row
-   `(installed)` if EITHER matches an installed entry's JSON key OR its `mcp=`
-   value — still show it so the user can reinstall/update.
+   `(installed)` if EITHER matches the JSON key of ANY entry in the servers map
+   OR its `mcp=` value — still show it so the user can reinstall/update. Match
+   against the whole map, not only the Agent Guard rows: a remote entry carries
+   no `mcp=`, and its key is the package.
 
 See [references/key-rules-and-troubleshooting.md](references/key-rules-and-troubleshooting.md)
 for key rules and troubleshooting.
@@ -471,9 +567,9 @@ for key rules and troubleshooting.
 
 Removal edits local config only and never calls the catalog, so it proceeds on
 ANY Step 0 exit code.
-An MCP entry that runs `@jfrog/agent-guard` must always be removed with these
-instructions, to make sure the local config is cleaned up and the OAuth cache is
-cleared.
+An MCP entry that runs `@jfrog/agent-guard`, or one that carries a `url` and no
+`command`, must always be removed with these instructions, to make sure the
+local config is cleaned up and the OAuth cache is cleared.
 
 1. **Locate the entry across both scopes first.** Read the servers map from BOTH
    the project and user config files for the current harness (per
@@ -496,6 +592,9 @@ cleared.
    contains secrets — never print, echo, or surface its contents when reading or
    editing it; operate on it by key only.** So:
    - If no entry matched in step 1, skip this step entirely.
+   - If the deleted entry carried a `url` and no `command`, skip this step:
+     that shape caches no token, so a key of that name is a different
+     install's.
    - If a matching entry remains in the other scope (user kept only one of a
      duplicate), leave the cache key in place.
    - Only when all matching project and user entries have been deleted (or the

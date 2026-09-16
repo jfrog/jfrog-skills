@@ -3,7 +3,8 @@
 // absolute path. This is the file the JFrog plugin ships with — NOT the
 // user's project- or user-scope MCP config. This skill never touches the
 // customer's own mcp.json; only the one owned by the JFrog plugin — with
-// one exception, kiro-cli, which has no plugin behind it (see below).
+// two exceptions, kiro-cli and Junie, which have no plugin behind them and
+// use the tool's own global MCP config instead (see below).
 //
 // Plugin-owned paths per harness:
 //   Cursor:     ~/.cursor/plugins/cache/cursor-public/jfrog/<sha>/mcp.json
@@ -21,9 +22,13 @@
 //   Kiro CLI:   ~/.kiro/settings/mcp.json (not plugin-shipped; this is
 //                 Kiro's own global MCP config, so the jfrog entry is
 //                 created — or merged into an existing file — with a
-//                 placeholder url. See ensureKiroCliJfrogEntry() below.)
+//                 placeholder url. See ensureOwnGlobalMcpJfrogEntry() below.)
 //   Devin:      ~/.local/share/devin/cli/plugins/cache/<slug>/<version>/mcp.json
 //                 (glob → newest; <slug> is prefix-filtered to github.com_jfrog_devin-plugin-*.)
+//   Junie:      ~/.junie/mcp/mcp.json (not plugin-shipped; this is Junie's
+//                 own global MCP config, handled exactly like Kiro CLI —
+//                 same mcpServers.jfrog shape, created or merged in with a
+//                 placeholder url. See ensureOwnGlobalMcpJfrogEntry() below.)
 //
 // NOTE (Claude): the current released Claude plugin (jfrog-beta/0.3.0-beta.1)
 // does NOT ship a .mcp.json — the source repo has one, but the packager
@@ -51,6 +56,12 @@
 //                      extension runtime may sanitize these from the plugin
 //                      subprocess; in that case Copilot self-identifies via
 //                      JFROG_INIT_HARNESS=vscode (see SKILL.md Step 5).
+//   6. Junie        -> $JUNIE_DATA / $JUNIE_SHIM_PATH set (JetBrains), OR the
+//                      skill is installed under ~/.junie/ (installedUnderJunie).
+//                      The IDE panel's shell steps don't carry JUNIE_*, so the
+//                      install-location fallback is what fires there. Listed
+//                      last so a nested real agent inside a JetBrains IDE
+//                      terminal wins by static priority.
 // Codex is listed first because a Codex session launched from inside
 // another harness's terminal still carries that host's own signal — and
 // nesting goes both ways (OpenCode included), so more than one signal
@@ -82,9 +93,30 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { isMainModule } from "./lib/jf.mjs";
 
-const VALID_HARNESSES = new Set(["claude", "cursor", "vscode", "codex", "opencode", "kiro", "kiro-cli", "devin"]);
+const VALID_HARNESSES = new Set(["claude", "cursor", "vscode", "codex", "opencode", "kiro", "kiro-cli", "devin", "junie"]);
+
+// Env-free Junie detection. Junie's IDE panel runs shell steps without the
+// JUNIE_* vars, so we also treat "this skill lives under the user's own
+// ~/.junie/ dir" as Junie - anchored to the home directory so an unrelated
+// `.junie` segment elsewhere in the path can't be mistaken for a Junie install.
+// Installs outside ~/.junie/ aren't auto-detected - set JFROG_INIT_HARNESS=junie.
+function installedUnderJunie() {
+  const home = process.env.HOME || process.env.USERPROFILE || homedir();
+  if (!home) return false;
+  const norm = (p) => (p || "").replace(/\\/g, "/").replace(/\/+$/, "");
+  const junieRoot = norm(home) + "/.junie/";
+  let here = "";
+  try {
+    here = fileURLToPath(import.meta.url);
+  } catch {
+    // import.meta.url unavailable — fall back to CLAUDE_SKILL_DIR only.
+  }
+  const underJunieHome = (p) => (norm(p) + "/").startsWith(junieRoot);
+  return underJunieHome(here) || underJunieHome(process.env.CLAUDE_SKILL_DIR);
+}
 
 // One entry per harness, in priority order (see doc comment above) — used
 // both as the signal check and as the static fallback when the ancestry
@@ -100,6 +132,10 @@ const HARNESS_SIGNALS = [
   // row won't fire and Copilot in VS Code must self-identify via
   // `JFROG_INIT_HARNESS=vscode` (see SKILL.md Step 5).
   { name: "vscode", signaled: () => process.env.VSCODE_PID || process.env.TERM_PROGRAM === "vscode" },
+  // Junie (JetBrains): JUNIE_* when the agent sets them, else the install
+  // location (installedUnderJunie) for the IDE panel. Last so a nested real
+  // agent in a JetBrains terminal wins on priority.
+  { name: "junie", signaled: () => process.env.JUNIE_DATA || process.env.JUNIE_SHIM_PATH || installedUnderJunie() },
 ];
 
 // Breaks ties when multiple harness signals fire at once. Walks process
@@ -366,10 +402,10 @@ function resolveKiroPath() {
 
 // The url every other harness's plugin ships; the generic substitution
 // step rewrites it with the real JPD from `jf config`.
-const KIRO_CLI_PLACEHOLDER_URL = "https://${JFROG_PLATFORM_URL}/mcp";
+const OWN_GLOBAL_MCP_PLACEHOLDER_URL = "https://${JFROG_PLATFORM_URL}/mcp";
 
 // Overwrites an existing file via temp+rename (preserves symlinks and mode).
-function replaceKiroCliConfig(target, content) {
+function replaceOwnGlobalMcpConfig(target, content) {
   const real = realpathSync(target);
   const tmp = `${real}.tmp.${process.pid}`;
   try {
@@ -390,16 +426,18 @@ function replaceKiroCliConfig(target, content) {
   }
 }
 
-// kiro-cli is the one target with no plugin behind it: ~/.kiro/settings/mcp.json
-// is Kiro's own global MCP config, so a missing jfrog entry is something to
+// Shared by the two targets with no JFrog plugin behind them — kiro-cli
+// (~/.kiro/settings/mcp.json) and Junie (~/.junie/mcp/mcp.json). Both are
+// the tool's OWN global MCP config, so a missing jfrog entry is something to
 // add rather than an install error. Additive only — the file normally holds
 // the user's other MCP servers, and an existing jfrog entry is left exactly
 // as it is (a placeholder in its url is the substitution step's job, not
-// this one's). Returns an error result, or null when the file is ready.
+// this one's). Both use the same `mcpServers.jfrog` shape. Returns an error
+// result, or null when the file is ready.
 //
 // `retryAfterRace` guards the one path that can legitimately need a second
 // look: see the EEXIST branch below.
-function ensureKiroCliJfrogEntry(target, retryAfterRace = true) {
+function ensureOwnGlobalMcpJfrogEntry(target, retryAfterRace = true) {
   let raw = null;
   try {
     raw = readFileSync(target, "utf8");
@@ -413,13 +451,13 @@ function ensureKiroCliJfrogEntry(target, retryAfterRace = true) {
   // An empty file counts: Kiro treats it as no config, and JSON.parse of
   // "" would only send us down the invalid-JSON path below.
   if (raw === null || raw.trim() === "") {
-    const content = JSON.stringify({ mcpServers: { jfrog: { url: KIRO_CLI_PLACEHOLDER_URL } } }, null, 2) + "\n";
+    const content = JSON.stringify({ mcpServers: { jfrog: { url: OWN_GLOBAL_MCP_PLACEHOLDER_URL } } }, null, 2) + "\n";
     try {
       if (raw === null) {
         mkdirSync(dirname(target), { recursive: true });
         writeFileSync(target, content, { flag: "wx", mode: 0o600 });
       } else {
-        replaceKiroCliConfig(target, content);
+        replaceOwnGlobalMcpConfig(target, content);
       }
     } catch (err) {
       if (err.code !== "EEXIST") {
@@ -428,7 +466,7 @@ function ensureKiroCliJfrogEntry(target, retryAfterRace = true) {
       // "wx" raises EEXIST for a race-created file or a dangling symlink;
       // retry to tell them apart (a real file now parses; an unreadable path
       // comes back here with the retry spent and is reported as an error).
-      if (retryAfterRace) return ensureKiroCliJfrogEntry(target, false);
+      if (retryAfterRace) return ensureOwnGlobalMcpJfrogEntry(target, false);
       return { error: `could not write ${target}: something already at that path cannot be read as a file`, code: 2 };
     }
     return null;
@@ -444,10 +482,10 @@ function ensureKiroCliJfrogEntry(target, retryAfterRace = true) {
     return { error: `${target} is not a JSON object — refusing to modify it; fix the file, then re-run.`, code: 2 };
   }
 
-  // Kiro CLI reads only mcpServers.jfrog — a top-level jfrog key (Codex
-  // shape) is invisible to it. Use a direct lookup instead of jfrogMcpEntry()
-  // so a bare top-level entry doesn't falsely satisfy the check and skip the
-  // merge that would write the mcpServers shape Kiro CLI actually needs.
+  // Kiro CLI and Junie read only mcpServers.jfrog — a top-level jfrog key
+  // (Codex shape) is invisible to them. Use a direct lookup instead of
+  // jfrogMcpEntry() so a bare top-level entry doesn't falsely satisfy the
+  // check and skip the merge that writes the mcpServers shape they need.
   const existing = parsed.mcpServers && typeof parsed.mcpServers === "object" && !Array.isArray(parsed.mcpServers)
     ? parsed.mcpServers.jfrog
     : undefined;
@@ -466,28 +504,37 @@ function ensureKiroCliJfrogEntry(target, retryAfterRace = true) {
   const entry = parsed.mcpServers.jfrog;
   parsed.mcpServers.jfrog = {
     ...(entry !== null && typeof entry === "object" && !Array.isArray(entry) ? entry : {}),
-    url: KIRO_CLI_PLACEHOLDER_URL,
+    url: OWN_GLOBAL_MCP_PLACEHOLDER_URL,
   };
 
   try {
-    replaceKiroCliConfig(target, JSON.stringify(parsed, null, 2) + "\n");
+    replaceOwnGlobalMcpConfig(target, JSON.stringify(parsed, null, 2) + "\n");
   } catch (err) {
     return { error: `could not write ${target}: ${err.message}`, code: 2 };
   }
   return null;
 }
 
-function resolveKiroCliPath() {
-  const p = join(homedir(), ".kiro", "settings", "mcp.json");
-  const err = ensureKiroCliJfrogEntry(p);
+// kiro-cli and Junie share this: ensure the jfrog entry exists in the tool's
+// own global mcp.json, then return its real path.
+function resolveOwnGlobalMcpPath(target) {
+  const err = ensureOwnGlobalMcpJfrogEntry(target);
   if (err) return err;
   // Resolve after ensure so the substitution step downstream always
   // receives the real path — never a symlink that renameSync would replace.
   try {
-    return { path: realpathSync(p) };
+    return { path: realpathSync(target) };
   } catch (e) {
-    return { error: `could not resolve real path of ${p}: ${e.message}`, code: 2 };
+    return { error: `could not resolve real path of ${target}: ${e.message}`, code: 2 };
   }
+}
+
+function resolveKiroCliPath() {
+  return resolveOwnGlobalMcpPath(join(homedir(), ".kiro", "settings", "mcp.json"));
+}
+
+function resolveJuniePath() {
+  return resolveOwnGlobalMcpPath(join(homedir(), ".junie", "mcp", "mcp.json"));
 }
 
 export function resolveMcpConfig() {
@@ -506,7 +553,7 @@ export function resolveMcpConfig() {
   // set the very variable they already set.
   if (process.env.JFROG_INIT_HARNESS && !VALID_HARNESSES.has(harness)) {
     return {
-      error: `JFROG_INIT_HARNESS=${process.env.JFROG_INIT_HARNESS} is not one of: claude, cursor, vscode, codex, opencode, kiro, kiro-cli, devin.`,
+      error: `JFROG_INIT_HARNESS=${process.env.JFROG_INIT_HARNESS} is not one of: claude, cursor, vscode, codex, opencode, kiro, kiro-cli, devin, junie.`,
       code: 1,
       harness,
     };
@@ -521,11 +568,12 @@ export function resolveMcpConfig() {
     case "kiro": return { ...resolveKiroPath(), harness };
     case "kiro-cli": return { ...resolveKiroCliPath(), harness };
     case "devin": return { ...resolveDevinPath(), harness };
+    case "junie": return { ...resolveJuniePath(), harness };
     default:
       return {
         error:
-          "could not detect current harness (Claude Code / Cursor / VS Code / Codex / OpenCode / Devin).\n" +
-          "  Set JFROG_INIT_HARNESS=claude|cursor|vscode|codex|opencode|kiro|kiro-cli|devin, or\n" +
+          "could not detect current harness (Claude Code / Cursor / VS Code / Codex / OpenCode / Devin / Junie).\n" +
+          "  Set JFROG_INIT_HARNESS=claude|cursor|vscode|codex|opencode|kiro|kiro-cli|devin|junie, or\n" +
           "  JFROG_INIT_MCP_CONFIG=/absolute/path/to/mcp.json to override.",
         code: 1,
         harness,
