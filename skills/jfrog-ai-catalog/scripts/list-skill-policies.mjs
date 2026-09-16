@@ -45,18 +45,29 @@
 //
 // Windows / jf as a .cmd or .bat shim: this repo's own canonical Windows
 // install (skills/jfrog-init/scripts/jfrog-install-jf-cli.mjs) places a
-// native jf.exe, but that doesn't rule out a customer's own `jf` reaching
-// PATH some other way (a corporate wrapper script, a third-party package
-// manager) that DOES produce a .cmd/.bat shim — which spawnSync cannot
-// execute without shell:true. Handled below (resolveJfPath/
-// buildJfInvocation), mirroring jfrog-agent-guard-check.mjs's runJf()/
-// needsShell — same detection, same
-// unsafe-character rejection before building a shell command string, since
-// shell:true does not array-escape arguments the way a direct spawn does.
+// native jf.exe, which is the common case this script directly supports.
+// A customer's `jf` COULD reach PATH some other way (a corporate wrapper,
+// a third-party package manager) producing a .cmd/.bat shim instead, which
+// plain spawnSync cannot execute without shell:true — a real, narrower gap
+// this script does not attempt to close.
+//
+// A shell-quoted invocation was tried and reverted: this script's own path
+// argument always contains literal "&" (its query-string separators), and
+// safely caret-escaping that specifically for cmd.exe's notoriously
+// inconsistent metacharacter parsing is not something verifiable without a
+// real Windows environment to test against — confirmed empirically in this
+// session that neither a naive "reject any special character" check (it
+// rejected this script's own argument on every call) nor Node's
+// shell:true + array-args form (which Node's own deprecation warning says
+// does NOT escape arguments, only concatenates them — verified live: a
+// crafted argument was silently split at "&") are safe, correct answers
+// here. Shipping an unverified hand-rolled escape scheme for this exact
+// history of subtle, security-relevant bugs was judged worse than the
+// plain, simple spawn below, which matches skills/jfrog/scripts/
+// jfrog-check-server-collision.mjs's existing precedent (also no shell
+// handling) for the common, verified case.
 
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants as fsConstants } from 'node:fs';
-import { delimiter, join } from 'node:path';
 
 const PAGE_LIMIT = 250;
 // Bounded, not browsable: this answer must be complete, so pages are fetched
@@ -75,14 +86,23 @@ const OVERALL_BUDGET_MS = 60_000;
 
 const DONE = Symbol('list-skill-policies:done');
 
+// KNOWN_FLAGS, not "anything starting with --": a real --server-id value is
+// user-chosen and not guaranteed to avoid a leading "--" (jf places no such
+// restriction on server ids) — rejecting every "--"-prefixed token as "must
+// be the next flag" would wrongly refuse a legitimate value shaped that
+// way. Only recognizing this script's own actual flag names avoids that
+// false rejection while still catching the real "missing value" case this
+// function exists for.
+const KNOWN_FLAGS = new Set(['--project', '--server-id']);
+
 // takeValue consumes the token after a flag as its value, but only if that
-// token doesn't itself look like a flag — otherwise a missing value (e.g.
-// `--project --server-id abc`) would silently swallow the NEXT flag's name
-// as if it were this flag's value, and the real problem (a missing
-// --project value) would never be reported.
+// token isn't itself one of this script's OWN recognized flags — otherwise
+// a missing value (e.g. `--project --server-id abc`) would silently
+// swallow the next flag's name as if it were this flag's value, and the
+// real problem (a missing --project value) would never be reported.
 function takeValue(argv, i, flagName) {
   const next = argv[i + 1];
-  if (next === undefined || next.startsWith('--')) {
+  if (next === undefined || KNOWN_FLAGS.has(next)) {
     process.stderr.write(
       `list-skill-policies.mjs: ${flagName} requires a value\n`
     );
@@ -235,63 +255,6 @@ function stripJfLogLines(text) {
     .trim();
 }
 
-// resolveJfPath finds `jf` on PATH the way the OS itself would, checking
-// every PATHEXT-listed extension on Windows (bare "jf" is never directly
-// executable there) so a .cmd/.bat shim is detected rather than silently
-// missed. Returns '' if not found (fetchPage's spawnSync then reports its
-// own ENOENT-style failure exactly as before).
-function resolveJfPath() {
-  const dirs = (process.env.PATH || '').split(delimiter).filter(Boolean);
-  const names =
-    process.platform === 'win32'
-      ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD')
-          .split(';')
-          .map((ext) => 'jf' + ext.toLowerCase())
-      : ['jf'];
-  for (const dir of dirs) {
-    for (const name of names) {
-      const full = join(dir, name);
-      try {
-        accessSync(
-          full,
-          process.platform === 'win32' ? fsConstants.F_OK : fsConstants.X_OK
-        );
-        return full;
-      } catch {
-        // keep looking
-      }
-    }
-  }
-  return '';
-}
-
-// buildJfInvocation decides HOW to run `jf api ...`: a direct, safely
-// array-escaped spawn for a native binary (the common case on every
-// platform, and the only case on macOS/Linux), or — ONLY when `jf` itself
-// resolves to a .cmd/.bat file — a shell-quoted command string, since
-// spawnSync cannot execute a batch file without shell:true, and shell:true
-// does not array-escape arguments the way a direct spawn does. Args are
-// checked for shell metacharacters first and the shell path is refused
-// entirely if any are present, rather than ever passing something
-// shell-unsafe through to cmd.exe.
-function buildJfInvocation(args) {
-  const jfPath = resolveJfPath() || 'jf';
-  const needsShell = /\.(cmd|bat)$/i.test(jfPath);
-  if (!needsShell) {
-    return { command: jfPath, args, shell: false };
-  }
-  const unsafe = /[&|;$<>`"'%^!\r\n]/.test(jfPath) || args.some((a) => /[&|;$<>`"'%^!\r\n]/.test(a));
-  if (unsafe) {
-    throw new PageFailure('the AI Catalog policy engine could not be reached safely');
-  }
-  const command = [`"${jfPath}"`, ...args.map((a) => `"${a}"`)].join(' ');
-  return {
-    command,
-    args: [],
-    shell: process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : '/bin/sh',
-  };
-}
-
 function fetchPage(project, serverId, offset) {
   const path =
     '/unifiedpolicy/api/v1/policies' +
@@ -305,12 +268,10 @@ function fetchPage(project, serverId, offset) {
   // as an extra positional argument for at least one other flag on this
   // call (see jfrog-login-register-session.sh), so this order is the
   // established, defended convention, not an arbitrary choice.
-  const invocation = buildJfInvocation(['api', '--server-id', serverId, path]);
-  const result = spawnSync(invocation.command, invocation.args, {
+  const result = spawnSync('jf', ['api', '--server-id', serverId, path], {
     encoding: 'utf8',
     timeout: 30_000,
     stdio: ['ignore', 'pipe', 'pipe'],
-    shell: invocation.shell,
   });
 
   if (result.error) {

@@ -33,10 +33,16 @@ execute the script directly; invoke it through `node` the same way
 `check-environment.sh` in the base skill is invoked through `bash`.)
 
 - **stdout, exit 0**: finished text, ready to present **verbatim** — the
-  intro line plus the policy table (occasionally with one extra trailing
-  line noting the result was capped — still part of the same verbatim
-  block, not a separate case to react to), or the one-line "no policies"
-  fallback. Never parse or reformat it; the script has already done that.
+  intro line plus the policy table, or the one-line "no policies" fallback.
+  The table can carry one extra trailing line — still part of the same
+  verbatim block, not a separate case to react to — and its wording
+  distinguishes two different reasons for a partial list: a project simply
+  having enough policies to hit the lookup's safety cap, versus a later
+  page genuinely failing to load after earlier ones already succeeded (an
+  honest partial answer, not a total failure, since real data is already in
+  hand). Both are still exit 0 — only the wording differs — so don't
+  collapse them into one generic "capped" message when relaying either.
+  Never parse or reformat any of this; the script has already done that.
 - **stderr, exit 1**: the call itself failed (for any reason — including the
   account lacking the AI Catalog entitlement; the script does not pre-check
   entitlement separately, since that check does not reliably reflect whether
