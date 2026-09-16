@@ -367,6 +367,7 @@ canonical_agent_name() {
     iflow) echo "iflow" ;;
     trae) echo "trae" ;;
     amazon-q-cli|amazon-q|amazon_q) echo "amazon_q" ;;
+    junie) echo "junie" ;;
     *) echo "unknown" ;;
   esac
 }
@@ -417,6 +418,9 @@ detect_harness() {
     echo "iflow"
   elif [[ -n "${TRAE_AI_SHELL_ID:-}" ]]; then
     echo "trae"
+  elif [[ -n "${JUNIE_DATA:-}" || -n "${JUNIE_SHIM_PATH:-}" || "${BASH_SOURCE[0]}" == *"/.junie/"* ]]; then
+    # Junie (JetBrains): JUNIE_* env or a ~/.junie/ install; earlier real-agent checks win first.
+    echo "junie"
   elif [[ -n "${AI_AGENT:-}" || -n "${AGENT:-}" ]]; then
     # aider and amazon_q have no reliable session env — AI_AGENT / AGENT only.
     canonical_agent_name "${AI_AGENT:-${AGENT:-}}"

@@ -13,6 +13,18 @@ import { fileURLToPath } from "node:url";
 
 import { prependToPathIfMissing, resolveCommand } from "./command.mjs";
 
+// This skill never exports JFROG_CLI_USER_AGENT itself (see the note in
+// SKILL.md), so the version is only known when the base skill's environment
+// check already ran in this session. "unknown" — not "dev", which means
+// "installed from master" — is the fallback, matching check-environment.sh.
+export function skillsProductUserAgent() {
+  const existing = process.env.JFROG_CLI_USER_AGENT;
+  if (typeof existing === "string" && existing.startsWith("jfrog-skills/")) {
+    return existing.split(/\s+/)[0];
+  }
+  return "jfrog-skills/unknown";
+}
+
 export const JF_BIN_DIR = join(homedir(), ".jfrog", "bin");
 const JF_BIN = join(JF_BIN_DIR, process.platform === "win32" ? "jf.exe" : "jf");
 
@@ -292,7 +304,11 @@ const MAX_SAME_ORIGIN_REDIRECTS = 5;
 // means the request itself failed (connection error, timeout, etc).
 export async function authedFetch(creds, path) {
   try {
-    const headers = { Accept: "application/json", ...authHeader(creds) };
+    const headers = {
+      Accept: "application/json",
+      "User-Agent": skillsProductUserAgent(),
+      ...authHeader(creds),
+    };
     let url = `${creds.baseUrl}${path}`;
     let res = await fetch(url, {
       headers,
@@ -345,7 +361,11 @@ export const HTTP_UNREACHABLE = "000";
 // for callers that only need the status. Never throws.
 export async function anonymousFetch(endpoint) {
   try {
-    const res = await fetch(endpoint, { redirect: "manual", signal: AbortSignal.timeout(10_000) });
+    const res = await fetch(endpoint, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+      headers: { "User-Agent": skillsProductUserAgent() },
+    });
     return { status: String(res.status), headers: res.headers };
   } catch {
     return { status: HTTP_UNREACHABLE, headers: new Headers() };

@@ -23,7 +23,7 @@ publicly accessible Releases Artifactory instance. It allows anonymous access
 and hosts Agent Guard releases.
 
 Canonical invocation (every catalog / login command; never omit `--registry`):
-`npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard`
+`npx --yes --registry "<REGISTRY_URL>" @jfrog/agent-guard`
 
 `@jfrog/agent-guard` is not published to the public npm registry; resolve it
 with `--registry <REGISTRY_URL>` above rather than the default npm registry.

@@ -1,14 +1,16 @@
 # Runtime permissions
 
-The Step 0 Agent Guard check and the agent guard commands make outbound HTTPS
-calls, and some operations also write under `~/.jfrog/`. Grant the matching
-runtime access, or the commands fail (`Forbidden`, empty output) or the Step 0
-check returns a false "disabled" result.
+Each operation requires different runtime access. Grant per the table below,
+or the commands fail (`Forbidden`, empty output) or the Step 0 check returns
+a false "disabled" result.
 
 | Operation | What it needs |
 | --- | --- |
-| Step 0 check, `--inspect`, `--list-available` | Network: outbound HTTPS to the npm registry and the JFrog platform |
-| OAuth `--login`, removing a cached entry | Network + write access to `~/.jfrog/` (`jfrogmcp.conf.json`) |
+| Step 0 check (`node …check.mjs`) | Outbound HTTPS to the JFrog platform. When credentials come from `jf config`: also execute `jf` and read `$JFROG_CLI_HOME_DIR` when set, or `~/.jfrog/` otherwise |
+| `--inspect`, `--list-available` | Outbound HTTPS to the npm registry + JFrog platform; write `~/.npm/_npx` (npx cache) |
+| OAuth `--login` | Same as above, plus browser launch and write `~/.jfrog/jfrogmcp.conf.json` |
+| Removing an MCP config entry | Read both project and user harness MCP config files; write the matched file(s) (e.g. `.cursor/mcp.json`, `.mcp.json`). No network |
+| Clearing an OAuth cache key | Read + write `~/.jfrog/jfrogmcp.conf.json`. No network |
 
 How that access is granted depends on the agent. Some agents (e.g. Claude Code)
 read the skill's optional `allowed-tools` frontmatter to pre-approve the

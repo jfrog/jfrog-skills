@@ -16,14 +16,15 @@ jf skills list --server-id "<SID>" --harness "<harness>" --check-updates
 ```
 
 Resolve `<harness>` to the current agent (see `installing-skills.md`).
-**Exception — Kiro:** `--harness kiro` errors `unknown agent`, and `list` has
-no `--path` flag. List directly from the filesystem instead: skill directory
-names under `.kiro/skills` (project) / `~/.kiro/skills` (global, or
-`$KIRO_HOME/skills`), each containing a `SKILL.md`. Version/description
-aren't available this way — omit those columns. This is a filesystem
-inventory only: a directory with a `SKILL.md` cannot confirm the skill was
-installed via `jf skills install` — a manually added skill looks identical.
-Present it as such rather than implying AI Catalog provenance.
+**Exception — Kiro and Junie:** neither `--harness kiro` nor `--harness junie`
+works, and `list` has no `--path` flag, so list directly from the filesystem:
+skill directory names under `.kiro/skills` / `~/.kiro/skills` (or
+`$KIRO_HOME/skills`) for Kiro, `.junie/skills` / `~/.junie/skills` for Junie,
+each containing a `SKILL.md`. Version/description aren't available this way —
+omit those columns. This is a filesystem inventory only: a directory with a
+`SKILL.md` cannot confirm the skill was installed via `jf skills install` — a
+manually added skill looks identical. Present it as such rather than implying
+AI Catalog provenance.
 **Never run a bare `jf skills list`** because it errors. Always pass
 `--harness <h>` (installed skills) or `--repo <key>` (registry contents).
 `--check-updates` is only supported with `--harness` (not with `--repo`). Merge

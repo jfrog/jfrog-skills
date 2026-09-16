@@ -68,9 +68,19 @@ has always surfaced, just worded without "pending":
   **probe** decides, the only signal tied to *this* JPD:
   - exit 4 → ⚠️ `not enabled on this JPD` (+ ask admin, docs from `detail`)
   - exit 1 → ⚠️ `could not confirm it's enabled`
-  - exit 0 → MCP is on; check your session for JFrog MCP tools **on this JPD**
-    (same base URL, else they don't count): visible → ✅; else ⚠️ `enabled — sign
-    in to use it`, and offer sign-in **after the summary, never mid-walk**
+  - exit 0 → the endpoint is on, but that's the server, not your sign-in. For
+    *this* JPD, cheapest first:
+    - **✅** — already conclusive (no extra call): the `jfrog` tools show
+      connected/authorized and you can use them, or you've already used one this
+      walk.
+    - Else, if a `jfrog` tool is callable without starting a sign-in, **make one
+      cheap read-only call**: returns data → **✅**; any other result
+      (`401`/`needsAuth`, an error, or a timeout) → ⚠️.
+    - **⚠️ `enabled — sign in to use it`** (the default) — no `jfrog` tool callable
+      this turn, or confirming would need a sign-in. (A `401` challenge or a
+      merely-listed tool is never ✅ **on its own**.)
+    - Re-decide every walk (never reuse a stale result); offer sign-in **after the
+      summary, never mid-walk**.
 - **Step 5b red (OpenCode OAuth incomplete):** `not authenticated`. If
   the user asks, that's when `opencode mcp auth jfrog` comes in.
 - **Step 6 hit its retry cap (no project resolved):** `project not set

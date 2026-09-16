@@ -52,13 +52,14 @@ its stdout as `<UA>`. Parse the `tool=<h>` field from `<UA>` and map it to a
 
 If `tool` is `unknown`, empty, or not in the table — do **not** guess. Ask
 the user for the desired install path and use `--path <dir>` instead.
-**Exception — Kiro (install only):** if you're self-identified as Kiro (IDE
-or `kiro-cli`, per your system prompt — `check-environment.sh` doesn't
-detect it), `--harness kiro` is rejected by `jf`, so skip asking and use
-`--path` with `.kiro/skills` (project) / `~/.kiro/skills` (global, or
-`$KIRO_HOME/skills` if `KIRO_HOME` is set) directly. This exception does not
-extend to `jf skills list` — see *List currently installed skills* in
-`managing-installed-skills.md`.
+**Exception — Kiro and Junie (install only):** `jf` accepts neither
+`--harness kiro` nor `--harness junie`, so if you're self-identified as either
+(Kiro IDE / `kiro-cli`, or Junie — `check-environment.sh` detects Junie but not
+Kiro), skip asking and use `--path` directly: `.kiro/skills` (project) /
+`~/.kiro/skills` (global, or `$KIRO_HOME/skills` if `KIRO_HOME` is set) for
+Kiro; `.junie/skills` (project) / `~/.junie/skills` (global) for Junie. This
+exception does not extend to `jf skills list` — see *List currently installed
+skills* in `managing-installed-skills.md`.
 
 Choose exactly one install target (these are mutually exclusive):
 

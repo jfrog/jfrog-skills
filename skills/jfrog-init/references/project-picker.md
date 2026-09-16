@@ -104,8 +104,8 @@ over the generic first-two when present:
 
 - **If `AskUserQuestion` is not available as a tool at all** (some
   harnesses don't expose it — check `$JFROG_INIT_HARNESS`: `kiro` /
-  `kiro-cli` never have it, so skip the tool call and go straight to
-  the fallback instead of calling it and surfacing its error), use the
+  `kiro-cli` / `junie` never have it, so skip the tool call and go straight
+  to the fallback instead of calling it and surfacing its error), use the
   plain-text fallback line above —
   *"Which project do you want to use?"*, nothing else — regardless of
   how many entries `candidatesWithNames` has. Never explain that the

@@ -47,7 +47,7 @@ pinned version before running `make test-contracts` (pin: `CI_PYTEST_VERSION` in
 `.github/workflows/build.yml`):
 
 ```bash
-pip install "pytest==8.4.2" "pyyaml==6.0.2"
+PIP_CONSTRAINT=.github/constraints/validate.txt pip install pytest pyyaml
 ```
 
 ## Base vs Workflow Skills

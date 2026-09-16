@@ -21,11 +21,16 @@ import { join } from "node:path";
 import { detectHarness, resolveMcpConfig } from "./jfrog-resolve-mcp-config.mjs";
 
 const harness = detectHarness();
-// kiro-cli's resolveMcpConfig() writes to disk as a side effect (ensureKiroCliJfrogEntry),
-// which this diagnostic-only script must never do — derive the path directly instead.
+// kiro-cli and Junie's resolveMcpConfig() writes to disk as a side effect
+// (ensureOwnGlobalMcpJfrogEntry), which this diagnostic-only script must never
+// do — derive the path directly for those two instead.
+const OWN_GLOBAL_MCP_PATHS = {
+  "kiro-cli": join(homedir(), ".kiro", "settings", "mcp.json"),
+  junie: join(homedir(), ".junie", "mcp", "mcp.json"),
+};
 const resolved =
-  harness === "kiro-cli"
-    ? { path: join(homedir(), ".kiro", "settings", "mcp.json") }
+  Object.hasOwn(OWN_GLOBAL_MCP_PATHS, harness)
+    ? { path: OWN_GLOBAL_MCP_PATHS[harness] }
     : resolveMcpConfig();
 
 if (harness === "opencode") {
@@ -110,6 +115,13 @@ Restart Codex, then re-run /jfrog-init.`);
 
 Restart the Devin session, then re-run /jfrog-init.`);
     break;
+  case "junie":
+    console.log(`Junie (JetBrains):
+  No plugin reinstall needed — the jfrog entry in ~/.junie/mcp/mcp.json
+  is created automatically by /jfrog-init. Re-run /jfrog-init to recreate it.
+  If /jfrog-init reports the file is invalid, open ~/.junie/mcp/mcp.json,
+  fix the JSON (keep the other MCP server entries), then re-run /jfrog-init.`);
+    break;
   default:
     console.log(`Reinstall the JFrog plugin in whichever IDE you're using:
   Cursor:      Settings → Plugins → search "JFrog" → reinstall.
@@ -119,6 +131,7 @@ Restart the Devin session, then re-run /jfrog-init.`);
   Kiro:        Powers panel → Add Custom Power → Import from GitHub.
   Kiro CLI:    no reinstall needed — entry is created automatically by /jfrog-init.
   Devin:       devin plugins install jfrog/devin-plugin -y
+  Junie:       no reinstall needed — entry is created automatically by /jfrog-init.
 
 Restart the IDE afterwards, then re-run /jfrog-init.`);
   }
@@ -134,6 +147,7 @@ Expected plugin-owned paths (for reference):
   Kiro:    ~/.kiro/powers/installed/jfrog-kiro-power/mcp.json
   Kiro CLI: ~/.kiro/settings/mcp.json (not plugin-owned; created by /jfrog-init)
   Devin:   ~/.local/share/devin/cli/plugins/cache/<slug>/<version>/mcp.json
+  Junie:   ~/.junie/mcp/mcp.json (not plugin-owned; created by /jfrog-init)
 `);
 }
 

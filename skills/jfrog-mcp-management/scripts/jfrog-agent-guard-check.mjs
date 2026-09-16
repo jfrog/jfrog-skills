@@ -31,6 +31,18 @@ import process from "node:process";
 // Global `fetch` requires Node.js 18+.
 const MIN_NODE_MAJOR = 18;
 
+// Step 0 can run before the base skill's environment check has exported
+// JFROG_CLI_USER_AGENT, so the version is not always knowable here.
+// "unknown" — not "dev", which means "installed from master" — is the
+// fallback, matching check-environment.sh.
+function skillsProductUserAgent() {
+  const existing = process.env.JFROG_CLI_USER_AGENT;
+  if (typeof existing === "string" && existing.startsWith("jfrog-skills/")) {
+    return existing.split(/\s+/)[0];
+  }
+  return "jfrog-skills/unknown";
+}
+
 const SETTINGS_PATH =
   "/ml/core/api/v1/administration/account-settings/mcp_gateway_plugin_enabled";
 // Self-hosted JPDs serve the same API behind `/bridge-client`. Tried ONLY
@@ -486,6 +498,7 @@ function runJfApi(args, extraEnv, unsetEnv) {
         ...extraEnv,
         // Avoid a second proxy-sensitive wait after the settings response.
         JFROG_CLI_REPORT_USAGE: "false",
+        JFROG_CLI_USER_AGENT: skillsProductUserAgent(),
       },
       unsetEnv,
     });
@@ -507,6 +520,7 @@ async function fetchGatewayPluginEnabled(url, creds) {
       headers: {
         Accept: "application/json",
         Authorization: authorization,
+        "User-Agent": skillsProductUserAgent(),
       },
       signal: controller.signal,
     });
