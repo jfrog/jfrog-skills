@@ -113,14 +113,34 @@ function fetchPage(project, serverId, offset) {
     `?action_type=use_skill&project_key=${encodeURIComponent(project)}` +
     `&hierarchical=true&expand=rules&limit=${PAGE_LIMIT}&offset=${offset}`;
 
+  // Matches the shared jfrog-check-server-collision.mjs precedent
+  // (skills/jfrog/scripts/): explicit timeout, plain `jf` (no shell: true —
+  // it's a native compiled binary, not an npm shim on any platform, so
+  // PATH-based resolution is enough on Windows too).
   const result = spawnSync('jf', ['api', path, '--server-id', serverId], {
     encoding: 'utf8',
+    timeout: 30_000,
   });
 
   if (result.error) {
-    // spawn itself failed (e.g. `jf` not found on PATH) — result.stderr is
-    // empty in this case, so there is nothing to scrub; report generically.
+    // spawn itself failed — result.stderr is empty in this case, so there
+    // is nothing to scrub. Distinguish a timeout (verified: on this Node
+    // version, an exceeded `timeout` sets result.error with code
+    // ETIMEDOUT/ETIMEOUT rather than only result.signal) from every other
+    // spawn failure (e.g. `jf` missing from PATH), since they read very
+    // differently to a user.
+    if (result.error.code === 'ETIMEDOUT' || result.error.code === 'ETIMEOUT') {
+      fail('the AI Catalog policy engine took too long to respond');
+    }
     fail('could not run the jf CLI');
+  }
+  if (result.signal) {
+    // Belt-and-braces: killed by a signal without result.error being set
+    // (seen on some Node/OS combinations for a timeout kill, unlike the
+    // one verified above) — status is null, not non-zero, so the check
+    // below alone would not catch it and this call would otherwise hang
+    // with no bound at all.
+    fail(`the AI Catalog policy engine did not respond (${result.signal})`);
   }
   if (typeof result.status === 'number' && result.status !== 0) {
     const clean = cleanErrorLine(result.stderr);
