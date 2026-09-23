@@ -45,6 +45,7 @@ export function jfApi(args) {
       // Pinning stdio here keeps this silent: nothing is inherited,
       // everything is still captured.
       stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, CI: "true" },
     });
     return { ok: true, stdout, stderr: "" };
   } catch (err) {

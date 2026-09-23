@@ -536,14 +536,15 @@ jf api "/xray/api/v1/services/results?repo=docker-local&path=my-service/1.0/mani
 
 ### Paginating exposure results
 
+`page_num` starts at **1**. Non-zero exit or empty `.data` → stop. Cap **20 pages**.
+
 ```bash
 PAGE=1
-while true; do
-  RESP=$(jf api "/xray/api/v1/secrets/results?repo=my-repo&path=my-artifact&page_num=$PAGE&num_of_rows=100")
-  echo "$RESP" | jq '.data[]'
-  TOTAL=$(echo "$RESP" | jq '.total_count')
-  COUNT=$(echo "$RESP" | jq '.data | length')
-  [ "$COUNT" -eq 0 ] && break
+MAX_PAGES=20
+while [ "$PAGE" -le "$MAX_PAGES" ]; do
+  if ! jf api "/xray/api/v1/secrets/results?repo=my-repo&path=my-artifact&page_num=$PAGE&num_of_rows=100" \
+      > /tmp/xr-$$.json; then break; fi
+  jq '.data[]' /tmp/xr-$$.json
   PAGE=$((PAGE + 1))
 done
 ```
@@ -662,8 +663,8 @@ policy that affected the decision (blocking, bypassed, waived).
 
 ### Pagination
 
-`offset` + `num_of_rows`. `meta.next_offset` → next page. First request:
-`include_total=true` for total event count.
+`offset` + `num_of_rows`. First page **`offset=0`** (never `offset=`).
+Advance only when `next_offset` is an integer **greater than** last offset. Cap 20 pages.
 
 ### Common use cases
 
