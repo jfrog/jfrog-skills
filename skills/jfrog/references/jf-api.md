@@ -9,7 +9,8 @@ endpoints, auto-authenticated against the resolved server. **Do not use
 ## Product-prefix table
 
 `jf api` requires the **full** path including the product prefix; omitting it
-returns 404.
+returns 404. Never invent `GET /api/v1/artifacts`. Cursor is `offset=0` or
+Xray `page_num=1`. Loops / 401 / 403 → `cli-gotchas.md`.
 
 | Product | Path prefix |
 |---------|-------------|

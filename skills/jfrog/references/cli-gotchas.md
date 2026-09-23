@@ -58,6 +58,11 @@ Hard rules and known failure modes:
   (especially the product prefix) and target server version. On any of
   these errors, do not try a different configured server as a workaround —
   that targets a different environment. Report the error and ask the user.
+- **No retry loops (HARD).** No `while true`; no empty `offset=`/`page=`.
+  403/404/timeout → stop. 401 → re-login **same** server, then **one** retry of that URL (sole identical-request exception). Identical path + query a **second** time → stop. First page `offset=0` or `page_num=1`.
+  Pager: 2xx and `next_offset` **greater than** last offset, or increment
+  `page_num`. Cap **20 pages**. No `GET /api/v1/artifacts`. AQL on
+  `<repo>-cache` (never `<virtual>-cache`). Package-block 403 → `jfrog-package-curation`.
 - **Xray contextual analysis:** the summary artifact response has two
   applicability fields — `applicability` (top-level, often null) and
   `applicability_details` (always present with a `result` string). **Use
