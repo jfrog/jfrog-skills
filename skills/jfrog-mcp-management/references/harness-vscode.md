@@ -100,10 +100,18 @@ started — re-run Enable.
 
 ## Verify
 
-Ask the user to confirm in `MCP: List Servers` that the server is **Running with
-at least one tool**. "Discovered 0 tools" is NOT healthy — the Agent Guard
-started but the upstream MCP didn't. Treat 0 tools as Failed → see the "0 tools"
-troubleshooting in [key-rules-and-troubleshooting.md](key-rules-and-troubleshooting.md).
+If you can already see or call at least one upstream tool from this
+server, skip this check. Otherwise: Enable / Restart if that has not
+happened, then check this session again. Only then ask the user to open
+`MCP: List Servers` and say whether the server is up. Do not ask them
+for a tool count.
+
+Success: at least one upstream tool from this server is available to you.
+The server being up is not success.
+
+Empty tool list: not success, not a diagnosis — follow
+[Connected but 0 tools](key-rules-and-troubleshooting.md#connected-but-0-tools).
+Do not invent another debug path until that section is finished.
 
 ## Remove cleanup
 
@@ -122,6 +130,8 @@ echo any stored value.
 
 A wrong stored secret is cleared via the **Clear** CodeLens above the matching
 `inputs` entry in `mcp.json`; then restart the server and VS Code re-prompts.
-Several steps here (Start, entering inputs, checking `MCP: List Servers`) are
-UI-only **user** actions — ask the user to do them; editing `mcp.json` and
-running the agent guard commands are your steps.
+Several steps here (Start, entering inputs) are UI-only **user** actions —
+ask the user to do them. Editing `mcp.json`, running the agent guard
+commands, and checking this session's tools are your steps. `MCP: List
+Servers` only when you cannot see tools yourself, or when they ask whether
+a server is running — do not ask them for a tool count.

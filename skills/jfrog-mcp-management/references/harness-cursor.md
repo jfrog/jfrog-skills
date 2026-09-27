@@ -45,19 +45,25 @@ never enabled — re-run Enable.
 
 ## Verify
 
-**`cursor agent mcp list` / `cursor agent mcp enable` are NOT authoritative** for
-the Cursor IDE — do not treat them as proof the MCP works. The only proof is that
-tool descriptor files are actually present at:
+If you can already see or call at least one upstream tool from this
+server, skip this check. Otherwise: after `Developer: Reload Window`,
+check that tool descriptor files exist at:
 
 ```
 ~/.cursor/projects/<this-workspace>/mcps/<mcp-server-name>/tools/*.json
 ```
 
 (`<mcp-server-name>` is the JSON key of the MCP, optionally prefixed `user-`.)
-NEVER ask the user to inspect these files themselves — after they enable the MCP,
-**offer to check the `tools/` directory for them**. If `tools/` is empty or
-missing after a `Developer: Reload Window`, treat as Failed → see the "0 tools"
-troubleshooting in [key-rules-and-troubleshooting.md](key-rules-and-troubleshooting.md).
+**`cursor agent mcp list` / `cursor agent mcp enable` are not the check** for
+the Cursor IDE. NEVER ask the user to inspect these files — **offer to check
+the `tools/` directory for them**.
+
+Success: at least one upstream tool from this server you can see or call, or at
+least one `*.json` in that `tools/` directory.
+
+Empty tool list: not success, not a diagnosis — follow
+[Connected but 0 tools](key-rules-and-troubleshooting.md#connected-but-0-tools).
+Do not invent another debug path until that section is finished.
 
 ## Notes
 

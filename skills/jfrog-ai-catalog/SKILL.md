@@ -26,7 +26,7 @@ Pick the row matching the user's intent and read that reference file.
 | Intent | Read |
 |--------|------|
 | "What skills are available?" / browse the catalog / list versions / search by name | [references/discovering-skills.md](references/discovering-skills.md) |
-| Install or update a skill (latest or a pinned version), or a download is blocked | [references/installing-skills.md](references/installing-skills.md) |
+| Install a skill with an explicitly resolved version and repo, update a skill, or handle a blocked download | [references/installing-skills.md](references/installing-skills.md) |
 | "What's installed?" / remove an installed skill | [references/managing-installed-skills.md](references/managing-installed-skills.md) |
 | Publish / upload / release a skill to the catalog | [references/publishing-skills.md](references/publishing-skills.md) |
 | "What plugins are available?" / browse the plugin catalog / list plugin versions / search plugins | [references/discovering-plugins.md](references/discovering-plugins.md) |
@@ -97,7 +97,7 @@ flowchart TD
     B -->|No| C[Ask user to install jf CLI, then continue]
     B -->|Yes| D{Intent}
     C --> D
-    D -->|List all skills / versions| E[npx @jfrog/agent-guard --list-skills]
+    D -->|List all skills / versions| E[npx @jfrog/agent-guard --list-skills --allowed-only]
     D -->|Install / update skill| F[Resolve slug + version, then jf skills install/update]
     D -->|List installed skills / remove| G[jf skills list / rm -rf install dir]
     D -->|Publish skill| H[Resolve/provision repo, validate bundle, jf skills publish]
@@ -121,7 +121,15 @@ the reference files above.
   the next agent session start, so tell the user to restart.
 - **Don't leak the plumbing**: present skills/versions/repos to the user, never
   the `npx`/Agent Guard commands, `--registry`, flags, or cursors. Run follow-ups
-  yourself.
+  yourself. Discuss catalog filtering only when the user asks about missing or
+  blocked results; follow the refusal in `discovering-skills.md`.
+- **Skill discovery is always policy-scoped**: every skill and skill-version
+  listing must follow `discovering-skills.md`. Never weaken that listing path,
+  including for audit, blocked-content, or named-repository requests. Each
+  `locations[]` entry from `--list-skill-versions` also carries its own
+  `allowStatus`, since a repo's governance status is a per-repo fact, never a
+  per-version one (MLAI-1309) — see `discovering-skills.md` and
+  `installing-skills.md`.
 - **Use the response templates verbatim**: where a reference file gives a "reply
   using this exact template" block, fill the placeholders and send exactly that,
   with the same wording every time and no extra preamble or commentary.

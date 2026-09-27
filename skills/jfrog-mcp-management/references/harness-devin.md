@@ -124,24 +124,24 @@ only.
 ## Verify
 
 Before treating a missing server as Failed, confirm the entry is in the active
-store for this harness (user `~/.config/devin/mcp_config.json` by default).
+store (user `~/.config/devin/mcp_config.json` by default).
 
-After the user completes Restart (see Restart), run `devin mcp list` for connection status,
-then **list that server's live tools** through the connected MCP (Devin CLI and
-Devin Desktop Local).
+If you can already see or call at least one upstream tool from this
+server, skip this check. Otherwise: after the user completes Restart,
+run `devin mcp list` for connection status, then
+**list that server's live tools** through the connected MCP (Devin CLI and
+Devin Desktop Local). On first connect without cached OAuth, Devin opens a
+browser to sign in; later runs reuse stored credentials. Devin Local and Devin
+CLI may prompt to approve each MCP tool call by default — grant the prompt
+before listing tools.
 
-The server MUST expose **at least one tool**. A connected indicator alone is
-NOT proof — the Agent Guard proxy can report connected with 0 upstream tools.
-Empty tool list = Failed → see the "0 tools" troubleshooting in
-[key-rules-and-troubleshooting.md](key-rules-and-troubleshooting.md).
+Success: the live tool list from the connected server has at least one
+upstream tool. A connected indicator alone is not success. Do **not** treat a
+tool list scraped from npm / GitHub docs as verification.
 
-Do **not** treat a tool list scraped from npm / GitHub docs as verification —
-only a live tool list from the connected server counts.
-
-On first connect without cached OAuth, Devin opens a browser to sign in; later
-runs reuse stored credentials. Devin Local and Devin CLI may prompt to approve
-each MCP tool call by default — grant the prompt before treating an empty list
-as a failure.
+Empty tool list: not success, not a diagnosis — follow
+[Connected but 0 tools](key-rules-and-troubleshooting.md#connected-but-0-tools).
+Do not invent another debug path until that section is finished.
 
 ## Notes
 

@@ -425,10 +425,13 @@ Then tell the user:
 2. Restart per the harness's **Restart** column.
 3. Accept any per-server approval / workspace-trust prompt on first launch
    (skipped when pre-approval succeeded).
-4. Verify per the harness's **Verify** column. **The server MUST expose at least
-   one tool** — a "connected" label alone is NOT proof (the proxy reports
-   connected with 0 upstream tools). Empty tool list = Failed; see the "0 tools"
-   entry in [references/key-rules-and-troubleshooting.md](references/key-rules-and-troubleshooting.md).
+4. Verify per the harness's **Verify**. Success = **at least one
+   upstream tool** you can see or call. If you already can, stop — do
+   not ask the user to check a tool count. If you cannot, Enable /
+   Restart may still be needed (tools often attach only after). An
+   empty tool list is not success and not a diagnosis — follow
+   [Connected but 0 tools](references/key-rules-and-troubleshooting.md#connected-but-0-tools).
+   Do not invent another debug path until that section is finished.
 
 ## Step 5: Authenticate OAuth MCPs (auto, after Step 4)
 
@@ -442,9 +445,13 @@ Skip for local MCPs and for remote MCPs whose auth comes from a static token in
 `env`.
 
 `--login` opens the browser, runs OAuth, caches tokens in
-`~/.jfrog/jfrogmcp.conf.json`. In the same turn, tell the user you are about
-to open the browser to sign them in to `<MCP_NAME>` and immediately run the
-command — do not wait for confirmation or a follow-up prompt:
+`~/.jfrog/jfrogmcp.conf.json`. Agent Guard may also expose
+`enable_<slug>_tools` until login completes; invoking it starts the same
+OAuth login from the session.
+
+In the same turn, tell the user you are about to open the browser to sign
+them in to `<MCP_NAME>` and immediately run the command — do not wait for
+confirmation or a follow-up prompt:
 
 ```
 npx --yes \

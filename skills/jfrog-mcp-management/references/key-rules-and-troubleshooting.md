@@ -97,25 +97,71 @@ as the MCP proxy.
    Carve-out: `--login` `expected 401, got 200` is anonymous MCP — ignore, not
    this bucket.
 
+## Connected but 0 tools
+
+The harness shows the server connected/running but this agent still has no
+tools from that server (none you can see or call). Agent Guard (the proxy)
+is up; upstream tools are not visible. Do not report success. If this
+session already has an upstream tool from that server, this section does not apply.
+
+Run the steps in order. Do not skip a step, including because you think you
+already know the answer. When a step says re-run **Verify**,
+use this harness's **Verify** section. Do not invent another
+check, script, or debug path until these steps are finished.
+
+Expected flow: when the upstream is ready, Agent Guard sends MCP
+`tools/list_changed` and the harness updates the tool list. Re-check this
+harness's **Verify**. If the harness does not hot-refresh, the user must
+apply that harness's **Restart**.
+
+**Restart** means the action in this harness's **Restart** section (new
+agent session / reload). It does not mean rebooting the machine or a
+separate MCP-only command.
+
+Typical reasons:
+- Upstream still starting (download, install, first launch).
+- Not allowed in this JFrog project (allowlist is dynamic).
+- Upstream failed to start (missing env, expired token, runtime/spawn error).
+- The harness session was not running. Agent Guard and the upstream start
+  when the harness starts — waiting with it closed does not count.
+
+Steps:
+1. If the config changed and this harness's **Restart** has not run since,
+   do that first.
+2. Re-run Verify (including now). ≥1 tool → success. Stop.
+3. List → Available to install (`--list-available`). Confirm this MCP is
+   still in the catalog for this project. A recent `--inspect` is not this
+   check — allowlist membership is dynamic, and a wrong project key looks
+   the same as one that is still starting.
+4. Re-run Verify. ≥1 tool → success. Stop.
+5. Still empty: **stop**. Do not gather logs in this turn. Tell the user
+   once that after Restart the upstream may take up to a few minutes. 
+   They can say **check again**. Do not guess how long, and
+   do not send them away to wait. If they waited with the harness closed,
+   the MCP was not running — the wait starts after Restart.
+6. After **check again**, or if they ask to debug further: re-run Verify.
+   ≥1 tool → success. Stop. How long it has already been is not a
+   diagnosis.
+7. Still empty with the harness running after Restart — gather logs:
+   - Set `JF_AGENT_GUARD_LOG_LEVEL=debug` on the Agent Guard entry's env,
+     then Restart, and read Agent Guard stderr.
+   - If the harness has a debug mode (e.g. Claude Code `claude --debug`),
+     relaunching in that mode can add more log output.
+   From stderr:
+   - **OAuth (remote)** — re-run `--login`.
+   - **Static-token (remote)** — this harness's **Value reference** is set.
+   - **Local (stdio)** — spawn/runtime error.
+   Last resort: run the same command as the config entry in a terminal
+   (`npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard` plus that
+   entry's `--server` / `_JF_ARGS`, with `JF_AGENT_GUARD_LOG_LEVEL=debug`).
+   This is an MCP stdio process — it will block until you stop it. Read
+   stderr. Do not start by writing a wrapper script.
+
 ## Troubleshooting
 
 Items below are harness-agnostic unless they point into the current harness's
 row in [harness-common.md](harness-common.md).
 
-- **"connected" but 0 tools** (empty tool/capability list in the harness's
-  verify view — e.g. Claude Code's `/mcp` `Capabilities:`) — agent guard proxy
-  started, upstream MCP did not. A "connected" label is misleading here. NEVER
-  report success when there are 0 tools.
-  1. Relaunch in the harness's debug mode if it has one (e.g. Claude Code:
-     `claude --debug`) and read the agent guard stderr; diagnose by MCP type:
-     - **OAuth (remote)** — re-run the OAuth login (`--login`); refresh token
-       likely expired.
-     - **Static-token (remote)** — confirm every `${VAR}` in `env` is exported
-       in the launching shell and the token is still valid.
-     - **Local (stdio)** — check that the bundled binary actually launched
-       (agent guard stderr will show the spawn error).
-  2. Verify that the MCP server is still allowed. See the skill's "Available to
-     install" flow.
 - **An MCP was installed as a `stdio` Agent Guard entry although Gateway
   routing is expected** — this is the designed fallback, not a failure.
   `--inspect` returns anything other than
@@ -131,7 +177,7 @@ row in [harness-common.md](harness-common.md).
   why, the reason is on stderr: re-run the Step 2 `--inspect` command with
   `JF_AGENT_GUARD_LOG_LEVEL=debug` exported and read the single eligibility
   record it prints. Never paste an access token from that output.
-- **Configured server missing from the harness's list/verify view** —
+- **Configured server missing from the harness's list or Verify** —
   rejected/pending. Re-run the enable/verify step (Install → Step 4a).
 - **MCP still appears as approved (or won't go away) after editing the config**
   — on harnesses that pre-approve via files (e.g. Claude Code), approval state

@@ -63,14 +63,18 @@ var exported after Kiro is already running won't resolve until you relaunch.
 
 ## Verify
 
-- **`kiro-cli`:** `kiro-cli mcp status --name <name>` for connection status,
-  then confirm real tools via `/mcp` in the same chat session (lists each
-  active server's tools).
-- **Kiro IDE:** tell the user to type `/mcp` in the chat — it lists each
-  active server's tools directly, so they can drill into the target server.
-  Do not invoke it as a tool yourself.
+If you can already see or call at least one upstream tool from this
+server, skip this check. Otherwise:
 
-A connected/active status alone is NOT proof — the Agent Guard proxy can
-report up with 0 upstream tools. Empty tool list = Failed, see the "0 tools"
-troubleshooting in
-[key-rules-and-troubleshooting.md](key-rules-and-troubleshooting.md).
+- **`kiro-cli`:** `kiro-cli mcp status --name <name>` for connection status,
+  then confirm tools via `/mcp` in the same chat session (lists each active
+  server's tools).
+- **Kiro IDE:** tell the user to type `/mcp` in the chat — it lists each
+  active server's tools. Do not invoke it as a tool yourself.
+
+Success: `/mcp` lists at least one upstream tool for the server. Connected/active
+status alone is not success.
+
+Empty tool list: not success, not a diagnosis — follow
+[Connected but 0 tools](key-rules-and-troubleshooting.md#connected-but-0-tools).
+Do not invent another debug path until that section is finished.

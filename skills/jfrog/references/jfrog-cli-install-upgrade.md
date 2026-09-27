@@ -25,8 +25,10 @@ After installation, run `jf --version` to confirm, then
 
 ## Upgrading the JFrog CLI
 
-If the environment check reports a newer version is available, inform the user
-and offer to upgrade:
+On `NEWER_AVAILABLE`, run
+`bash <skill_path>/scripts/cli-newer-version-offer.sh --clear` immediately.
+Never interrupt the task: finish the user's task first, then offer the upgrade
+as the last line of the reply. Upgrade only after the user says Yes:
 
 ```bash
 # macOS
