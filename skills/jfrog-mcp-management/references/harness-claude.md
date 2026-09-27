@@ -86,11 +86,17 @@ metadata, read `mcpServers` from `.mcp.json` (project) and `~/.claude.json`
 
 ## Verify
 
-`/mcp` → **drill into the server entry** (arrow into it, not just the top-level
-row) → read `Capabilities:`. It MUST list at least one tool. Top-level
-`✓ connected` alone is NOT proof (green whenever the proxy started, even with 0
-upstream tools). Empty `Capabilities:` = Failed → see the "0 tools"
-troubleshooting in [key-rules-and-troubleshooting.md](key-rules-and-troubleshooting.md).
+If you can already see or call at least one upstream tool from this
+server, skip this check. Otherwise: you run `/mcp` → **drill into the
+server entry** (arrow into it, not just the top-level row) → read
+`Capabilities:`. Do not ask the user to report `Capabilities:`.
+
+Success: `Capabilities:` lists at least one upstream tool. Top-level `✓ connected`
+alone is not success (green whenever the proxy started).
+
+Empty tool list: not success, not a diagnosis — follow
+[Connected but 0 tools](key-rules-and-troubleshooting.md#connected-but-0-tools).
+Do not invent another debug path until that section is finished.
 
 ## Approval / stuck-state precedence
 

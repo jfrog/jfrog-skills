@@ -3,8 +3,16 @@
 #
 # check-environment.sh is the only writer of suggest_upgrade (true when
 # latest is first evaluated or replaced and is strictly newer than
-# cli_version). This script only reads that bool and, after Yes or No,
-# --clear writes false. It does not run jf.
+# cli_version). This script only reads that bool; --clear writes false as
+# soon as the agent has read NEWER_AVAILABLE. It does not run jf.
+#
+# --clear means "mark this latest as already offered", not "clear the cache":
+# it flips suggest_upgrade to false and deliberately leaves cli_version and
+# latest_version_available intact, which is what makes the next offer wait for
+# a genuinely new latest instead of re-offering this one.
+#
+# JFROG_CLI_AVOID_NEW_VERSION_WARNING=true (case-insensitive, same check as the
+# jf CLI's own new-version warning) forces SKIP without touching the cache.
 #
 # Usage:
 #   bash cli-newer-version-offer.sh
@@ -41,6 +49,10 @@ if [[ "${1:-}" == "--clear" ]]; then
   fi
   emit_skip
 fi
+
+avoid_warning="$(printf '%s' "${JFROG_CLI_AVOID_NEW_VERSION_WARNING:-}" \
+  | tr '[:upper:]' '[:lower:]')"
+[[ "$avoid_warning" == "true" ]] && emit_skip
 
 if command -v jq >/dev/null 2>&1 && [[ -f "$CACHE_FILE" ]] \
   && jq -e '.suggest_upgrade == true' "$CACHE_FILE" >/dev/null 2>&1; then

@@ -184,26 +184,25 @@ match `^[a-zA-Z0-9_-]+$`), or an untrusted project config.
 
 ## Verify
 
-Run `/mcp` in the Codex TUI (or check the IDE extension's MCP view) and confirm
-the server exposes the upstream MCP's **real tools**. `codex mcp list` shows the
-server and its auth status but is NOT proof of working tools - the Agent Guard
-proxy can report up with 0 upstream tools.
+If you can already see or call at least one upstream tool from this
+server, skip this check. Otherwise: run `/mcp` in the Codex TUI (or check the IDE
+extension's MCP view) for the server's tools. `codex mcp list` shows the
+server and its auth status.
 
-Codex-specific signals to read correctly:
 - **`Auth: Unsupported` is normal** for static-header and local MCPs - it
   describes Codex's own OAuth support, not the upstream MCP. Judge by the tool
   list.
-- **An `enable_<slug>_tools` tool is a normal Agent Guard gate**, not an error:
-  for MCPs that need sign-in or explicit enablement, the Agent Guard first
-  exposes this single tool; invoking it (e.g. "sign in to `<MCP>`") runs the flow
-  and the upstream MCP's real tools then appear. Re-check `/mcp` afterward.
-- If the **real tools never appear** (even after enabling / signing in), a
-  required input likely did not reach the server - most often an `env_vars` name
-  or shell export whose case does not match the catalog input `name` (see Value
-  reference), or a variable that was not exported in the launching shell. Fix it
-  and start a new session. A truly empty tool list = Failed → see the "0 tools"
-  troubleshooting in
-  [key-rules-and-troubleshooting.md](key-rules-and-troubleshooting.md).
+- **`enable_<slug>_tools`** starts OAuth login (Step 5) — invoke it, then
+  re-check `/mcp`. Not success by itself.
+
+Success: at least one **real** upstream tool (not only `enable_<slug>_tools`).
+`codex mcp list` "connected" or auth status alone is not success.
+
+Empty tool list: not success, not a diagnosis. Check that each `env_vars`
+name matches the catalog input `name` and is exported in the launching
+shell (see Value reference). Mismatch → fix it and start a new session.
+Then follow [Connected but 0 tools](key-rules-and-troubleshooting.md#connected-but-0-tools).
+Do not invent another debug path until that section is finished.
 
 ## Remove
 

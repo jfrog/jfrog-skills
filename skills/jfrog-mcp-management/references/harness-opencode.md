@@ -133,24 +133,23 @@ section - do NOT print, log, or return the whole file or unrelated config values
 
 ## Verify
 
-Confirm the server exposes the upstream MCP's **real tools** (they appear to the
-agent as `<sanitized-server-name>_<tool>`). `opencode mcp list` shows connection
-status, but a "connected" row is NOT proof - the Agent Guard proxy can report up
-with 0 upstream tools.
+If you can already see or call at least one upstream tool from this
+server, skip this check. Otherwise: confirm tools via the names the agent sees:
+`<sanitized-server-name>_<tool>`. `opencode mcp list` shows connection status.
 
-- **An `enable_<slug>_tools` tool is a normal Agent Guard gate**, not an error:
-  for MCPs that need sign-in or explicit enablement, the Agent Guard first
-  exposes this single tool; invoking it (e.g. "sign in to `<MCP>`") runs the flow
-  and the upstream MCP's real tools then appear. Re-check afterward. (OpenCode's
-  own `opencode mcp auth` is for `type: "remote"` OAuth servers only and does NOT
-  apply to this local Agent Guard entry.)
-- If the **real tools never appear** (even after enabling / signing in), a
-  required input likely did not reach the server - most often an `environment`
-  name or shell export whose case does not match the catalog input `name` (see
-  Value reference), or a variable that was not exported in the launching shell.
-  Fix it and start a new session. A truly empty tool list = Failed → see the
-  "0 tools" troubleshooting in
-  [key-rules-and-troubleshooting.md](key-rules-and-troubleshooting.md).
+`enable_<slug>_tools` starts OAuth login (Step 5) — invoke it, then
+re-check. Not success by itself. (OpenCode's own `opencode mcp auth` is for
+`type: "remote"` OAuth servers only and does NOT apply to this local Agent
+Guard entry.)
+
+Success: at least one **real** upstream tool (not only `enable_<slug>_tools`).
+`opencode mcp list` "connected" alone is not success.
+
+Empty tool list: not success, not a diagnosis. Check that each
+`environment` name matches the catalog input `name` and is exported in
+the launching shell (see Value reference). Mismatch → fix it and start
+a new session. Then follow [Connected but 0 tools](key-rules-and-troubleshooting.md#connected-but-0-tools).
+Do not invent another debug path until that section is finished.
 
 ## Remove
 

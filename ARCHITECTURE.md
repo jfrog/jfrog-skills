@@ -228,8 +228,8 @@ Helper scripts in `scripts/` handle environment bootstrapping and credential man
 
 | Script | Purpose | When called |
 |--------|---------|-------------|
-| `cli-newer-version-offer.sh` | Reads cache `suggest_upgrade` plus existing `cli_version` / `latest_version_available`; prints `SKIP` or `NEWER_AVAILABLE <cur> <latest>`; `--clear` writes `suggest_upgrade: false` after Yes/No | After `check-environment.sh` exit 0/1 (not during `jfrog-init`) |
-| `check-environment.sh` | Verifies `jf` CLI is installed and current; caches result for 24h. Writes `suggest_upgrade: true` when published latest is strictly newer and the flag is missing, unknown, or the latest changed; writes `false` when current is equal/newer or the user already declined this latest. Failed probes keep the previous valid latest. | First JFrog operation in a session |
+| `cli-newer-version-offer.sh` | Reads cache `suggest_upgrade` plus existing `cli_version` / `latest_version_available`; prints `SKIP` or `NEWER_AVAILABLE <cur> <latest>`; `JFROG_CLI_AVOID_NEW_VERSION_WARNING=true` (same opt-out as `jf`) forces `SKIP`; `--clear` writes `suggest_upgrade: false` as soon as `NEWER_AVAILABLE` is read. The offer never blocks: the agent finishes the task, then ends its reply with a one-line Yes/No note | After `check-environment.sh` exit 0/1 (not during `jfrog-init`) |
+| `check-environment.sh` | Verifies `jf` CLI is installed and current; caches result for 24h. Writes `suggest_upgrade: true` when published latest is strictly newer and the flag is missing, unknown, or the latest changed; writes `false` when current is equal/newer or this latest was already offered. Failed probes keep the previous valid latest. | First JFrog operation in a session |
 | `jfrog-login-register-session.sh` | Registers a browser login session; outputs `SESSION_UUID` and `VERIFY_CODE` | Adding a new server via web login |
 | `jfrog-login-save-credentials.sh` | Retrieves token from completed login session and runs `jf config add`; verifies with `jf api /artifactory/api/system/version` | Completing a web login flow |
 

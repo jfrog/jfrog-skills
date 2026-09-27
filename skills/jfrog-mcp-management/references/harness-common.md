@@ -115,10 +115,23 @@ case; harnesses whose config is not JSON differ — e.g. **Codex** uses TOML wit
   JFrog project key is lowercase alphanumerics/hyphens, and `spec.packageName`
   adds only `@ . /`. Never substitute any other value into `_JF_ARGS`.
 
-**Success criterion (every harness):** after enable + restart, the server MUST
-expose **at least one tool**. A "connected" / "running" label alone is NOT proof
-— the Agent Guard proxy can report up with 0 upstream tools. An empty
-tool/capability list = Failed.
+**Success criterion (every harness):** success = at least one upstream tool
+from that server that you can see or call, not a connected/running
+indicator. Agent Guard can show connected with 0 upstream tools.
+`enable_<slug>_tools` starts that server's OAuth login (Step 5) — invoke
+it, then re-check. It is not an upstream tool.
+
+1. If you can already see or call at least one upstream tool from this
+   server, that is success. Stop. Do not ask the user to check a tool
+   count for you; tools you can already use are enough.
+2. If you cannot, that is not a failure. Some harnesses inject tools as
+   soon as the MCP is up; some only after Restart. Follow the **Verify**
+   section in the harness file. Ask the user only when that section
+   tells you to.
+
+Still no tools after that check: not success, not a diagnosis — follow
+[Connected but 0 tools](key-rules-and-troubleshooting.md#connected-but-0-tools).
+Do not invent another debug path until that section is finished.
 
 **OAuth cache (every harness):** OAuth `--login` caches tokens in
 `~/.jfrog/jfrogmcp.conf.json` regardless of harness; removal cleanup of that

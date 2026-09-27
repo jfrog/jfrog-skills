@@ -137,7 +137,7 @@ check_cli() {
 
   # Offer once per new latest. suggest_upgrade is tri-state:
   #   true  — pending offer
-  #   false — declined (or not behind); --clear writes false
+  #   false — already offered (or not behind); --clear writes false
   #   missing / non-semver prev latest — never evaluated → set true when behind
   local prev_latest="" prev_flag="" suggest_upgrade=false
   if [[ -f "$CACHE_FILE" ]] && command -v jq &>/dev/null; then
