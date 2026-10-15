@@ -6,8 +6,13 @@ description: >-
   (`jf skills`, `jf agent plugins`) and JFrog Agent Guard. Use whenever the
   user asks what skills or plugins are available or installed, wants to
   browse/search the catalog, see versions, install/update/uninstall/delete a
-  skill or plugin, or publish/upload/release one to JFrog / Artifactory / the
-  AI Catalog.
+  skill or plugin, publish/upload/release one to JFrog / Artifactory / the
+  AI Catalog, or list the AI Catalog (skill/plugin governance) policies —
+  allow-lists, malicious-skill checks — that apply to skills in a project.
+  Do NOT use this skill for MCP servers (that's jfrog-mcp-management, even
+  when the user says "policy" or "approved"), for Xray or curation "blocked
+  by policy" package errors (that's jfrog-package-curation), or for Xray
+  policies and watches (that's the base jfrog skill).
 metadata:
   role: workflow
 ---
@@ -26,6 +31,7 @@ Pick the row matching the user's intent and read that reference file.
 | Intent | Read |
 |--------|------|
 | "What skills are available?" / browse the catalog / list versions / search by name | [references/discovering-skills.md](references/discovering-skills.md) |
+| List the AI Catalog governance policies that apply to skills in a project (not MCP servers, not Xray/curation — see `listing-policies.md`'s own disambiguation) | [references/listing-policies.md](references/listing-policies.md) |
 | Install a skill with an explicitly resolved version and repo, update a skill, or handle a blocked download | [references/installing-skills.md](references/installing-skills.md) |
 | "What's installed?" / remove an installed skill | [references/managing-installed-skills.md](references/managing-installed-skills.md) |
 | Publish / upload / release a skill to the catalog | [references/publishing-skills.md](references/publishing-skills.md) |
@@ -66,7 +72,8 @@ Pick the row matching the user's intent and read that reference file.
 - **Resolve the project (`<PROJECT>`) only when needed.**
   It is required for `--list-skills`, `--list-skill-versions`,
   `--provision-skills-repository`, `--list-agent-plugins`,
-  `--list-agent-plugin-versions`, and `--provision-agent-plugins-repository`.
+  `--list-agent-plugin-versions`, `--provision-agent-plugins-repository`, and
+  listing AI Catalog policies (`references/listing-policies.md`).
   Resolve it with this priority:
   1. Parse `~/.jfrog/setup.json` (if present) and read `.servers["<SID>"].currentActiveProject`.
   2. Fall back to `$JF_PROJECT`.
@@ -98,6 +105,7 @@ flowchart TD
     B -->|Yes| D{Intent}
     C --> D
     D -->|List all skills / versions| E[npx @jfrog/agent-guard --list-skills --allowed-only]
+    D -->|List policies for skills| M[Resolve project, run list-skill-policies.mjs]
     D -->|Install / update skill| F[Resolve slug + version, then jf skills install/update]
     D -->|List installed skills / remove| G[jf skills list / rm -rf install dir]
     D -->|Publish skill| H[Resolve/provision repo, validate bundle, jf skills publish]

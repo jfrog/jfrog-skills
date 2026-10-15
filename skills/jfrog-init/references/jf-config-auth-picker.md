@@ -126,20 +126,21 @@ would be redundant here.
 
 Print exactly one ready-to-run command, with `--url` (and, for Step 4,
 the already-resolved `--server-id`) filled in — the user runs it
-**themselves, in their own terminal**, replacing the placeholder with
-their own token. **Never** ask for the token in chat, and never run
-this command yourself via the Bash tool — the token must not enter
-this conversation at all.
+**themselves, in their own terminal**, picks **Access Token**, and
+pastes their token at jf's hidden prompt (never on the command line,
+where other local users can read it in process listings). **Never** ask
+for the token in chat, and never run this command yourself via the
+Bash tool — the token must not enter this conversation at all.
 
 - **Step 3** (no server-id yet — one will be created):
   ```
-  jf config add jfrog --url=<url> --access-token=<paste-your-token-here> --interactive=false
+  jf config add jfrog --url=<url> --interactive
   ```
 - **Step 4** (existing server, refreshing a stale token — reuse the
   already-resolved `<server-id>` and `--overwrite` so this updates the
   same entry instead of creating a second one):
   ```
-  jf config add <server-id> --url=<url> --access-token=<paste-your-token-here> --interactive=false --overwrite
+  jf config add <server-id> --url=<url> --interactive --overwrite
   ```
 
 Send this as its own chat message (same rule as today: no `!` prefix —

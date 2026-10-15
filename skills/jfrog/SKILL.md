@@ -19,7 +19,7 @@ compatibility: >-
   (CLI) and Tier 3 (jf api) operations; without it, only MCP (Tier 1) is available.
 metadata:
   role: base
-  version: "0.41.0"
+  version: "0.42.0"
 ---
 
 # JFrog Skill
@@ -257,10 +257,10 @@ or temp directory. Use it **only** for these two artifacts:
    schema (see `references/onemodel-graphql.md`).
 
 **Do not** save HTTP response bodies, GraphQL query results, ad-hoc JSON, reports,
-or any other temporary files under `skills-cache/`. Write those to a host temp
-path instead (for example `/tmp/<name>-$$.json` or `mktemp -d`), echo the path
-when a follow-up Shell step must read the file — same pattern as *Preserving
-command output* below.
+or any other temporary files under `skills-cache/`. Write those inside a private
+per-session directory created once with `JF_TMP=$(mktemp -d) && echo "$JF_TMP"`
+(never predictable names directly in `/tmp`); reuse the echoed directory in
+follow-up Shell steps — same pattern as *Preserving command output* below.
 
 ## Cautious execution
 
@@ -381,7 +381,7 @@ session floor — **they do not replace** full
 |-----------------------------------------|--------|
 | [`references/cli-gotchas.md`](references/cli-gotchas.md) | gotchas, caveats, known issues, do/don't, I/O & auth traps |
 | [`references/jf-api.md`](references/jf-api.md) | product-prefix table, flags, examples, GraphQL payload |
-| [`references/preserving-command-output.md`](references/preserving-command-output.md) | temp files, `$$` paths, no re-fetch for `jq` |
+| [`references/preserving-command-output.md`](references/preserving-command-output.md) | private `mktemp -d` dir, no re-fetch for `jq` |
 | [`references/cli-command-discovery.md`](references/cli-command-discovery.md) | namespaces, top-level cmds, Pipelines sunset |
 
 Skipping any of these **on a Tier B path** = incomplete base-skill load /
@@ -455,7 +455,7 @@ these paths):**
 
 - **MCP:** read structured tool results directly — do not pipe through shell/`jq`
 - **`jf api` I/O:** body → stdout, status → stderr; pipe stdout to `jq`;
-  **never `2>&1 | jq`**. No `-L` / `-o` — redirect: `jf api … > /tmp/out-$$.json`
+  **never `2>&1 | jq`**. No `-L` / `-o` — redirect: `jf api … > "${JF_TMP:?}/<label>.json"`
 - **Product prefix** required on every `jf api` path (see Tier B `jf-api.md`)
 - **Never re-fetch to retry `jq`** — save output first
   ([Preserving command output](#preserving-command-output) + Tier B
@@ -468,12 +468,12 @@ Shell calls, (3) subagents for large fan-out. Details →
 
 ## Preserving command output
 
-Save network responses to a temp file; echo the path; re-read for `jq` — never
-re-run the same network call to fix parsing.
+Save network responses inside a private `mktemp -d` dir (created once, echoed,
+reused); re-read for `jq` — never re-run the same network call to fix parsing.
 
 **Tier B — MUST read in full before advanced I/O / re-parse patterns:**
 [`references/preserving-command-output.md`](references/preserving-command-output.md)
-(`$$` + echo, session id, no re-fetch / no cross-context reuse).
+(`JF_TMP` dir + echo, no re-fetch / no cross-context reuse).
 
 ## Before you run `jf` — quick checklist
 

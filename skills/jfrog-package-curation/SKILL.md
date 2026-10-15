@@ -195,9 +195,10 @@ When curation is entitled, use the Xray curation API to check whether the
 package version is allowed across all repositories before downloading.
 
 ```bash
-RESPONSE_FILE="/tmp/curation-status-$$.json"
-PAYLOAD_FILE="/tmp/curation-payload-$$.json"
-STDERR_FILE="/tmp/curation-err-$$.log"
+JF_TMP=$(mktemp -d) && echo "$JF_TMP"
+RESPONSE_FILE="${JF_TMP:?}/curation-status.json"
+PAYLOAD_FILE="${JF_TMP:?}/curation-payload.json"
+STDERR_FILE="${JF_TMP:?}/curation-err.log"
 
 jq -n \
   --arg type    "<TYPE>"    \
@@ -213,8 +214,13 @@ jf api /xray/api/v1/curation/package_status/all_repos \
   > "$RESPONSE_FILE" 2> "$STDERR_FILE"
 RC=$?
 set -e
-echo "RC=$RC"; echo "$RESPONSE_FILE"
+echo "RC=$RC"
 ```
+
+The files live in a private `mktemp -d` directory (mode 0700, unpredictable
+name), so another account on a shared host cannot pre-plant, symlink or read
+them. Never write them to predictable `/tmp/<name>-$$` paths. `${JF_TMP:?}`
+aborts if the variable is unset rather than writing to `/`.
 
 Supported `packageType` values: `npm`, `pypi`, `maven`, `go`, `nuget`,
 `docker`, `gradle`.
@@ -223,9 +229,15 @@ Supported `packageType` values: `npm`, `pypi`, `maven`, `go`, `nuget`,
 surfaces the HTTP result through its **exit code** and a
 `"<hh:mm:ss> [Warn] ... returned 4xx/5xx"` line on **stderr** (not a
 `%{http_code}` suffix in stdout). The response body is always written to
-stdout. Parse both:
+stdout. Parse both. Variables do not survive across Shell calls, so the
+snippet re-sets them from the values printed above:
 
 ```bash
+JF_TMP=<echoed directory>
+RESPONSE_FILE="${JF_TMP:?}/curation-status.json"
+STDERR_FILE="${JF_TMP:?}/curation-err.log"
+RC=<printed RC>
+
 if [ "$RC" -eq 0 ]; then
   echo "Package is allowed by curation."
 elif grep -q 'returned 403' "$STDERR_FILE"; then
@@ -235,6 +247,7 @@ else
   echo "Curation check failed (rc=$RC):"
   cat "$STDERR_FILE"
 fi
+rm -rf -- "${JF_TMP:?}"
 ```
 
 **Evaluate the outcome:**

@@ -67,9 +67,14 @@ JFROG_HOST=$(echo "$JFROG_PLATFORM_URL" | \
   sed 's|^[a-z]*://||' | sed 's|\.jfrog\.io.*||' | sed 's|[./]|-|g')
 
 # Retrieve the one-time token (stdout = JSON body; stderr = jf status lines)
-RESP_FILE="/tmp/jf-login-resp-$$.json"
-STDERR_FILE="/tmp/jf-login-err-$$.txt"
-trap 'rm -f "$RESP_FILE" "$STDERR_FILE"' EXIT
+# The body carries the access token: keep it in a private (0700) mktemp dir
+# with owner-only files, never at a predictable path in a shared /tmp.
+# umask stays 077 for the rest of the run (jf config writes are private too).
+umask 077
+WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/jf-login.XXXXXX")
+trap 'rm -rf "$WORK_DIR"' EXIT
+RESP_FILE="$WORK_DIR/resp.json"
+STDERR_FILE="$WORK_DIR/err.txt"
 
 : >"$STDERR_FILE"
 set +e
@@ -114,12 +119,16 @@ fi
 # Save credentials to jf config (writes to ~/.jfrog/, needs unrestricted filesystem)
 jf config remove "$JFROG_HOST" --quiet 2>/dev/null || true
 
-if ! jf config add "$JFROG_HOST" \
+# Token goes over stdin (printf is a builtin), never argv — argv is visible
+# to other local users in process listings.
+if ! printf '%s' "$ACCESS_TOKEN" | jf config add "$JFROG_HOST" \
   --url="$JFROG_PLATFORM_URL" \
-  --access-token="$ACCESS_TOKEN" \
-  --interactive=false 2>/dev/null; then
+  --access-token-stdin \
+  --interactive=false 2>"$WORK_DIR/config-add-err.txt"; then
   echo "ERROR: Failed to save credentials with jf config add." >&2
-  echo "This may be caused by sandbox restrictions on ~/.jfrog/ writes." >&2
+  echo "One possible cause is sandbox restrictions on ~/.jfrog/ writes; jf reported:" >&2
+  # The token went in via stdin, so jf's stderr does not contain it.
+  cat "$WORK_DIR/config-add-err.txt" >&2
   exit 4
 fi
 

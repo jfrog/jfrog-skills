@@ -114,7 +114,7 @@ export async function detectProject(serverIdArg, projectInputArg) {
         : "no project chosen — ask the user which project to use (no projects are accessible on this JPD)",
       ...(candidatesWithNames.length > 0 ? { candidates: shown.candidatesWithNames.map((p) => p.key), ...shown } : {}),
     });
-  } else if (list.code === 401 || list.code === 403) {
+  } else if (list.code === 401) {
     emit({ check: "project", status: "error", detail: `project enumeration failed: /access rejected credentials (HTTP ${list.code}). Re-run \`jf config add --interactive\`.` });
     return { exitCode: 3 };
   } else {

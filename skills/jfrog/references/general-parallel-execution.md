@@ -11,12 +11,12 @@ Multiple independent operations → use lightest parallelism tier:
 ## Tier 1: Batch within a single Shell call
 
 Combine independent commands with `&&`. All JFrog API calls share `jf api` +
-`jf config` server — batching is safe and efficient:
+`jf config` server — batching is safe (`JF_TMP`: **Preserving command output**).
 
 ```bash
-jf api /artifactory/api/repositories > /tmp/jf-repos-$$.json && \
-jf api /artifactory/api/system/ping    > /tmp/jf-ping-$$.json && \
-jf api /artifactory/api/storageinfo    > /tmp/jf-storage-$$.json
+jf api /artifactory/api/repositories > "${JF_TMP:?}/repos.json" && \
+jf api /artifactory/api/system/ping    > "${JF_TMP:?}/ping.json" && \
+jf api /artifactory/api/storageinfo    > "${JF_TMP:?}/storage.json"
 ```
 
 Cross-product reads (Access, Xray, etc.) batch the same way — same `jf api`
@@ -28,17 +28,14 @@ Multiple Shell tool calls in one message when commands are independent and
 concurrency cuts runtime:
 
 ```bash
-# Shell call 1 — echo the expanded path so the agent can reference it later
-OUT=/tmp/jf-repos-$$.json
-jf api /artifactory/api/repositories > "$OUT" && echo "$OUT"
+# Shell call 1 (set JF_TMP to the echoed dir in every call)
+JF_TMP=<session dir>
+jf api /artifactory/api/repositories > "${JF_TMP:?}/repos.json"
 
-# Shell call 2 (parallel) — same pattern, different PID
-OUT=/tmp/jf-users-$$.json
-jf api /access/api/v2/users/ > "$OUT" && echo "$OUT"
+# Shell call 2 (parallel) — new file name
+JF_TMP=<session dir>
+jf api /access/api/v2/users/ > "${JF_TMP:?}/users.json"
 ```
-
-Each parallel Shell call gets different PID → `$$` differs. Echo path for
-cross-call use (see SKILL.md **Preserving command output**).
 
 ## Tier 3: Parallel subagents
 
@@ -71,7 +68,8 @@ All three run concurrently. Parent merges into unified report.
 
 1. State goal clearly (e.g. "Collect all Xray policies and watches").
 2. Exact commands, or API tier + `--help` discovery.
-3. Save to `/tmp/jf-<label>-$$.json`, echo expanded path, return structured summary.
+3. Pass the parent's session dir; save to `<dir>/subagent-N-<label>.json`
+   (N = index; never delete the dir); return a summary.
 4. Specify return fields (counts, lists) so parent need not re-read raw data.
 
 ### Subagent type selection
@@ -84,11 +82,10 @@ All three run concurrently. Parent merges into unified report.
 
 | Scenario | Tier |
 |----------|------|
-| 2–5 independent reads, same server | 1 (single Shell) |
+| 2–5 independent reads or a simple one-shot fetch | 1 (single Shell) |
 | Many independent reads where concurrency cuts total runtime | 2 (parallel Shell) |
 | Full platform audit, multi-section report, cross-server comparison | 3 (subagents) |
 | Task branches need different reference files or reasoning | 3 (subagents) |
-| Simple one-shot data fetch | 1 (single Shell) |
 
 ## When NOT to parallelize
 
@@ -100,7 +97,6 @@ All three run concurrently. Parent merges into unified report.
 
 ## Aggregating many outputs (JSONL, logs, ndjson)
 
-Do **not** have multiple background processes append **unsynchronized** to the
-same file — lines interleave, corrupt machine-readable output. Prefer sequential
-writes, one file per worker/chunk then concatenate, or file locking.
-See `references/general-bulk-operations-and-agent-patterns.md`.
+No unsynchronized concurrent appends to one file (interleaved lines corrupt
+output): one file per worker/chunk, then concatenate. See
+`references/general-bulk-operations-and-agent-patterns.md`.

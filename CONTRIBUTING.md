@@ -76,6 +76,23 @@ Everything under `skills/` is **published** (see `.dist-include`) and is what
 **Do not** put maintainer-only or internal process notes under `skills/`.
 Those live in `docs/` (not distributed, not validated as skill tokens).
 
+## Proposing a use-case hint
+
+`skills/jfrog/references/general-use-case-hints.md` is a read-only table of edge
+cases and mitigations. Agents must not edit it at runtime; changes arrive only
+through a maintainer PR. The same flow applies to `cli-gotchas.md`.
+
+1. Reproduce the issue once on a real server or fixture.
+2. Add one table row (or a short subsection if the table is a poor fit).
+3. Use general wording so a use case on a different product still benefits.
+4. Scan existing entries for duplicates or near-duplicates and update the
+   existing row instead of adding a new one.
+5. Keep the file under 80 rows. Beyond that, consolidate related entries or
+   promote recurring patterns into the relevant reference file.
+
+Do not add contributor instructions to the skill file itself; it is loaded into
+the agent's context.
+
 ## No Internal Test Data
 
 No references to internal JFrog environments, instance names, or specific internal projects/repos/packages/builds are allowed anywhere in this repo. Specifically:

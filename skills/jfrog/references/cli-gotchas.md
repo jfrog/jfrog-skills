@@ -19,10 +19,10 @@ Hard rules and known failure modes:
   `[Info] Http Status: NNN` to **stderr** on every call; non-2xx also exits
   1 and adds `[Warn] jf api: <method> <url> returned NNN`. Pipe stdout to
   `jq` directly; **never `2>&1 | jq`** — stderr corrupts the JSON. To keep
-  diagnostics: `jf api <path> 2>/tmp/err-$$.log | jq .`.
+  diagnostics: `jf api <path> 2>"${JF_TMP:?}/<label>.err" | jq .`.
 - `jf api` has **no `-L`** (follow redirects) and **no `-o`** (output file).
   Save bodies with shell redirection
-  (`jf api ... > /tmp/out-$$.json`); for
+  to `${JF_TMP:?}` (`jf api ... > "${JF_TMP:?}/<label>.json"`); for
   binary downloads through the Artifactory remote proxy prefer `jf rt dl`,
   which handles the cache and redirect semantics natively.
 - Remote repository content is stored in a `-cache` suffixed repo. Properties
@@ -81,5 +81,4 @@ Hard rules and known failure modes:
   lines to an NDJSON file, then `jq -s '.' file.ndjson` to produce the final
   array. See `references/general-bulk-operations-and-agent-patterns.md`.
 - Accumulated edge cases from real tasks live in `references/general-use-case-hints.md`
-  — read when debugging odd failures; **append** a short entry when you confirm
-  a new, reusable gotcha.
+  — read when debugging odd failures (read-only; never edit skill files).

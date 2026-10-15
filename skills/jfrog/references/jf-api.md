@@ -49,7 +49,7 @@ before running `jq` on it.
 
 ```bash
 QUERY='{ evidence { searchEvidence(first: 5, where: { hasSubjectWith: { repositoryKey: "my-repo-local" } }) { totalCount } } }'
-PAYLOAD=/tmp/onemodel-payload-$$.json RESPONSE=/tmp/onemodel-$$.json
+PAYLOAD="${JF_TMP:?}/evidence-payload.json" RESPONSE="${JF_TMP:?}/evidence.json"
 jq -n --arg q "$QUERY" '{query:$q}' > "$PAYLOAD"
 jf api /onemodel/api/v1/graphql -X POST \
   -H "Content-Type: application/json" --input "$PAYLOAD" > "$RESPONSE"

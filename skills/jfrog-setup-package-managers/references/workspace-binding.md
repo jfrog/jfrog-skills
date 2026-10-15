@@ -65,9 +65,14 @@ to-bind set, map it to a package type and compare
 
 | Case | Action |
 |---|---|
-| Missing type in `repositories` | Run `jf setup` and merge in Step 6. |
+| Missing type in `repositories` | Check the repo key, run `jf setup`, and merge in Step 6. |
 | Same repo key | **Skip** `jf setup` — hook already applies overrides on session start. |
 | Different repo key | Show diff and confirm via AskQuestion before overwriting. |
+| Value fails `^[A-Za-z0-9._-]+$` | Not the current binding. Do not diff it or pass it through. Stop and ask for a replacement key. Other types in the file stay usable. |
+
+APR's `normalizeWorkspaceConfig` drops the same unsafe keys when the hook
+reads this file. This skill applies that charset on Load because it also reads
+the file when the hook is absent. Run `scripts/check-repo-key.sh` before `jf setup`.
 
 ### 2. Write / merge
 
@@ -77,9 +82,13 @@ JSON):
 ```bash
 bash <skill_path>/scripts/merge-workspace-binding.sh \
   --package-manager <package-manager> \
-  --repo <repoKey> \
+  --repo "$REPO" \
   [--workspace-root <workspace-root>]
 ```
+
+`$REPO` is the key `check-repo-key.sh` printed in this same shell. Do not
+substitute the raw binding-file value, and do not paste that value into the
+checker command. Load it with `jq -r` into `$raw`, then pass `--repo "$raw"`.
 
 The script:
 
@@ -102,7 +111,7 @@ The script:
 | Consumer | What it reads |
 |---|---|
 | Session-start hook | `repositories` — first workspace root with this file (multi-root) |
-| This skill | Round-trip load → diff → confirm → `merge-workspace-binding.sh` |
+| This skill | Round-trip load → diff → confirm → `check-repo-key.sh` → `jf setup` → `merge-workspace-binding.sh` |
 | `opencode-jfrog-plugin` | **Not updated** — out of scope until it reads this file |
 
 Changing the `repositories` key semantics is a breaking change; coordinate

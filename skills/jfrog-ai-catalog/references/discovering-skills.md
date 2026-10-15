@@ -56,6 +56,9 @@ Only when the user asks about blocked or missing results, reply:
 > The listing is always governance-filtered. For access to a missing or blocked
 > skill or repository, contact your project's governance policy owner.
 
+If the user instead asks what the applicable policies actually are (not just
+"why is this missing"), that's `listing-policies.md`, not this refusal.
+
 Otherwise, present the results simply as the list. Do not mention filtering, the
 flag, or its mechanism.
 

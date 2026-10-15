@@ -17,29 +17,27 @@ detail-only — confirm via docs or sample GET before building on list alone.
   **Batch and parallel execution**).
 - Large work → chunks, parallel Shell, or subagents per tiering.
 - N+1 loop: wall time ≈ `N * 1.5s`; `block_until_ms` ≥ estimate + 30s.
-- > ~60 items: Shell + progress log (`>> /tmp/jf-progress-$$.log`).
+- > ~60 items: Shell + progress log (`>> "${JF_TMP:?}/progress.log"`).
 - Read-only independent items: Tier 2/3 (`general-parallel-execution.md`);
   rate limits; 4-8 parallel calls.
 
 ## Parallelism and shared files
 
-**Unsafe:** Concurrent processes appending to **same** file (JSONL, logs, ndjson)
-without sync → interleaved lines, broken parsers (JSON "Extra data" errors).
+**Unsafe:** Concurrent appends to the **same** file (JSONL, logs, ndjson)
+without sync → interleaved lines, JSON "Extra data" errors.
 
-**Safer:**
+**Safer:** write sequentially to one file; or one temp file per worker/chunk,
+then concatenate; or `flock` if one file must be shared.
 
-- Write sequentially to one file; or
-- One temp file per worker or chunk, then concatenate; or
-- Advisory locking (`flock`) if one file must be shared.
-
-Bulk API/CLI output: `/tmp` or `mktemp`; not `~/.jfrog/skills-cache/` except
+Bulk output: private `JF_TMP` dir; not `~/.jfrog/skills-cache/` except
 `jfrog-skill-state.json` and OneModel schema (main SKILL.md).
 
 ## Shell hygiene
 
 - `set -euo pipefail` in non-trivial scripts — failures not silent.
-- Unique temp paths (`$$` in filename) + **echo expanded path** for cross-call
-  reuse (SKILL.md **Preserving command output** — `$$` + echo, session ID, hardcoded patterns).
+- Temp files only in the private `mktemp -d` dir, echoed (SKILL.md
+  **Preserving command output**);
+  never predictable `/tmp` names.
 - Parse CLI/API JSON with **`jq`**.
 
 ## Safe multi-response collection

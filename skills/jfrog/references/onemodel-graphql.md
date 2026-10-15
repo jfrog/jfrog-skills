@@ -17,14 +17,13 @@ Cache: `${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/` (with `jf config`,
 
 1. **`onemodel-schema-${JFROG_SERVER_ID}.graphql`** — this workflow (supergraph
    SDL). **Always** use [Fetch the schema](#2-fetch-the-schema); never mirror
-   under `/tmp`.
+   into a temp dir.
 2. **`jfrog-skill-state.json`** — env check (main SKILL.md); scripts own it;
    do not delete/replace casually.
 
 **Never** store GraphQL **responses**, REST bodies, reports, or scratch under
-`skills-cache/`. Responses → `/tmp` with unique name (`$$`, `mktemp -d`) as in
-[Execute the query](#6-execute-the-query). `RESPONSE_FILE` must stay outside
-`skills-cache/`.
+`skills-cache/`. Responses → private `mktemp -d` dir ([Execute the
+query](#6-execute-the-query)).
 
 ## Prerequisites
 
@@ -81,7 +80,7 @@ Schema is large. Cache under skill cache (CLI home, outside installed skill),
 keyed by concrete `JFROG_SERVER_ID` from step 1 (CLI `serverId`, never a
 placeholder like `default`).
 
-**Always this exact path** — not `/tmp/` or elsewhere:
+**Always this exact path** — not a temp dir or elsewhere:
 
 `${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/onemodel-schema-${JFROG_SERVER_ID}.graphql`
 
@@ -230,10 +229,13 @@ response. **Do not** put `RESPONSE_FILE` under `~/.jfrog/skills-cache/` —
 schema + `jfrog-skill-state.json` only (see
 [`~/.jfrog/skills-cache/` policy](#jfrogskills-cache-policy)).
 
-Multiple queries in one shell → temp dir under `/tmp` + sequential names:
+Use `JF_TMP` (SKILL.md **Preserving command output**) with a per-flow
+subdirectory, creating `JF_TMP` first if this session has none yet (callers
+from other skills may reach here before it exists); echo both and re-set
+both (plus the counter) in each later call:
 
 ```bash
-ONEMODEL_TMPDIR=$(mktemp -d)
+JF_TMP=${JF_TMP:-$(mktemp -d)} && ONEMODEL_TMPDIR=$(mktemp -d "$JF_TMP/onemodel.XXXXXX") && printf 'JF_TMP=%q\nONEMODEL_TMPDIR=%q\n' "$JF_TMP" "$ONEMODEL_TMPDIR"
 ONEMODEL_QUERY_NUM=0
 ```
 
@@ -241,7 +243,7 @@ Before each query:
 
 ```bash
 ONEMODEL_QUERY_NUM=$((ONEMODEL_QUERY_NUM + 1))
-RESPONSE_FILE="$ONEMODEL_TMPDIR/response-$ONEMODEL_QUERY_NUM.json"
+RESPONSE_FILE="${ONEMODEL_TMPDIR:?}/response-$ONEMODEL_QUERY_NUM.json"
 ```
 
 #### Always use `jq` to build the JSON payload
@@ -268,7 +270,7 @@ Example — **small** query with `jq --arg`:
 
 ```bash
 QUERY='{ evidence { searchEvidence(first: 5, where: { hasSubjectWith: { repositoryKey: "my-repo-local" } }) { totalCount } } }'
-PAYLOAD_FILE="$ONEMODEL_TMPDIR/payload-$ONEMODEL_QUERY_NUM.json"
+PAYLOAD_FILE="${ONEMODEL_TMPDIR:?}/payload-$ONEMODEL_QUERY_NUM.json"
 jq -n --arg q "$QUERY" '{"query": $q}' > "$PAYLOAD_FILE"
 
 jf api /onemodel/api/v1/graphql \
@@ -284,7 +286,7 @@ Example — **nested** query from a file (preferred for real OneModel calls):
 
 ```bash
 # my-query.graphql contains a normal multi-line GraphQL document
-PAYLOAD_FILE="$ONEMODEL_TMPDIR/payload-$ONEMODEL_QUERY_NUM.json"
+PAYLOAD_FILE="${ONEMODEL_TMPDIR:?}/payload-$ONEMODEL_QUERY_NUM.json"
 jq -n --rawfile q my-query.graphql \
   '{"query": ($q | gsub("#.*"; "") | gsub("\\s+"; " ") | sub("^ +"; "") | sub(" +$"; ""))}' \
   > "$PAYLOAD_FILE"
