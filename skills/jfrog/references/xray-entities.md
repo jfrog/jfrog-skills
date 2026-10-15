@@ -117,7 +117,7 @@ Report all eight values as distinct categories — do not merge them.
 ```bash
 jq '[.artifacts[0].issues[] | .applicability_details[]? | .result]
     | group_by(.) | map({result: .[0], count: length})
-    | sort_by(.count) | reverse' /tmp/xray-summary.json
+    | sort_by(.count) | reverse' "${JF_TMP:?}/xray-summary.json"
 ```
 
 For Docker images, the path format is
@@ -543,8 +543,8 @@ PAGE=1
 MAX_PAGES=20
 while [ "$PAGE" -le "$MAX_PAGES" ]; do
   if ! jf api "/xray/api/v1/secrets/results?repo=my-repo&path=my-artifact&page_num=$PAGE&num_of_rows=100" \
-      > /tmp/xr-$$.json; then break; fi
-  jq '.data[]' /tmp/xr-$$.json
+      > "${JF_TMP:?}/secrets-results.json"; then break; fi
+  jq '.data[]' "${JF_TMP:?}/secrets-results.json"
   PAGE=$((PAGE + 1))
 done
 ```
@@ -561,12 +561,11 @@ Unknown paths → discover with AQL, then fan out to exposures.
 **Docker repos** — find all manifests:
 
 ```bash
-OUT=/tmp/manifests-$$.json
+OUT="${JF_TMP:?}/manifests.json"
 jf api /artifactory/api/search/aql \
   -X POST -H "Content-Type: text/plain" \
   -d 'items.find({"repo":"my-docker-local","name":"manifest.json","path":{"$nmatch":"*_uploads*"}}).include("repo","path","name")' \
   > "$OUT"
-echo "$OUT"
 jq -r '.results[] | .path + "/" + .name' "$OUT"
 ```
 

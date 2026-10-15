@@ -115,14 +115,20 @@ Web login fails (old server, network restrictions):
 
 1. Ask user to generate token in JFrog UI:
   **Administration > Identity and Access > Access Tokens > Generate Token**
-2. Save non-interactively:
+2. Ask user to run in **their own terminal** (not via your shell tool, no `!`
+  prefix), pick **Access Token**, and paste the token at jf's hidden prompt
+  (add `--overwrite` if `<server-id>` already exists):
 
 ```bash
-jf config add <server-id> \
-  --url=https://<jfrog-url> \
-  --access-token=<token> \
-  --interactive=false
+jf config add <server-id> --url=https://<jfrog-url> --interactive
 ```
+
+3. After the user confirms, verify with
+  `jf api --server-id=<server-id> /artifactory/api/system/version`, then run
+  the Post-login handoff gate.
+
+Never ask for the token in chat or put it in a command — a command-line
+token is visible to other local users in process listings.
 
 ## Gotchas
 

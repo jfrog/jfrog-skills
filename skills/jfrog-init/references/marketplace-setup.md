@@ -5,19 +5,35 @@
 ## What this step does
 
 Registers the JFrog Claude agent-plugin marketplace with
-Claude Code (`claude plugin marketplace add <url>`), so plugins
+Claude Code (declared in its config, then fetched with
+`claude plugin marketplace update <name>`), so plugins
 published to Artifactory become installable via `/plugin install`.
 `jfrog-add-claude-marketplace.mjs` does all of it, including the
-`~/.netrc` write below — never call `claude` yourself.
+config writes below — never call `claude` yourself.
 
-## The `~/.netrc` write
+## Where the token is stored
 
-The only file this skill creates to hold a token, so say so plainly if the
-user asks. The token goes to `~/.netrc`, replacing any prior block for that
-host. `claude plugin install` needs it because the marketplace lists each
-plugin as a plain Artifactory URL with no credentials in it. The marketplace
-fetch does not use the file, because the token passed to `claude plugin
-marketplace add` reaches Claude Code's own plugin config.
+Nowhere new. The script installs a helper at
+`~/.jfrog/skills/marketplace-headers.mjs` (under `JFROG_CLI_HOME_DIR` when
+set) and declares the marketplace in Claude Code's config (`settings.json`
+and `plugins/known_marketplaces.json` under `CLAUDE_CONFIG_DIR`, default
+`~/.claude`) with a `headersHelper` naming that helper and the resolved
+server. Claude Code runs the helper on each marketplace and plugin fetch;
+it asks `jf` for the token at request time, so neither file nor any command
+line holds it. Discovery also goes through `jf`, so `jf`'s proxy settings apply.
+
+Copies an earlier Step 8 left are removed. A token in another JFrog
+marketplace entry's URL or `Authorization` header is dropped, and an entry
+on the same JPD gets the same `headersHelper` so it still logs in. After a
+successful register, the `~/.netrc` block for this JPD's host whose password
+is the token `jf` holds is deleted; every other block stays, including one
+for this host with another password.
+
+Requirements, or the script fails red and the user adds the marketplace by hand:
+
+- `jf` on `PATH` and logged in to that server.
+- Claude Code 2.1.238 or later.
+- A server ID of letters, digits, `.`, `_` or `-` only.
 
 ## Server scope
 

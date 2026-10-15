@@ -211,8 +211,8 @@ Build the JSON body with `jq -n` into a **file**, then pass the file to
 ```bash
 QUERY='query GetEvidence($repoKey: String!, $path: String!, $name: String!) { evidence { getEvidence(repositoryKey: $repoKey, path: $path, name: $name) { evidenceId verified } } }'
 
-PAYLOAD_FILE="/tmp/onemodel-payload-$$.json"
-RESPONSE_FILE="/tmp/onemodel-response-$$.json"
+PAYLOAD_FILE="${JF_TMP:?}/get-evidence-payload.json"
+RESPONSE_FILE="${JF_TMP:?}/get-evidence.json"
 
 jq -n \
   --arg q "$QUERY" \

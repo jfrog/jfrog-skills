@@ -18,7 +18,7 @@ hard-rule violation.
 
 - **Gotchas / caveats / do-don'ts**: **MUST** `references/cli-gotchas.md` on Tier B — not replaceable by SKILL.md Tier A floor
 - **`jf api` prefixes / flags / GraphQL**: **MUST** `references/jf-api.md` before `jf api`
-- **Temp files / `$$` / no re-fetch**: **MUST** `references/preserving-command-output.md` before advanced I/O
+- **Temp files (private `mktemp -d` dir) / no re-fetch**: **MUST** `references/preserving-command-output.md` before advanced I/O
 - **Namespaces / top-level cmds / Pipelines sunset**: **MUST** `references/cli-command-discovery.md` when discovery beyond `--help`
 
 Tier C (when needed — not Tier B):
@@ -82,4 +82,4 @@ for one operation.
 - **Batching, parallel Shell calls, or launching subagents**: read `references/general-parallel-execution.md`
 - **Large or parallel data gathering, list-vs-detail APIs, cache hygiene**: read `references/general-bulk-operations-and-agent-patterns.md`
 - **Standalone HTML report with JFrog-aligned styling**: read `references/jfrog-brand-html-report.md`
-- **Reusable gotchas from past tasks**: read or extend `references/general-use-case-hints.md`
+- **Reusable gotchas from past tasks**: read `references/general-use-case-hints.md`

@@ -62,12 +62,14 @@ export function deriveServerId(platformUrl) {
 // child's stderr live to the parent) — see lib/jf-api.mjs's jfApi() for
 // the full rationale. Still captures both streams via the thrown error's
 // .stdout/.stderr on failure.
-function execFileOpts(timeoutMs, needsShell) {
+// `input`, when given, is written to the child's stdin.
+function execFileOpts(timeoutMs, needsShell, input) {
   return {
     encoding: "utf8",
     timeout: timeoutMs,
     shell: needsShell,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+    ...(input === undefined ? {} : { input }),
   };
 }
 
@@ -154,11 +156,13 @@ export function saveCredentials(platformUrlRaw, sessionUuid) {
     // No existing entry to remove — fine.
   }
 
+  // Token goes over stdin, never argv — argv is visible to other local users
+  // in process listings (and, under a `.cmd` shim, in cmd.exe's command line).
   try {
     execFileSync(
       jfPath,
-      ["config", "add", serverId, `--url=${platformUrl}`, `--access-token=${accessToken}`, "--interactive=false"],
-      execFileOpts(15_000, needsShell)
+      ["config", "add", serverId, `--url=${platformUrl}`, "--access-token-stdin", "--interactive=false"],
+      execFileOpts(15_000, needsShell, accessToken)
     );
   } catch {
     process.stderr.write("ERROR: Failed to save credentials with jf config add.\n");

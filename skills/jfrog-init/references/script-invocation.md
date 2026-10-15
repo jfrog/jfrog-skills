@@ -119,8 +119,8 @@ lookups), `node
 - `jfrog-state-file.mjs`'s **`set`** mode (writes `~/.jfrog/setup.json`
   with caller-supplied server-id/URL/project-key — see the Final summary
   in `SKILL.md`)
-- `jfrog-add-claude-marketplace.mjs` (Step 8 — rewrites `~/.netrc` and
-  calls `claude plugin marketplace add`, mutating Claude Code's own
+- `jfrog-add-claude-marketplace.mjs` (Step 8 — installs the headers helper
+  under `~/.jfrog/skills` and calls `claude plugin marketplace update`, mutating Claude Code's own
   marketplace config — see `marketplace-setup.md`). **Unlike the other
   entries in this list, this one has no prior `AskUserQuestion` consent
   step** — the harness's own approval prompt is the only gate before it
@@ -146,7 +146,7 @@ distinct reason: they're the five scripts in this directory that mutate
 something outside their own process (a downloaded binary made executable
 and run, the plugin's `mcp.json`, the user's own OpenCode config — the
 first mutation targeting a personal file rather than a plugin-owned one
-— the setup state file, and `~/.netrc` plus Claude Code's own
+— the setup state file, and the headers helper plus Claude Code's own
 marketplace config, respectively) rather than just reading state and
 emitting JSON.
 A prior version of this grant covered every `*.mjs` in `scripts/`

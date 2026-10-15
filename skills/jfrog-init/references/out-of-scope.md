@@ -20,5 +20,5 @@
   export` only in memory, for one `fetch` call. Step 3/4's token-based
   `jf config` path (see `references/jf-config-auth-picker.md`) never
   touches this skill or the model at all — the user runs that command
-  themselves. **Step 8 is the one deliberate exception** — it writes
-  the token to `~/.netrc`; see `references/marketplace-setup.md`.
+  themselves. Step 8 stores no token either: Claude Code asks `jf`
+  through a helper at request time; see `references/marketplace-setup.md`.

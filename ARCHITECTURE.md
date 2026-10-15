@@ -220,7 +220,7 @@ Cross-cutting concerns — authentication, credential management, parallelism, b
 | `jfrog-brand-html-report.md` | HTML report styling |
 | `general-parallel-execution.md` | Three-tier parallelism: shell batch, parallel tool calls, subagents |
 | `general-bulk-operations-and-agent-patterns.md` | List-vs-detail, N+1, timeouts, NDJSON, concurrency |
-| `general-use-case-hints.md` | Living table of edge cases and mitigations |
+| `general-use-case-hints.md` | Read-only table of edge cases and mitigations (maintainer-curated via PR; see CONTRIBUTING.md "Proposing a use-case hint") |
 
 ### Scripts
 

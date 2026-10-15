@@ -77,8 +77,13 @@ When you look up a package manager in this file, you get one of:
 | **resolved (trusted)** | `repositories.<pkg>` present, `source` is `agents-config` | Key from agents-conf.json with `verifyRepos: false` | **No** |
 | **unresolved** | `repositories.<pkg>` is missing | No mapping in agents-conf.json, verify failed, or type not configured | n/a |
 
-The skill relies on `jf setup --repo` to validate the repo key at apply
-time (`GET /api/repositories/<repoKey>` inside the CLI).
+The skill relies on `jf setup --repo` to validate that the repo exists at apply
+time (`GET /api/repositories/<repoKey>` inside the CLI). Before that, every
+value read from this file, the session table, or the workspace binding goes
+through `scripts/check-repo-key.sh --repo "$raw"`. A key that fails
+`^[A-Za-z0-9._-]+$` (APR `isSafeRepoKey`) is not usable — stop and ask. Do not
+paste it into a shell command, including inside single quotes. The shell
+parses that line before `jf` starts.
 
 ## Reading the cache from the skill
 
@@ -86,11 +91,13 @@ The current `serverId` for this session comes from `jf config export`
 (the default server). Read the cache with:
 
 ```bash
-SID="$(jf c show --server-id 2>/dev/null | awk '/Server ID/ {print $3; exit}')"
+sid_raw="$(jf c show --format=json | jq -r 'map(select(.isDefault))[0].serverId // empty')"
+SID="$(bash <skill_path>/scripts/check-repo-key.sh --server-id "$sid_raw")" || SID=""
 CACHE="$HOME/.jfrog/skills-cache/package-resolution.json"
 
-# Get a repo key for a package type (empty if unresolved):
-jq -r --arg sid "$SID" --arg type "<pkgType>" '.servers[$sid].repositories[$type] // ""' "$CACHE"
+# Get a repo key for a package type (empty if unresolved). Pass "$raw"
+# to check-repo-key.sh. Do not copy this output into the command text.
+raw="$(jq -r --arg sid "$SID" --arg type "<pkgType>" '.servers[$sid].repositories[$type] // ""' "$CACHE")"
 
 # Dump every resolved (pkgType, repoKey) pair for this SID:
 jq -r --arg sid "$SID" '.servers[$sid].repositories | to_entries[] | "\(.key)\t\(.value)"' "$CACHE"
@@ -102,7 +109,8 @@ jq -r --arg sid "$SID" '.servers[$sid].source' "$CACHE"
 If `$CACHE` does not exist, or the SID branch is missing, the hook has
 not yet resolved on this machine for this server — fall back to reading
 the injected "Resolved URLs for this session" table in agent context
-(parse the URL to recover `repoKey`), and if that is also absent, treat
+(parse the URL to recover `repoKey`, then load it through the quoted heredoc
+in SKILL.md Step 3.4 — never into `raw="…"`), and if that is also absent, treat
 every package manager as `unresolved` and prompt the user (Step 2).
 
 The resolver refreshes stale entries on session start (TTL + agents-conf.json mtime).

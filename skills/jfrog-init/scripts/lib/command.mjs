@@ -100,5 +100,5 @@ export function runCommand({ command, target, shell }, args, { timeoutMs }) {
       ? `${command} did not respond within ${timeoutMs / 1000}s and was terminated.\n`
       : `${result.error.message}\n`;
   }
-  return { ok: result.status === 0, out };
+  return { ok: result.status === 0, out, stdout: result.stdout || "" };
 }
