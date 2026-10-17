@@ -22,7 +22,7 @@ Install them in your AI coding agent and interact with JFrog through natural lan
 From remote repository:
 
 ```bash
-npx skills add git@github.com:jfrog/jfrog-skills.git -g \
+npx skills add https://github.com/jfrog/jfrog-skills.git -g \
     --skill jfrog \
     --skill jfrog-package-curation \
     --skill jfrog-ai-catalog \
