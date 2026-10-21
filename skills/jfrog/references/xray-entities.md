@@ -9,6 +9,7 @@ Read when working with:
 
 CLI: `jf xr --help`, `jf audit --help`, `jf scan --help`.
 REST: `jf api /xray/api/v2/...` (see base skill *Invoking platform APIs with `jf api`*).
+SAST (`jf audit --sast`): `references/xray-sast-scan.md`.
 
 ## Entity relationship overview
 
@@ -33,8 +34,7 @@ Core chain: **Watch** monitors **Resources** via **Policies**. When a
 
 ## Indexed resources
 
-Xray must **index** a resource before scan/monitor. Indexing decomposes
-artifacts into components and tracks them continuously.
+Xray must **index** a resource before scan/monitor.
 
 Indexable types:
 - **Repositories** — local and remote (Xray indexes the `-cache` for remotes)
@@ -45,9 +45,8 @@ Configure via Xray UI or `PUT /api/v1/binMgr/builds` / `PUT /api/v1/binMgr/repos
 
 ## Components
 
-Software package Xray identifies during scanning. Artifacts (JARs, Docker
-layers, npm tarballs, …) decompose into components mapped to vulnerability
-and license data.
+Package Xray identifies while scanning; artifacts (JARs, Docker layers, npm
+tarballs, …) decompose into components mapped to vulnerability and license data.
 
 IDs by package type:
 - Maven: `gav://group:artifact:version`
@@ -59,8 +58,6 @@ IDs by package type:
 
 ## Vulnerabilities
 
-Known security issue tied to specific component versions.
-
 | Field | Description |
 |-------|-------------|
 | `cve` | CVE identifier (e.g. `CVE-2021-44228`) |
@@ -70,18 +67,15 @@ Known security issue tied to specific component versions.
 | `fixed_versions` | Component versions where the vulnerability is resolved |
 | `references` | Links to advisories and patches |
 
-CVSS score → always use `cvss_v3`. Xray maintains its own continuously updated DB.
+CVSS score → always use `cvss_v3`.
 
 ## Contextual analysis
 
 Evaluates whether a vulnerability is **actually reachable** in this usage
-context (beyond raw CVE data): invoked code paths, mitigating configs,
-exposure via how the component is used.
+context: invoked code paths, mitigating configs, component exposure.
 
-**Applicability** status drives remediation priority: Critical + not
-applicable ≺ High + confirmed applicable.
-
-Coverage varies by package/vulnerability type — check Xray docs.
+**Applicability** drives remediation priority: Critical + not applicable ≺
+High + confirmed applicable.
 
 ### Response fields: `applicability` vs `applicability_details`
 
@@ -137,7 +131,7 @@ banned lists enforced via watches and policies.
 
 ## Watches
 
-Central **monitoring config** linking resources to policies.
+**Monitoring config** linking resources to policies.
 
 | Field | Description |
 |-------|-------------|
@@ -147,14 +141,13 @@ Central **monitoring config** linking resources to policies.
 | `active` | Whether the watch is enabled |
 | `project_key` | Optional project scope |
 
-Indexed resource change (new artifact, updated component data) → Xray
-re-evaluates watches that include that resource.
+Indexed resource change → Xray re-evaluates its watches.
 
 API: `GET/POST/PUT/DELETE /api/v2/watches`
 
 ## Policies
 
-**Rules** Xray evaluates against components in watched resources.
+**Rules** evaluated against watched components.
 
 | Policy type | Rule evaluates | Common conditions |
 |-------------|---------------|-------------------|
@@ -170,7 +163,7 @@ API: `GET/POST/PUT/DELETE /api/v2/policies`
 
 ## Violations
 
-Generated when a watched component matches a policy rule.
+Generated when a watched component matches a rule.
 
 | Field | Description |
 |-------|-------------|
@@ -273,7 +266,7 @@ Scope by: **Vulnerability** (CVE / Xray ID), **Component**, **Artifact**,
 
 API: `GET/POST/DELETE /api/v1/ignore_rules`
 
-**Version note:** Ignore rules are **v1 only**. `/api/v2/ignore_rules` → 404.
+Ignore rules are **v1 only**; `/api/v2/ignore_rules` → 404.
 
 ## Summary APIs
 
@@ -286,8 +279,7 @@ artifacts. Use **only for security/compliance queries**.
 - Unsure if indexed → try component summary first (works if component is in Xray DB)
 
 **Prerequisite — Xray indexing:** Data only if the repo is indexed **and**
-Xray has scanned the artifact. Artifact may exist in Artifactory while Xray
-knows nothing (repo not marked for indexing, or not yet processed). Empty
+Xray has scanned the artifact. Empty
 results ≠ clean — means no Xray data. Report possibly not indexed; do not
 declare vulnerability-free.
 
@@ -295,10 +287,8 @@ declare vulnerability-free.
 
 **v1 only — no `/api/v2/summary/component`.** v2 → 404.
 
-Query by component ID. Returns `issues[]`, `licenses[]`,
-`operational_risks[]` per component. Use when you know the package version
-but not the Artifactory path, or when the repo is not indexed (artifact
-summary would be empty).
+Query by component ID; returns `issues[]`, `licenses[]`,
+`operational_risks[]` per component.
 
 Body uses `component_details` (array of `{component_id}`), **not**
 `component_ids`.
@@ -451,9 +441,8 @@ jf api "/xray/api/v2/search/impactedResources?vulnerability=CVE-2021-23337&limit
 
 ## Exposures (Advanced Security)
 
-Actionable findings from JFrog Advanced Security beyond CVE scanning:
-hard-coded secrets, insecure IaC, service misconfigs — real exploitable
-threats in binaries, source, and configs (vs theoretical CVEs).
+Advanced Security findings beyond CVEs: hard-coded secrets, insecure IaC,
+service misconfigs in binaries, source, and configs.
 
 Requires **JFrog Advanced Security** enabled. Artifact must be in an indexed
 repo and already scanned.

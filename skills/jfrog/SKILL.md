@@ -12,14 +12,14 @@ description: >-
   data, or perform any JFrog Platform administration task.
   Also use when the user mentions jf, jfrog, artifactory, xray, distribution,
   evidence, apptrust, onemodel, graphql, workers, mission control, curation,
-  advanced security, exposures, or any JFrog product name.
+  advanced security, exposures, sast, or any JFrog product name.
   Do NOT use this skill to install, add, remove, list, or manage MCP servers.
 compatibility: >-
   Requires bash, jq, and awk on PATH. The JFrog CLI (jf) is required for Tier 2
   (CLI) and Tier 3 (jf api) operations; without it, only MCP (Tier 1) is available.
 metadata:
   role: base
-  version: "0.42.0"
+  version: "0.43.0"
 ---
 
 # JFrog Skill

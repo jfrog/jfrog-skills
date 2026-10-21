@@ -50,6 +50,7 @@ for one operation.
 
 - **Watches, policies, violations, components, or vulnerability scanning (concepts)**: read `references/xray-entities.md`
 - **Exposures scanning results (secrets, IaC, service misconfigurations, application security risks)**: read `references/xray-entities.md` § Exposures (Advanced Security)
+- **Scanning source code with SAST (`jf audit --sast`)**: read `references/xray-sast-scan.md`
 - **Package install/resolve/download failure blamed on Curation — 403 from a curated remote, `ETARGET` / "no matching version", a version missing from the index, "why was package X blocked?", or a waiver after a block**: load the `jfrog-package-curation` workflow skill and follow its "Troubleshoot a failure" section (index-time CVS audit + download-time package audit → root cause + remediation, MCP only). Its "Check & download" section instead handles proactive "is this package safe to download?".
 - **Is this package safe / allowed / curated? Downloading npm, Maven, PyPI, Go, or similar packages via JFrog**: load the `jfrog-package-curation` workflow skill and follow its "Check & download" section.
 - **Curation audit events (approved/blocked packages, dry-run policy evaluations, curation export) without a failure to triage**: read `references/xray-entities.md` § Curation audit events
