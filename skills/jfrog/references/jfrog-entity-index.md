@@ -8,7 +8,7 @@ When to read this file:
 - Need **GraphQL (OneModel)** entry points (workflow, examples, patterns) —
   see [GraphQL (OneModel)](#graphql-onemodel) below.
 
-After identifying domain, follow **Reference** column pointer for detailed definitions, relationships, agent rules.
+Then follow the **Reference** column pointer.
 
 ## Cross-product flow
 
@@ -34,7 +34,7 @@ flowchart TD
     Cat[Catalog] -.->|enriches metadata| SP
 ```
 
-Key takeaway: **artifacts** = atomic unit. Builds reference them, Xray scans them, release bundles collect them, distribution delivers them. **Applications** orchestrate top-level release flow. **Stored Packages** bridge artifacts → package abstraction. **Catalog** enriches packages with global security, legal, operational metadata. **Evidence** attests entities across all domains.
+Key takeaway: **artifacts** are the atomic unit; **Applications** orchestrate release flow; **Stored Packages** bridge artifacts to packages; **Catalog** enriches packages; **Evidence** attests across domains.
 
 ## GraphQL (OneModel)
 
