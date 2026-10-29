@@ -82,17 +82,22 @@ export const JF_CLI_TIMEOUT_MS = 30_000;
 // SHELL_UNSAFE, a `jf` arg (e.g. a server ID) may legitimately contain one.
 export const JF_ARG_UNSAFE = /[&|;$<>`"'\\^\n]/;
 
+// The screen every `jf` spawn with caller-built args applies first — runJf(),
+// lib/jf-api.mjs's jfApi(), jfrog-login-save-credentials.mjs — so none drifts.
+export function assertJfArgsShellSafe(args, shell, caller) {
+  if (!shell) return;
+  const unsafe = args.find((a) => JF_ARG_UNSAFE.test(a));
+  if (unsafe !== undefined) {
+    throw new Error(`${caller}: refusing shell-unsafe argument: ${JSON.stringify(unsafe)}`);
+  }
+}
+
 // The one place every `jf` spawn goes through. `timeoutMs` overrides the
 // local-operation default for a network-bound caller.
 export function runJf(args, { timeoutMs = JF_CLI_TIMEOUT_MS } = {}) {
   selfHealPath();
   const { target, shell } = resolveCommand("jf");
-  if (shell) {
-    const unsafe = args.find((a) => JF_ARG_UNSAFE.test(a));
-    if (unsafe !== undefined) {
-      throw new Error(`runJf: refusing shell-unsafe argument: ${JSON.stringify(unsafe)}`);
-    }
-  }
+  assertJfArgsShellSafe(args, shell, "runJf");
   // Without this, execFileSync forwards jf's stderr to ours.
   // Node's DEP0190 fires on every shell:true spawn with an args array,
   // warning generically about unescaped-argument injection — the exact

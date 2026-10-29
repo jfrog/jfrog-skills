@@ -32,7 +32,7 @@ every choice (`--repo`, target) up front.
 
 **Resolve `<harness>` from the environment check script — never from your model
 name.** If `<UA>` is not already known from this session, run
-`bash <skill_path>/../jfrog/scripts/check-environment.sh <model-slug>` now and capture
+`node <skill_path>/../jfrog/scripts/check-environment.mjs <model-slug>` now and capture
 its stdout as `<UA>`. Parse the `tool=<h>` field from `<UA>` and map it to a
 `jf` harness name:
 

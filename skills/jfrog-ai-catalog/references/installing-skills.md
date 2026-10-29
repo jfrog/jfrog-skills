@@ -52,7 +52,7 @@ up front.
 
 **Resolve `<harness>` from the environment check script — never from your model
 name.** If `<UA>` is not already known from this session, run
-`bash <skill_path>/../jfrog/scripts/check-environment.sh <model-slug>` now and capture
+`node <skill_path>/../jfrog/scripts/check-environment.mjs <model-slug>` now and capture
 its stdout as `<UA>`. Parse the `tool=<h>` field from `<UA>` and map it to a
 `jf` harness name:
 
@@ -60,21 +60,24 @@ its stdout as `<UA>`. Parse the `tool=<h>` field from `<UA>` and map it to a
 |-------------------------|------------------------------|
 | `claude` | `claude-code` |
 | `cursor` | `cursor` |
-| `copilot` | `github-copilot` |
+| `copilot` | `github-copilot` (plus `--global`, see below) |
 | `unknown`, empty, or any other | Ask the user |
 
 If `tool` is `unknown`, empty, or not in the table — do **not** guess. Ask
 the user for the desired install path and use `--path <dir>` instead.
 **Exception — Kiro and Junie (install only):** `jf` accepts neither
 `--harness kiro` nor `--harness junie`, so if you're self-identified as either
-(Kiro IDE / `kiro-cli`, or Junie — `check-environment.sh` detects Junie but not
+(Kiro IDE / `kiro-cli`, or Junie — `check-environment.mjs` detects Junie but not
 Kiro), skip asking and use `--path` directly: `.kiro/skills` (project) /
 `~/.kiro/skills` (global, or `$KIRO_HOME/skills` if `KIRO_HOME` is set) for
 Kiro; `.junie/skills` (project) / `~/.junie/skills` (global) for Junie. This
 exception does not extend to `jf skills list` — see *List currently installed
 skills* in `managing-installed-skills.md`.
 
-Choose exactly one install target (these are mutually exclusive):
+**Exception — Copilot:** also pass `--global` (installs to `~/.copilot/skills`);
+without it, skills land under Copilot Chat's cwd, which VS Code may not scan.
+
+Otherwise choose exactly one install target (these are mutually exclusive):
 
 | Flag | Installs into |
 |------|---------------|
@@ -315,8 +318,8 @@ jf skills update "<slug>" --server-id "<SID>" --harness "<harness>" --repo "<rep
 ```
 
 Use the same install-target flag (`--harness`/`--global`/`--project-dir`/
-`--path`) the skill was installed with. After updating, re-verify the `SKILL.md`
-(see *Verify the install landed* above). If the update download 403s, handle it
+`--path`) the skill was installed with (Copilot: plus `--global`). After
+updating, re-verify the `SKILL.md` (see *Verify the install landed* above). If the update download 403s, handle it
 as in *Handling a blocked download* above.
 
 On success, reply using **this exact template**:

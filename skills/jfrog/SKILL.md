@@ -15,11 +15,13 @@ description: >-
   advanced security, exposures, sast, or any JFrog product name.
   Do NOT use this skill to install, add, remove, list, or manage MCP servers.
 compatibility: >-
-  Requires bash, jq, and awk on PATH. The JFrog CLI (jf) is required for Tier 2
-  (CLI) and Tier 3 (jf api) operations; without it, only MCP (Tier 1) is available.
+  Requires bash, jq, and awk on PATH (Git Bash or WSL on Windows), and Node.js 18
+  or newer for the environment-check scripts (bash fallback if Node is missing).
+  The JFrog CLI (jf) is required for Tier 2 (CLI) and Tier 3 (jf api)
+  operations; without it, only MCP (Tier 1) is available.
 metadata:
   role: base
-  version: "0.43.0"
+  version: "0.44.0"
 ---
 
 # JFrog Skill
@@ -153,8 +155,13 @@ or Tier 3 (`jf`) operation this session, run the environment check. On exit
 0/1, **remember its stdout line verbatim** as `<UA>` for the rest of the
 session. Skip the CLI offer during `jfrog-init`.
 
+Run `node --version` first. Node 18+ → use the `.mjs` scripts below. Missing or
+older → use the `.sh` twin of every script below with `bash` (needs bash and jq;
+Git Bash or WSL on Windows): same arguments incl. `--clear`/`--force`, same
+output.
+
 ```bash
-bash <skill_path>/scripts/check-environment.sh <model-slug>
+node <skill_path>/scripts/check-environment.mjs <model-slug>
 # exit 0/1 stdout: exactly one opaque line — that line IS <UA>. Copy it byte-for-byte.
 # Do not parse, rebuild, or approximate the export value from this comment.
 # stderr: JSON state (cached 24h at ${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/jfrog-skill-state.json)
@@ -163,16 +170,18 @@ bash <skill_path>/scripts/check-environment.sh <model-slug>
 Then, on exit 0/1 only:
 
 ```bash
-bash <skill_path>/scripts/cli-newer-version-offer.sh
+node <skill_path>/scripts/cli-newer-version-offer.mjs
+# No Node 18+ → bash <skill_path>/scripts/cli-newer-version-offer.sh
 # SKIP → continue the original task; do not mention the offer.
 # NEWER_AVAILABLE <cli_version> <latest> (suggest_upgrade) → never block or ask
 # mid-task. Immediately run (before any other command):
-#   bash <skill_path>/scripts/cli-newer-version-offer.sh --clear
+#   node <skill_path>/scripts/cli-newer-version-offer.mjs --clear
+#   (no Node 18+: bash <skill_path>/scripts/cli-newer-version-offer.sh --clear)
 # Then finish the original task (success or failure) and end the final reply
 # with this line verbatim as its very last line (no other upgrade mention):
 #   JFrog CLI <latest> is available (you have <cli_version>). Upgrade? Yes / No
 # Yes (later turn) → references/jfrog-cli-install-upgrade.md, then
-# check-environment.sh --force (Tier 2/3 only on exit 0/1). No → silent.
+# check-environment.mjs (or .sh) <model-slug> --force (Tier 2/3 only on exit 0/1). No → silent.
 # Next offer = next new latest. JFROG_CLI_AVOID_NEW_VERSION_WARNING=true → SKIP.
 ```
 
@@ -192,7 +201,7 @@ invent, rebuild, or edit it). On exit 2/3 there is no `<UA>` — do not synthesi
 one. Current stdout starts with `jfrog-skills/`, never with `model/`.
 
 - **Parent session:** if `<UA>` is missing or starts with `model/` (legacy),
-  discard it and **re-run** `check-environment.sh`. Export the new exit 0/1
+  discard it and **re-run** `check-environment.mjs`. Export the new exit 0/1
   stdout line only when it does **not** start with `model/`; otherwise **stop**
   (do not invent).
 - **Subagents:** use only the parent-passed exact `<UA>` — never re-run the
@@ -251,7 +260,7 @@ Use **`jq`** for all JSON parsing of CLI and API output (pipes, `-r`, filters).
 `${JFROG_CLI_HOME_DIR:-$HOME/.jfrog}/skills-cache/` is **not** a general scratch
 or temp directory. Use it **only** for these two artifacts:
 
-1. **`jfrog-skill-state.json`** — written by `scripts/check-environment.sh`
+1. **`jfrog-skill-state.json`** — written by `scripts/check-environment.mjs`
    (24-hour CLI check cache).
 2. **`onemodel-schema-${JFROG_SERVER_ID}.graphql`** — cached OneModel supergraph
    schema (see `references/onemodel-graphql.md`).
@@ -481,7 +490,7 @@ reused); re-read for `jq` — never re-run the same network call to fix parsing.
 only when the next action needs `jf api` / advanced CLI:
 
 - [ ] `export JFROG_CLI_USER_AGENT='<UA>'` — exact stdout line from
-      `check-environment.sh` exit 0/1; CLI offer done or N/A (`jfrog-init`);
+      `check-environment.mjs` exit 0/1 (`.sh` if no Node 18+); CLI offer done or N/A (`jfrog-init`);
       `NEWER_AVAILABLE` = end-of-reply note, never a mid-task stop
 - [ ] network `jf`: `--server-id <SID>` after subcommand (not `jf --version` /
       `jf config show` pre-SID)

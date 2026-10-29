@@ -25,6 +25,7 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { jfApi, parseHttpStatus } from "./lib/jf-api.mjs";
 import { isMainModule } from "./lib/jf.mjs";
+import { resolveCommand } from "./lib/command.mjs";
 import { SAFE_URL } from "./jfrog-login-save-credentials.mjs";
 
 // Pins stdio so a failing/logging `jf` subprocess can't leak output to
@@ -102,18 +103,25 @@ export function registerSession(platformUrlRaw) {
   const sessionUuid = randomUUID();
   const verifyCode = sessionUuid.slice(-4);
 
-  // Register the session with the Access API
-  const register = jfApi([
-    "--url",
-    platformUrl,
-    "-X",
-    "POST",
-    "-H",
-    "Content-Type: application/json",
-    "-d",
-    JSON.stringify({ session: sessionUuid }),
-    "/access/api/v2/authentication/jfrog_client_login/request",
-  ]);
+  // Register the session with the Access API. A `jf.cmd` shim runs under
+  // cmd.exe, which splits on spaces and reads `"` as a metacharacter (see
+  // jfApi()), so there the body goes over stdin and the header drops its
+  // space. Elsewhere the body stays a plain `-d` arg.
+  const body = JSON.stringify({ session: sessionUuid });
+  const { shell } = resolveCommand("jf");
+  const register = jfApi(
+    [
+      "--url",
+      platformUrl,
+      "-X",
+      "POST",
+      "-H",
+      shell ? "Content-Type:application/json" : "Content-Type: application/json",
+      ...(shell ? ["--input", "-"] : ["-d", body]),
+      "/access/api/v2/authentication/jfrog_client_login/request",
+    ],
+    shell ? { input: body } : {}
+  );
   if (!register.ok) {
     const code = parseHttpStatus(register.stderr);
     process.stderr.write(`ERROR: Session registration failed (HTTP ${code})\n`);

@@ -34,6 +34,7 @@
 import { execFileSync } from "node:child_process";
 import { jfApi, parseHttpStatus } from "./lib/jf-api.mjs";
 import {
+  assertJfArgsShellSafe,
   isMainModule,
   jfConfigShow,
   normalizeJpdUrl,
@@ -46,6 +47,9 @@ import { resolveCommand } from "./lib/command.mjs";
 // so everything interpolated into a `jf` argument is screened first.
 export const SAFE_URL = /^https?:\/\/[A-Za-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~/-]*)?$/;
 const SAFE_TOKEN = /^[A-Za-z0-9._-]+$/;
+// The session UUID goes into the token path, so only register-session's
+// canonical randomUUID() form is accepted.
+export const SAFE_SESSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Derive server ID from URL
 // SaaS:        https://mycompany.jfrog.io  → mycompany
@@ -73,6 +77,13 @@ function execFileOpts(timeoutMs, needsShell, input) {
   };
 }
 
+// Every direct `jf` spawn below goes through the same screen as runJf().
+// An optional `input` is written to the child's stdin.
+export function execJf(jfPath, needsShell, args, timeoutMs, input) {
+  assertJfArgsShellSafe(args, needsShell, "saveCredentials");
+  return execFileSync(jfPath, args, execFileOpts(timeoutMs, needsShell, input));
+}
+
 export function saveCredentials(platformUrlRaw, sessionUuid) {
   if (!platformUrlRaw || !sessionUuid) {
     process.stderr.write("Usage: node jfrog-login-save-credentials.mjs <platform-url> <session-uuid>\n");
@@ -83,12 +94,16 @@ export function saveCredentials(platformUrlRaw, sessionUuid) {
     process.stderr.write("ERROR: platform URL contains unexpected characters.\n");
     return 1;
   }
+  if (!SAFE_SESSION_UUID.test(sessionUuid)) {
+    process.stderr.write("ERROR: session UUID is not a valid UUID.\n");
+    return 1;
+  }
 
   selfHealPath();
   const { target: jfPath, shell: needsShell } = resolveCommand("jf");
 
   try {
-    execFileSync(jfPath, ["--version"], execFileOpts(10_000, needsShell));
+    execJf(jfPath, needsShell, ["--version"], 10_000);
   } catch (err) {
     if (err.code === "ENOENT") {
       process.stderr.write("ERROR: jf is not installed\n");
@@ -151,19 +166,25 @@ export function saveCredentials(platformUrlRaw, sessionUuid) {
 
   // Save credentials to jf config (writes to ~/.jfrog/, needs unrestricted filesystem)
   try {
-    execFileSync(jfPath, ["config", "remove", serverId, "--quiet"], execFileOpts(10_000, needsShell));
+    execJf(jfPath, needsShell, ["config", "remove", serverId, "--quiet"], 10_000);
   } catch {
     // No existing entry to remove — fine.
   }
 
   // Token goes over stdin, never argv — argv is visible to other local users
   // in process listings (and, under a `.cmd` shim, in cmd.exe's command line).
+  const addArgs = ["config", "add", serverId, `--url=${platformUrl}`, "--access-token-stdin", "--interactive=false"];
+  // Screened before the try so a rejected argument isn't reported below as a
+  // sandbox problem.
   try {
-    execFileSync(
-      jfPath,
-      ["config", "add", serverId, `--url=${platformUrl}`, "--access-token-stdin", "--interactive=false"],
-      execFileOpts(15_000, needsShell, accessToken)
-    );
+    assertJfArgsShellSafe(addArgs, needsShell, "saveCredentials");
+  } catch (err) {
+    process.stderr.write(`ERROR: ${err.message}\n`);
+    return 4;
+  }
+
+  try {
+    execJf(jfPath, needsShell, addArgs, 15_000, accessToken);
   } catch {
     process.stderr.write("ERROR: Failed to save credentials with jf config add.\n");
     process.stderr.write("This may be caused by sandbox restrictions on ~/.jfrog/ writes.\n");

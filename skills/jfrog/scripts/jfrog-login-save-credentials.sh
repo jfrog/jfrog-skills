@@ -48,6 +48,12 @@ if [[ -z "$JFROG_PLATFORM_URL" || -z "$SESSION_UUID" ]]; then
   exit 1
 fi
 
+# The session UUID goes into the token path: accept only a canonical UUID.
+if [[ ! "$SESSION_UUID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+  echo "ERROR: session UUID is not a valid UUID." >&2
+  exit 1
+fi
+
 JFROG_PLATFORM_URL="${JFROG_PLATFORM_URL%/}"
 
 for cmd in jq jf; do

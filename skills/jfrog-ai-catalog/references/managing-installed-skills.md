@@ -16,6 +16,7 @@ jf skills list --server-id "<SID>" --harness "<harness>" --check-updates
 ```
 
 Resolve `<harness>` to the current agent (see `installing-skills.md`).
+For Copilot, add `--global` to `--check-updates` too.
 **Exception — Kiro and Junie:** neither `--harness kiro` nor `--harness junie`
 works, and `list` has no `--path` flag, so list directly from the filesystem:
 skill directory names under `.kiro/skills` / `~/.kiro/skills` (or

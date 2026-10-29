@@ -50,6 +50,34 @@ pinned version before running `make test-contracts` (pin: `CI_PYTEST_VERSION` in
 PIP_CONSTRAINT=.github/constraints/validate.txt pip install pytest pyyaml
 ```
 
+## Shared Scripts
+
+Skills are standalone and independent, so a script that several skills need is
+copied into each of them. The original lives in `scripts/`; the copies live in
+`skills/<skill>/scripts/`.
+
+### Adding a shared script
+
+1. Put it in `scripts/`.
+2. Add a line to `dev/sync-scripts.txt`: `<path under scripts/> <skill> [<skill> ...]`.
+3. Run `make sync-scripts` and commit the copies.
+
+Never edit a copy. Change the original and sync again. CI fails if:
+
+- the list is malformed
+- a listed script or skill does not exist
+- a copy is missing or differs from its original
+- a skill that is not listed for a script holds a copy of it
+
+To run the same validation locally: `dev/sync-scripts.sh --validate`.
+
+### Removing a shared script or a skill's copy
+
+Sync never deletes anything.
+
+1. Remove the skill from the script's line in `dev/sync-scripts.txt`, or remove the whole line.
+2. Delete the leftover copies by hand.
+
 ## Base vs Workflow Skills
 
 - **`jfrog`** is the base skill. It provides foundational JFrog knowledge, CLI setup instructions, and routes to workflow skills via internal references.
