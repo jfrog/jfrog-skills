@@ -11,7 +11,7 @@ plus **exactly one** harness file; do NOT open the others.
 ## Step A — detect the harness and open ONE file
 
 The `CLAUDECODE` / `CURSOR_*` / `CODEX_*` / `OPENCODE` signals below
-mirror `../../jfrog/scripts/check-environment.sh` `detect_harness()`; the
+mirror `../../jfrog/scripts/check-environment.mjs` `detectHarness()`; the
 `TERM_PROGRAM=vscode` editor hint is **not** in that script, and Devin and
 Kiro are **not** detected by the script. Each row's signal is **self-contained and
 non-overlapping**, so detection does not depend on evaluation order. The VS
@@ -19,7 +19,7 @@ Code harness file targets the **VS Code editor** (Copilot MCP support), not
 the standalone GitHub Copilot terminal CLI — the CLI (`COPILOT_CLI`) has no
 editor UI or `mcp.json`, so it falls through to the Fallback section.
 
-1. Call `../../jfrog/scripts/check-environment.sh` and parse `tool=<name>` from
+1. Run `node "<skill_path>/../jfrog/scripts/check-environment.mjs"` and parse `tool=<name>` from
    the User-Agent line. When `tool` is `claude` or `cursor`, that matches the
    Claude or Cursor row below — open that harness file. This call also
    satisfies the Prerequisites environment check — capture/export

@@ -78,7 +78,7 @@ At a glance is the floor for partial readers. Domain refs → on-demand via
 | **At a glance (always-read core)** | Primacy floor for partial readers: UA; `--server-id` after subcommand (network; bootstrap exempt); one server / stop-don't-switch (+ compare if user names); no prep mutations unless asked; never guess paths; **never skip** Cautious execution / Server selection / the Tier A Gotchas floor. Full `cli-gotchas.md` is Tier B — required only on `jf api` / advanced CLI paths |
 | **Prerequisites** | Required tools (`jq`); per-runtime network and filesystem permission table (Cursor / Claude Code / Other) — replaces the old standalone "Network permissions" section |
 | **Tool selection strategy** | Three-tier routing: JFrog MCP tools (preferred), `jf` CLI commands (fallback), `jf api` (last resort). Defines when to move to the next tier and how to handle cross-tier permission errors |
-| **Environment check** | Cached CLI detection via `scripts/check-environment.sh <model-slug>`; script prints the user-agent value on stdout following RFC 7231 product/comment grammar — `jfrog-skills/<v> (trigger=skill; tool=<harness>; client=<app>; model=<slug>) jfrog-cli-go/<v>` — where the parens carry semicolon-separated `key=value` annotations (`trigger=skill` always on this path; `tool=`/`client=`/`model=` when known; harness from `detect_harness()`, `client` from `detect_host_client()`) for the agent to remember and `export JFROG_CLI_USER_AGENT='<value>'` (plus `export JFROG_CLI_AI_MODEL='<slug>'`) once at the top of every bash invocation that runs `jf`. APR `jfrog-agent-hooks` eager setup overrides the same grammar with `trigger=hook` when it spawns `jf`. `tool=` is always emitted when known — mcp-management Step A parses this stdout line, which never includes the CLI's `ai-agent/` token. On jf >= 2.120.0 the CLI appends `ai-agent/` / `ai-client/` / `ai-model/` itself, so the script omits `client=` to avoid double-encoding; exit-code contract (MCP Tier 1 can proceed without this check; exit 2/3 means CLI tiers are unavailable). Supported harnesses: see **Agent identity table** below. |
+| **Environment check** | Cached CLI detection via `scripts/check-environment.mjs <model-slug>` (Node 18+; `check-environment.sh` is the bash fallback); script prints the user-agent value on stdout following RFC 7231 product/comment grammar — `jfrog-skills/<v> (trigger=skill; tool=<harness>; client=<app>; model=<slug>) jfrog-cli-go/<v>` — where the parens carry semicolon-separated `key=value` annotations (`trigger=skill` always on this path; `tool=`/`client=`/`model=` when known; harness from `detect_harness()`, `client` from `detect_host_client()`) for the agent to remember and `export JFROG_CLI_USER_AGENT='<value>'` (plus `export JFROG_CLI_AI_MODEL='<slug>'`) once at the top of every bash invocation that runs `jf`. APR `jfrog-agent-hooks` eager setup overrides the same grammar with `trigger=hook` when it spawns `jf`. `tool=` is always emitted when known — mcp-management Step A parses this stdout line, which never includes the CLI's `ai-agent/` token. On jf >= 2.120.0 the CLI appends `ai-agent/` / `ai-client/` / `ai-model/` itself, so the script omits `client=` to avoid double-encoding; exit-code contract (MCP Tier 1 can proceed without this check; exit 2/3 means CLI tiers are unavailable). Supported harnesses: see **Agent identity table** below. |
 | **`~/.jfrog/skills-cache/` — allowed files only** | Restricts the cache to two artifacts; routes everything else to `/tmp` |
 | **Cautious execution** | Confirm-before-mutate (all tiers), ask-on-ambiguity, never invent preparatory mutations, never guess tool names or API paths (anti-hallucination rule) |
 | **Server selection rules (mandatory)** | Single-server resolution; `awk` one-liner for the default server; no silent fallback; MCP/CLI auth independence warning; standard error-response template |
@@ -228,8 +228,8 @@ Helper scripts in `scripts/` handle environment bootstrapping and credential man
 
 | Script | Purpose | When called |
 |--------|---------|-------------|
-| `cli-newer-version-offer.sh` | Reads cache `suggest_upgrade` plus existing `cli_version` / `latest_version_available`; prints `SKIP` or `NEWER_AVAILABLE <cur> <latest>`; `JFROG_CLI_AVOID_NEW_VERSION_WARNING=true` (same opt-out as `jf`) forces `SKIP`; `--clear` writes `suggest_upgrade: false` as soon as `NEWER_AVAILABLE` is read. The offer never blocks: the agent finishes the task, then ends its reply with a one-line Yes/No note | After `check-environment.sh` exit 0/1 (not during `jfrog-init`) |
-| `check-environment.sh` | Verifies `jf` CLI is installed and current; caches result for 24h. Writes `suggest_upgrade: true` when published latest is strictly newer and the flag is missing, unknown, or the latest changed; writes `false` when current is equal/newer or this latest was already offered. Failed probes keep the previous valid latest. | First JFrog operation in a session |
+| `cli-newer-version-offer.mjs` (bash fallback: `.sh`) | Reads cache `suggest_upgrade` plus existing `cli_version` / `latest_version_available`; prints `SKIP` or `NEWER_AVAILABLE <cur> <latest>`; `JFROG_CLI_AVOID_NEW_VERSION_WARNING=true` (same opt-out as `jf`) forces `SKIP`; `--clear` writes `suggest_upgrade: false` as soon as `NEWER_AVAILABLE` is read. The offer never blocks: the agent finishes the task, then ends its reply with a one-line Yes/No note | After `check-environment.mjs` exit 0/1 (not during `jfrog-init`) |
+| `check-environment.mjs` (bash fallback: `.sh`) | Verifies `jf` CLI is installed and current; caches result for 24h. Writes `suggest_upgrade: true` when published latest is strictly newer and the flag is missing, unknown, or the latest changed; writes `false` when current is equal/newer or this latest was already offered. Failed probes keep the previous valid latest. | First JFrog operation in a session |
 | `jfrog-login-register-session.sh` | Registers a browser login session; outputs `SESSION_UUID` and `VERIFY_CODE` | Adding a new server via web login |
 | `jfrog-login-save-credentials.sh` | Retrieves token from completed login session and runs `jf config add`; verifies with `jf api /artifactory/api/system/version` | Completing a web login flow |
 
@@ -240,7 +240,7 @@ The runtime cache lives outside the installed skill tree, at
 `jf config`. This keeps the skill itself read-only-installable. The directory
 holds **only**:
 
-- **`jfrog-skill-state.json`** — output of `check-environment.sh`
+- **`jfrog-skill-state.json`** — output of `check-environment.mjs`
 - **`onemodel-schema-<server-id>.graphql`** — cached OneModel supergraph per configured CLI server
 
 Agents must **not** store HTTP responses, GraphQL results, or other scratch files there; use `/tmp` (or `mktemp`) per the base skill's SKILL.md.
@@ -295,7 +295,7 @@ Agent receives user request
     ├─ Try JFrog MCP tool (Tier 1 — no env check needed)
     │   └─ If a JFrog MCP tool exists and succeeds → done
     │
-    ├─ Run check-environment.sh (first CLI/API operation only)
+    ├─ Run check-environment.mjs (first CLI/API operation only)
     │
     ├─ Match task to the routing index in references/INDEX.md
     │   (via the "When to read reference files" pointer in SKILL.md)

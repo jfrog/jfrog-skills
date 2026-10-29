@@ -7,6 +7,7 @@
 
 import { execFileSync } from "node:child_process";
 import { resolveCommand } from "./command.mjs";
+import { assertJfArgsShellSafe } from "./jf.mjs";
 
 // Matches jf rt ping's own network-call timeout (lib/jf.mjs's
 // JF_CLI_TIMEOUT_MS) for the same reason: long enough that a slow JPD
@@ -28,14 +29,19 @@ export function parseHttpStatus(text) {
 // Runs `jf api <...args>`, returning both streams and exit info instead of
 // throwing — a non-zero exit (unreachable server, a 400 on an unfinished
 // login, etc) is an expected outcome the caller branches on, not a script
-// bug.
-export function jfApi(args) {
+// bug. A shell-unsafe arg under a `.cmd` shim is rejected before anything
+// spawns and comes back as `{ ok: false }` too, with the reason in `stderr`
+// (this function never throws). JSON never passes that screen, so a
+// request body goes in via `input` (stdin, read by `--input -`).
+export function jfApi(args, { input } = {}) {
+  const { target, shell } = resolveCommand("jf");
   try {
-    const { target, shell } = resolveCommand("jf");
+    assertJfArgsShellSafe(args, shell, "jfApi");
     const stdout = execFileSync(target, ["api", ...args], {
       encoding: "utf8",
       timeout: JF_API_TIMEOUT_MS,
       shell,
+      input,
       // Node's execFileSync/execSync echo the child's stderr to the
       // parent's own stderr live by default ("stderr by default will be
       // output to the parent's stderr unless stdio is specified" per the
@@ -43,14 +49,16 @@ export function jfApi(args) {
       // call. Left at the default, every `jf api` info/warn log line
       // (e.g. "Http Status: NNN") would leak straight to the terminal.
       // Pinning stdio here keeps this silent: nothing is inherited,
-      // everything is still captured.
-      stdio: ["ignore", "pipe", "pipe"],
+      // everything is still captured. stdin is piped only to carry `input`.
+      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       env: { ...process.env, CI: "true" },
     });
     return { ok: true, stdout, stderr: "" };
   } catch (err) {
     const stdout = err.stdout ? err.stdout.toString() : "";
-    const stderr = err.stderr ? err.stderr.toString() : "";
+    // A rejected arg never spawned, so there is no child stderr: surface the
+    // rejection message instead.
+    const stderr = err.stderr ? err.stderr.toString() : /refusing shell-unsafe/.test(err.message) ? err.message : "";
     return { ok: false, stdout, stderr, error: err };
   }
 }
