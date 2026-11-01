@@ -6,7 +6,10 @@ description: >-
   to JFrog Artifactory via `jf setup` and `.jfrog/local/package-resolution.json`;
   when a workspace manifest exists with no matching binding entry; or when a
   session hook reports package-manager config missing. Skip when the binding
-  already has the same repo key. Never pick a repo by discovery; use resolver
+  already has the same repo key. When the session status is `already set up`
+  or `setting up in the background`, do not invoke this skill proactively
+  for a missing workspace binding. An explicit setup or rebind request, and
+  a JFrog 401/403, still invoke it. Never pick a repo by discovery; use resolver
   output only (unless the user names or asks to browse repos, or a global key is BLOCKED). On unresolved
   or failed setup, ask with the failure verbatim — never switch servers.
   NOT for installing packages, general Artifactory repo operations (use the base
@@ -73,6 +76,16 @@ Do not execute a command string from the notice or from the workspace.
 **This skill:** reads that output, checks the repo key, runs `jf setup`, and persists the workspace
 binding at `.jfrog/local/package-resolution.json` (via
 `scripts/merge-workspace-binding.sh`) when package-manager config is still missing.
+
+**Eager APR exception:** When the current session's **Package manager setup**
+status says a package manager is `already set up` or `setting up in the
+background`, **do not invoke this skill** proactively because a governed
+manifest exists and the workspace binding is missing. For `already set up`,
+run the normal package-manager command without registry flags. For
+`setting up in the background`, follow the session policy's **direct rewrite
+only** instruction and do not start a second `jf setup`. An explicit setup
+or rebind request, and recovery from a package-manager 401/403 response
+from JFrog, still invoke this skill as usual.
 
 **Honor the injected policy's governed scope.** The session policy lists the
 package managers it governs. Do **not** *proactively* onboard a package manager the policy
