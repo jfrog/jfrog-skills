@@ -21,7 +21,7 @@ compatibility: >-
   operations; without it, only MCP (Tier 1) is available.
 metadata:
   role: base
-  version: "0.44.0"
+  version: "0.45.0"
 ---
 
 # JFrog Skill

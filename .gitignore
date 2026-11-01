@@ -25,3 +25,6 @@ e2e/.venv/
 e2e/.env
 e2e/.output/
 e2e/.pytest_cache/
+
+# Local CI log dumps. Not part of the repo.
+.ci-investigation/

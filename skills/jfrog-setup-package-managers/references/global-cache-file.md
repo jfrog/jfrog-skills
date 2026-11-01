@@ -46,7 +46,8 @@ pruning, the file cannot.
 ```
 
 Each `servers.<serverId>` entry holds `repositories`, `cached_at`, `source`, and
-`agentsConfigMtimeMs` (mtime of `~/.jfrog/agents-conf.json` at last refresh).
+`agentsConfigMtimeMs` (mtime of `~/.jfrog/agents-conf.json` at last refresh),
+plus an optional `unresolved` map when a configured key failed verification.
 The workspace binding file at
 [`.jfrog/local/package-resolution.json`](workspace-binding.md) holds
 only `repositories`. The map key **is** the `serverId`.
@@ -58,6 +59,7 @@ only `repositories`. The map key **is** the `serverId`.
 | `servers.<serverId>.cached_at` | ISO-8601 timestamp of the last refresh. TTL from `packageResolution.cacheTtlDays` in agents-conf.json (default 7). |
 | `servers.<serverId>.agentsConfigMtimeMs` | Invalidates cache when `~/.jfrog/agents-conf.json` changes. |
 | `servers.<serverId>.source` | `verified` = keys from agents-conf.json checked via `GET /api/repositories/{key}`; `agents-config` = trusted without HTTP (`verifyRepos: false`). |
+| `servers.<serverId>.unresolved.<pkgType>` | Optional. `{ "repoKey", "cause" }` for a configured key that failed verification (`not-found`, `package-type-mismatch`, `http-403`, `unreachable`, …). An entry with a failed key is re-checked after 1 hour, not after `cacheTtlDays`. Read-only for this skill — see [Broken global repo key](../SKILL.md#broken-global-repo-key-blocked). |
 
 Package type keys used in the file are `npm`, `pypi`, `maven`, `gradle`, `go`,
 `docker`, `helm`, `nuget`. Note `pypi` (not `pip`) — same convention the

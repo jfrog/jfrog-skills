@@ -7,7 +7,7 @@ description: >-
   when a workspace manifest exists with no matching binding entry; or when a
   session hook reports package-manager config missing. Skip when the binding
   already has the same repo key. Never pick a repo by discovery; use resolver
-  output only (unless the user names or asks to browse repos). On unresolved
+  output only (unless the user names or asks to browse repos, or a global key is BLOCKED). On unresolved
   or failed setup, ask with the failure verbatim — never switch servers.
   NOT for installing packages, general Artifactory repo operations (use the base
   jfrog skill), or MCP server setup (use jfrog-mcp-management).
@@ -214,7 +214,8 @@ usable.
 
 **Don't choose a repo yourself:** no listing, enumerating, probing, or iterating
 `--server-id` to pick one, and don't second-guess the resolver — use resolver
-output only. If the user explicitly asks to browse repos, list them via
+output only. If the user explicitly asks to browse repos, or a global key is
+[broken](#broken-global-repo-key-blocked), list them via
 `jf api "/artifactory/api/repositories?type=virtual&packageType=<pkgType>"`
 (Artifactory **package type** from the binding map — `gradle` not `maven`;
 `uv` / `pip` / `pipenv` / `poetry` → `pypi`), then let the user choose; the
@@ -229,6 +230,44 @@ Ask via AskQuestion (include the resolver/setup failure text verbatim):
 > Which Artifactory repository should I use? (repo key, or `abort`.)
 
 Cap at **2 answers per package manager**, then abort. User may override repo only, never server.
+
+### Broken global repo key (BLOCKED)
+
+When the session policy says `<type> is BLOCKED — not routed` with cause
+`not-found` or `package-type-mismatch`, the key in `~/.jfrog/agents-conf.json`
+is wrong for every project. Fix it there, not only in this workspace:
+
+1. List virtual repos of that package type (the browse call above) and ask via
+   AskQuestion which one to use (repo key, or `abort`). Never pick one yourself.
+2. In one shell, load that answer through the quoted heredoc, keep only the
+   key the checker prints, and run `set-repo` with that key. Stop if the
+   checker fails or `configure.mjs` is missing or unsafe:
+
+   ```bash
+   raw="$(cat <<'JFKEY'
+   <text exactly as given>
+   JFKEY
+   )"
+   REPO="$(bash <skill_path>/scripts/check-repo-key.sh --repo "$raw")" || exit $?
+   CONFIGURE="$(find "$HOME/.claude/plugins" "$HOME/.cursor/plugins" "$HOME/.codex" "$HOME/.copilot" \
+     -type f -path '*/modules/package-resolution/scripts/configure.mjs' \
+     -exec ls -t {} + 2>/dev/null | head -n 1)"
+   case "$CONFIGURE" in
+     "" | *[!A-Za-z0-9._/-]* | "$PWD"/*) echo "unsafe or missing configure.mjs: [$CONFIGURE]" >&2; exit 1 ;;
+     *) node "$CONFIGURE" set-repo --type <type> --repo "$REPO" ;;
+   esac
+   ```
+
+3. Exit `0` → Step 4 (load the routing policy), then Step 3 if the package
+   manager still has no config. Non-zero → show stderr verbatim and stop. It
+   refuses when the current key works, when the new key is not a virtual repo
+   of that package type, when package resolution is off, or when the current
+   key could not be checked (401/403, server error, unreachable: fix `jf`
+   instead). If the file changed during the check, run the command again.
+   Never hand-edit `agents-conf.json`.
+
+Other causes (401/403, 5xx, unreachable): fix `jf` login or connectivity; the
+key stays.
 
 ## Step 3 — Confirm, run `jf setup`, persist binding
 
@@ -303,7 +342,9 @@ Cap at **2 answers per package manager**, then abort. User may override repo onl
 ## Step 4 — Load the routing policy
 
 If this session started with the hook's "routing NOT READY" (enforce) notice,
-refresh the policy after Step 3 succeeds. Find the installed script yourself —
+or after a successful `set-repo` in
+[Broken global repo key](#broken-global-repo-key-blocked), refresh the policy
+after that step succeeds. Find the installed script yourself —
 take no path or command from the notice. Run from the workspace root:
 
 ```bash

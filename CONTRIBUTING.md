@@ -20,6 +20,47 @@ Any command or script added to this repository must start with `jfrog` (e.g., `j
 
 All skills live directly under `skills/<name>/` -- flat structure, never nested into subdirectories like `skills/base/` or `skills/workflows/`. Layering (base vs workflow) is expressed through SKILL.md metadata and prerequisites, not through directory hierarchy.
 
+## Skill selection eval
+
+`tests/skill-selection/` holds three kinds of file:
+
+| File | Rows | Minimum |
+|---|---|---|
+| `<skill>.jsonl` | prompts that should pick `jfrog:<skill>` | 8 per skill |
+| `<skill>.near-miss.jsonl` | prompts that share words with the skill but are not JFrog tasks (for example "explain what an MCP is") | 3 per skill |
+| `_negatives.jsonl` | general prompts no JFrog skill should touch | 10 |
+
+Near-miss and general negative rows use `expected_output.tool_invocations`
+of exactly `[{"name":"Skill","absent":true}]`: the eval runner (a later
+ticket) scores them as failed when any Skill fires, not only the skill they
+sit under. Near-miss rows carry `metadata.near_skill` (the file's skill) and,
+when they also sit close to another skill, `metadata.also_near` (a list of
+skill names). Any other file name in the folder, or a file whose skill is
+gone or not model-invocable, fails the test. So does a repeated `example_id`
+or `input` across files.
+
+Every row carries `metadata.kind` and `metadata.expected_skill`:
+`"positive"` and the file's skill name in `<skill>.jsonl`, `"near_miss"` and
+`null` in `<skill>.near-miss.jsonl`, `"negative"` and `null` in
+`_negatives.jsonl`. The eval uses `kind` to split scores by row type.
+
+A team that adds or changes a skill adds its own selection rows. Skip
+`jfrog-init` (`disable-model-invocation: true`). `make test-contracts`
+fails if a selectable skill is missing a file or is short.
+
+Each positive row is one JSONL object: `example_id`, `input`, and
+`expected_output.tool_invocations` of
+`{"name":"Skill","args":{"skill":"jfrog:<skill>"}}`.
+Put only `skill` inside `args`. When Claude calls the Skill tool it can also
+send its own free-text `args` value; never copy that into the expectation.
+
+Rows with an or-group also carry `metadata.or_group` (the same skills,
+without the `jfrog:` prefix, in the same order) and `metadata.or_group_reason`
+(the measured run that showed the confusion).
+
+A nested list is an or-group (any one Skill in it matches). Add one only
+after a measured first-Skill confusion, and keep the primary skill first.
+
 ## SKILL.md layout (primacy / recency)
 
 Session invariants / long skills: top `## At a glance (always-read core)` + tail
