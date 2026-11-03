@@ -504,7 +504,7 @@ add-on where the agent provides it.
    asserting whether this skill did. **When its `url` contains `/mcp-gateway/`
    (a remote MCP Gateway entry), show that complete `url`, from `http` to the
    end — in a table too, never shortened with `...`** — e.g.
-   `https://acme.jfrog.io/mcp-gateway/mcp/proj/com.supabase%2Fmcp`, not
+   `https://acme.jfrog.io/mcp-gateway/mcp/proj/02UkVNT1RFX2NvbS5zdXBhYmFzZS9tY3A`, not
    `.../mcp-gateway/...`.
 2. **If the harness exposes an MCP status command or view** (the harness-config
    "List installed" column — e.g. Claude Code's `claude mcp list`, Cursor/VS

@@ -50,8 +50,9 @@ URL.
   Agent Guard entry uses.
 - `url` is `routing.url` copied verbatim. Never build it, never normalise it,
   never re-encode it, never append a path. It always points at the tenant's own
-  JFrog Platform. A `%2F` in the URL is correct and must be written through
-  unchanged.
+  JFrog Platform. Its last segment is the MCP's registry id: an opaque id in the
+  URL-safe base64 alphabet (`A-Z a-z 0-9 - _`), so it never needs escaping.
+  Agent Guard checks it before returning a URL.
 - No `command`, no `args`, no `env`, no `${VAR}` — the Gateway holds the
   upstream credential, so there is nothing for the user to export. A `${VAR}` in
   a Gateway entry is a bug.

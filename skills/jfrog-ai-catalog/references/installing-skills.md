@@ -23,7 +23,8 @@ target is already installed, so its repo is fixed — not automatically by
 `jf`, but by reading it back from that install's own record (see *Update an
 installed skill* below) — and `allowStatus` is a per-repo fact, not
 per-version, so every version in that already-allowed repo is equally
-allowed. "Latest version in this specific, already-resolved repo" carries
+allowed — once update has confirmed that repo is still in the `--allowed-only`
+listing. "Latest version in this specific, already-resolved repo" carries
 none of the version/repo ambiguity this rule exists to prevent.
 
 **The `jf skills install` command takes no project.** Resolving which repo hosts
@@ -288,39 +289,50 @@ On success, reply using **this exact template**:
 
 To upgrade an installed skill to a newer version, use the CLI (it re-downloads
 and reinstalls in place). **`jf skills update` does not remember which repo the
-skill was installed from — you must resolve and pass `--repo` yourself.**
+skill was installed from — a repo has to be passed with `--repo`.**
 Without it, update either fails with `multiple skills repositories found`
 (listing every skills repo on the whole server, not scoped to this project or
 its governance policy at all) or, if handed some other repo, silently updates
-from it — even one that never hosted the originally installed skill. Never
-run `jf skills update` without a resolved `--repo`.
+from it — even one that never hosted the originally installed skill. The
+script below resolves and checks the repo for you.
 
-**Resolve `<repo>` from the existing install, never by asking the user or
-guessing.** Every install writes it to `.jfrog/skill-info.json` under the
-install directory:
+**Run the update script; never build the `jf skills update` command yourself.**
+It reads `<repo>` from the install's `.jfrog/skill-info.json`, checks it is a
+plain id, confirms it is still in the project's `--allowed-only` listing, and
+only then runs `jf skills update`. That file is untrusted (a project can commit
+its own copy), so never paste a value from it into a command.
 
-```bash
-jq -r '.repo' "<install-dir>/<slug>/.jfrog/skill-info.json"
-```
-
-If that file or its `.repo` field is missing (for example, a skill that was
-manually copied in rather than installed with `jf skills install`), tell the
-user you can't safely determine which repo to update from and stop. Do not
-substitute a repo from a fresh catalog listing instead — a same-named repo
-returned there is not proof it is the repo this specific install came from.
+Resolve `<PROJECT>` per **Resolve the project** in `../SKILL.md` Prerequisites,
+then run the script with network access:
 
 ```bash
-jf skills update "<slug>" --server-id "<SID>" --harness "<harness>" --repo "<repo>" --version "latest" --quiet
-# Preview without touching Artifactory:
-jf skills update "<slug>" --server-id "<SID>" --harness "<harness>" --repo "<repo>" --dry-run
-# Reinstall even if already at the target version:
-jf skills update "<slug>" --server-id "<SID>" --harness "<harness>" --repo "<repo>" --force --quiet
+node "<skill_path>/scripts/jfrog-update-skill.mjs" --slug '<slug>' --install-dir "<install-dir>" \
+  --server-id "<SID>" --project "<PROJECT>" --harness "<harness>"
+# Preview without touching Artifactory: add --dry-run
+# Reinstall even if already at the target version: add --force
 ```
 
-Use the same install-target flag (`--harness`/`--global`/`--project-dir`/
-`--path`) the skill was installed with (Copilot: plus `--global`). After
-updating, re-verify the `SKILL.md` (see *Verify the install landed* above). If the update download 403s, handle it
-as in *Handling a blocked download* above.
+Keep the slug in single quotes (double quotes don't stop `$(...)`). If it has
+anything but letters, digits, `.`, `_` or `-`, don't run the command: tell the
+user the skill name isn't valid.
+
+Use the same install target the skill was installed with:
+`--harness "<harness>"`, `--global`, `--project-dir "<dir>"` or `--path "<dir>"`
+(`--harness` can be combined with `--global`, as Copilot does, or with
+`--project-dir`). Always invoke via `node <path>`.
+
+Handle the exit code:
+
+- **0** — updated. Re-verify the `SKILL.md` (see *Verify the install landed*
+  above) and reply with the template below.
+- **3** — refused (the repo is missing or unsafe, or is no longer
+  governance-allowed). Show the single stderr line **verbatim** and stop. Do not
+  retry, and do not pick a repo from the catalog listing instead — a same-named
+  repo returned there is not proof it is the repo this install came from.
+- **1** — failed. If the download 403s, handle it as in *Handling a blocked
+  download* above, using the repo the script printed (`Updating from repo: …`)
+  and the version from `jf`'s `Using latest version: <version>` line; otherwise report the error line.
+- **2** — usage error: a bug in how the script was invoked.
 
 On success, reply using **this exact template**:
 
