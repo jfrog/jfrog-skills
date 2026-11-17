@@ -13,11 +13,11 @@ Install by **slug** (the registry `slug`/`name`, never a display name). Latest
 version is used by default, and the user may pass an explicit version.
 **The `jf agent plugins install` command takes no project.** Resolving which repo hosts
 the slug uses `--list-agent-plugin-versions` (below), which does require `--project`, so
-use `<PROJECT>` resolved at session start (see SKILL.md Prerequisites).
+use the AI Governance project `<PROJECT>` (see SKILL.md Prerequisites).
 
 ```bash
 jf agent plugins install "<slug>" \
-  --server-id "<SID>" \
+  --server-id "<SERVER_ID>" \
   --version "latest" \
   --repo "<repo>" \
   --harness "<harness>" \
@@ -63,7 +63,7 @@ up where the slug is hosted with the Agent Guard:
 
 ```bash
 npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard \
-  --list-agent-plugin-versions --project "<PROJECT>" --agent-plugin "<slug>" [--server "<SID>"] --format json
+  --list-agent-plugin-versions --project "<PROJECT>" --agent-plugin "<slug>" --server "<SERVER_ID>" --format json
 # read versions[].version and versions[].locations[].repoKey
 ```
 
@@ -98,7 +98,7 @@ After install, confirm the slug shows up as installed — don't guess where
 the source of truth for what's actually installed:
 
 ```bash
-jf agent plugins list --server-id "<SID>" --harness "<harness>" --format json \
+jf agent plugins list --server-id "<SERVER_ID>" --harness "<harness>" --format json \
   | jq -e --arg slug "<slug>" '.[] | select(.name == $slug)' >/dev/null \
   && echo "installed" || echo "MISSING from installed list"
 ```
@@ -116,13 +116,13 @@ To upgrade an installed plugin to a newer version, use the CLI (it re-downloads
 and reinstalls in place):
 
 ```bash
-jf agent plugins update --slug "<slug>" --server-id "<SID>" --harness "<harness>" --version "latest" --quiet
+jf agent plugins update --slug "<slug>" --server-id "<SERVER_ID>" --harness "<harness>" --version "latest" --quiet
 # Preview without touching Artifactory:
-jf agent plugins update --slug "<slug>" --server-id "<SID>" --harness "<harness>" --dry-run
+jf agent plugins update --slug "<slug>" --server-id "<SERVER_ID>" --harness "<harness>" --dry-run
 # Reinstall even if already at the target version:
-jf agent plugins update --slug "<slug>" --server-id "<SID>" --harness "<harness>" --force --quiet
+jf agent plugins update --slug "<slug>" --server-id "<SERVER_ID>" --harness "<harness>" --force --quiet
 # Update all installed plugins at once:
-jf agent plugins update --all --server-id "<SID>" --harness "<harness>" --quiet
+jf agent plugins update --all --server-id "<SERVER_ID>" --harness "<harness>" --quiet
 ```
 
 Note: unlike `jf skills update`, the slug is passed as `--slug <slug>` (a named

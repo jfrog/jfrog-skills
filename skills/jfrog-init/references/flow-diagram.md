@@ -61,7 +61,31 @@ flowchart TD
     S4ASK -->|Yes| S4
     S4ASK -->|No| STOP0C["STOP: user cancelled"]:::stopBox
     S4 -->|unreachable/timeout/other| STOP2["STOP: show raw error (network/URL hint included)"]:::stopBox
-    S4 -->|yes| S5
+    S4 -->|yes| GET["jfrog-ai-governance-config.mjs get (corrupt: one line, it will be replaced)"]:::stepBox
+
+    GET --> ASKGOV["AskUserQuestion: AI Governance server — saved server (if get returned another serverId), Same server or no AI Catalog, Different server"]:::fixBox
+    ASKGOV -->|same server / no AI Catalog| LIST
+    ASKGOV -->|saved server| PINGGOV
+    ASKGOV -->|different server| ASKURL["Plain chat: AI Governance server"]:::fixBox
+    ASKURL -->|the jf CLI default server| LIST
+    ASKURL -->|another server in jf config| PINGGOV
+    ASKURL -->|not in jf config yet| CONNECT["Web login or access token (Step 3's picker, jf CLI default server unchanged)"]:::fixBox
+    CONNECT --> PINGGOV["Ping the AI Governance server (Step 4's branch table)"]:::stepBox
+    PINGGOV -->|yes| LIST
+
+    LIST["jfrog-ai-governance-config.mjs list"]:::stepBox
+    LIST -->|saved project for this server| ASKKEEP["AskUserQuestion: Keep KEY as your AI Governance project? Yes/No"]:::fixBox
+    LIST -->|none| ASKPROJ
+    ASKKEEP -->|Yes| SET
+    ASKKEEP -->|No| ASKPROJ["AskUserQuestion: first 2 projects (from enumeration), No AI Catalog, or Other to type one"]:::fixBox
+    ASKPROJ -->|picked or typed| SET
+    ASKPROJ -->|enumeration failed: jf missing / credentials rejected| STOPCREDS["STOP: show raw error (re-auth via the Step 3 picker)"]:::stopBox
+
+    SET["jfrog-ai-governance-config.mjs set --force"]:::autoBox
+    SET -->|exit 2, invalid project key| ASKKEY["Plain chat: ask for the project key again (once; rejected again: STOP, nothing saved)"]:::fixBox
+    ASKKEY --> SET
+    SET -->|exit 1, or any other exit 2| STOPSET["STOP: show its error line"]:::stopBox
+    SET -->|exit 0| S5
 
     S5["5. Plugin mcp.json has a valid jfrog entry? (auto-substitutes a JFROG_PLATFORM_URL/JFROG_URL placeholder inline, if present)"]:::stepBox
     S5 -->|substitution needed, server-id ambiguous| ASKSRV5["AskUserQuestion: pick server-id"]:::fixBox
@@ -73,31 +97,21 @@ flowchart TD
     S5R -->|enabled: ✅ if signed in to this JPD, else offer sign-in AFTER Final Summary| S6
     F5R --> S6
 
-    S6["6. Project resolved?"]:::stepBox
-    S6 -->|state file has current project| ASKREUSE["AskUserQuestion: reuse CURRENT or pick different"]:::fixBox
-    ASKREUSE -->|reuse| S7
-    ASKREUSE -->|different| ASKPROJ["AskUserQuestion: first 2 projects (from enumeration), or Other to type one"]:::fixBox
-    S6 -->|no state file| ASKPROJ
-    ASKPROJ -->|picked or typed — accepted verbatim, no probe, no matching| S7
-    ASKPROJ -->|enumeration failed: jf missing / credentials rejected| STOPCREDS["STOP: show raw error (re-auth via the Step 3/4 picker)"]:::stopBox
+    S6["6. AI Catalog reachable and user entitled? (AI Governance server)"]:::stepBox
+    S6 -->|anon 404 / connection failure / 5xx, exit 1| F6U["ℹ️ AI Catalog not available: catalogReason=unreachable — JPD may not host AI Catalog, or it's down right now (non-blocking)"]:::fixBox
+    F6U --> S7CHECK
+    S6 -->|authed 401 or 403, not entitled, exit 4| F6E["ℹ️ AI Catalog not available: catalogReason=not_entitled — ask JFrog admin for AI Catalog Read role (non-blocking)"]:::fixBox
+    F6E --> S7CHECK
+    S6 -->|jf missing / credentials rejected / unexpected response shape, exit 3| STOP6["STOP: show raw error"]:::stopBox
+    S6 -->|yes, entitled, exit 0| S7CHECK
 
-    S7["7. AI Catalog reachable and user entitled?"]:::stepBox
-    S7 -->|anon 404 / connection failure / 5xx, exit 1| F7U["Note: catalogReason=unreachable — JPD may not host AI Catalog, or it's down right now (non-blocking)"]:::fixBox
-    F7U --> WRITE
-    S7 -->|authed 401 or 403, not entitled, exit 4| F7E["Note: catalogReason=not_entitled — ask JFrog admin for AI Catalog Read role (non-blocking)"]:::fixBox
-    F7E --> WRITE
-    S7 -->|ambiguous server-id, exit 2| ASKSRV7["AskUserQuestion: which jf server? (server-picker.md), then re-run"]:::fixBox
-    ASKSRV7 --> S7
-    S7 -->|jf missing / credentials rejected / unexpected response shape, exit 3| STOP7["STOP: show raw error — no state file written"]:::stopBox
-    S7 -->|yes, entitled, exit 0| WRITE["Write state file: server, jpdUrl, and currentActiveProject if resolved (else previous project, if any, is kept) — written on every NON-blocking path out of Step 7"]:::autoBox
-
-    WRITE --> S8CHECK{"Step 7 green AND harness == Claude Code? (detectHarness() reused from Step 5)"}:::stepBox
-    S8CHECK -->|no| DONE
-    S8CHECK -->|yes| S8["8. Claude agent-plugin marketplace registered?"]:::stepBox
-    S8 -->|exit 0, success| F8OK["Final Summary: ✅ JFrog Marketplace, plus the trailing sentence"]:::autoBox
-    S8 -->|exit 1 or 3, failed| F8BAD["Final Summary: ⚠️ JFrog Marketplace — not registered, no cause"]:::fixBox
-    F8OK --> DONE
-    F8BAD --> DONE
+    S7CHECK{"Step 6 green AND harness == Claude Code? (detectHarness() reused from Step 5)"}:::stepBox
+    S7CHECK -->|no| DONE
+    S7CHECK -->|yes| S7["7. Claude agent-plugin marketplace registered? (AI Governance server and project)"]:::stepBox
+    S7 -->|exit 0, success| F7OK["Final Summary: ✅ JFrog Marketplace, plus the trailing sentence"]:::autoBox
+    S7 -->|exit 1 or 3, failed| F7BAD["Final Summary: ⚠️ JFrog Marketplace — not registered, no cause"]:::fixBox
+    F7OK --> DONE
+    F7BAD --> DONE
 
     DONE(["JFrog init complete"]):::doneBox
 

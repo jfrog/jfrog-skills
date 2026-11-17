@@ -126,11 +126,9 @@ export async function detectServerPing(serverIdArg) {
     const detail = anonymousUnreachable
       ? `jf rt ping OK — anonymous GET ${endpoint} failed, but that only reflects this process's own network path (proxy/CA), not the server${NETWORK_UNREACHABLE_HINT}`
       : `reachable at ${endpoint} AND jf rt ping OK (HTTP ${httpCode})`;
-    // `jpdUrl` is the caller's clean, structured way to get this walk's
-    // resolved JPD URL — SKILL.md's Final Summary uses it (alongside
-    // Step 6's `resolvedKey`) to call `jfrog-state-file.mjs set` directly,
-    // without parsing a URL back out of the human-readable `detail` string.
-    emit({ check: "server-ping", status: "green", detail, jpdUrl: url });
+    // `serverId` and `jpdUrl` give the caller the resolved jf server
+    // (even when it was picked silently) without parsing `detail`.
+    emit({ check: "server-ping", status: "green", detail, serverId, jpdUrl: url });
     return 0;
   }
 

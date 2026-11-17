@@ -45,14 +45,13 @@ in `mcp.json`.
 > forwarding that variable on this platform — see the "0 tools" entry in
 > [key-rules-and-troubleshooting.md](key-rules-and-troubleshooting.md).
 
-## JFrog credentials — from the `jf` config
+## Junie may not pass your shell's env vars
 
-Junie may not forward ambient shell env to the MCP subprocess, so authenticate
-JFrog via the on-disk `jf` config: **always include `--server <SERVER_ID>` in
-`args`** (resolve `<SERVER_ID>` per [agent-guard-common.md](agent-guard-common.md))
-so the Agent Guard reads that server's URL + token from `~/.jfrog/` — do not omit
-it even with a single `jf` server. Don't rely on `JFROG_URL` /
-`JFROG_ACCESS_TOKEN` here — Junie may not forward them.
+Junie may start MCP servers without the environment of your shell. A
+variable exported only in a terminal — an upstream MCP's secret, for
+example — may not reach the server; it must be
+in Junie's own environment (set before Junie starts, see above). This is why
+JFrog credentials come from the `jf` config via `--server`.
 
 ## Enable
 
@@ -85,7 +84,7 @@ troubleshooting in [key-rules-and-troubleshooting.md](key-rules-and-troubleshoot
   install** (the written entry's `_JF_ARGS` carries `project=<JFROG_PROJECT_KEY>`).
   Resolve it per [agent-guard-common.md](agent-guard-common.md) **before the first
   call**, same as every harness. Junie has no native prompt, so ask in plain text
-  if it's unresolved, or have the user set `JF_PROJECT` in Junie's environment.
+  if it's unresolved.
 - Installed MCPs are ALWAYS the stdio Agent Guard entry from
   [harness-common.md](harness-common.md) — never a top-level `url` (that bypasses
   the Agent Guard), even though Junie's `mcp.json` accepts `url` servers.

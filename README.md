@@ -172,29 +172,29 @@ Browse, install, update, and publish agent skills and agent plugins hosted in th
 
 Try asking:
 
-> What skills are available in my JFrog AI Catalog project *project-name*?
+> What skills are available in my JFrog AI Catalog?
 
-> Install the *skill-name* skill from my JFrog AI Catalog project *project-name*
+> Install the *skill-name* skill from my JFrog AI Catalog
 
 > What skills do I have installed from the JFrog AI Catalog?
 
-> Show me the versions of *skill-name* in my JFrog AI Catalog project *project-name*
+> Show me the versions of *skill-name* in my JFrog AI Catalog
 
 > Update the *skill-name* skill from the JFrog AI Catalog to the latest version
 
-> Publish the skill at *path* to my JFrog AI Catalog project *project-name*
+> Publish the skill at *path* to my JFrog AI Catalog
 
-> What plugins are available in my JFrog AI Catalog project *project-name*?
+> What plugins are available in my JFrog AI Catalog?
 
-> Install the *plugin-name* plugin from my JFrog AI Catalog project *project-name*
+> Install the *plugin-name* plugin from my JFrog AI Catalog
 
 > What plugins do I have installed from the JFrog AI Catalog?
 
-> Show me the versions of *plugin-name* in my JFrog AI Catalog project *project-name*
+> Show me the versions of *plugin-name* in my JFrog AI Catalog
 
 > Update the *plugin-name* plugin from the JFrog AI Catalog to the latest version
 
-> Publish the plugin at *path* to my JFrog AI Catalog project *project-name*
+> Publish the plugin at *path* to my JFrog AI Catalog
 
 ### Plan topology, sizing, and deployment
 

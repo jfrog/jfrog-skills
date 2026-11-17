@@ -22,16 +22,16 @@ say to the user, the same way the rest of this skill never surfaces
 ## List the policies
 
 The query, auto-pagination, and error-scrubbing are **all owned by a bundled
-script** — this is fully deterministic once `<PROJECT>` and `<SID>` are
+script** — this is fully deterministic once `<PROJECT>` and `<SERVER_ID>` are
 known, so none of it is left to be reconstructed freehand each time.
 Presentation is not: the script hands back structured data, and you build
 the response.
 
-Resolve `<PROJECT>` per **Resolve the project** in `../SKILL.md`'s
-Prerequisites (never assume `default`, never invent one), then run:
+With `<SERVER_ID>` and `<PROJECT>` from *Prerequisites* in `../SKILL.md` (never
+assume `default`, never invent one), run:
 
 ```bash
-node <skill_path>/scripts/list-skill-policies.mjs --project "<PROJECT>" --server-id "<SID>"
+node <skill_path>/scripts/list-skill-policies.mjs --project "<PROJECT>" --server-id "<SERVER_ID>"
 ```
 
 Always invoke via `node <path>` — never execute the file directly.

@@ -94,15 +94,9 @@ case; harnesses whose config is not JSON differ — e.g. **Codex** uses TOML wit
   approval and tool policy the Agent Guard would, so it is not a bypass. Every
   other remote entry remains forbidden.
 - `--yes` and `--registry <URL>` MUST precede `@jfrog/agent-guard` in `args`.
-- `--server <ID>` in `args` is conditional: drop both array elements only on
-  the URL+token env path (`JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy
-  `JF_URL`+`JF_ACCESS_TOKEN`) — see
-  [agent-guard-common.md](agent-guard-common.md).
-  `<ID>` is a `jf config` server id — never an MCP name, never a URL, and
-  never a hostname you parsed out of `JFROG_URL` / `JF_URL`. If a real id
-  in `jf config show` happens to be hostname-shaped (`myco.jfrog.io`),
-  use it as-is; the ban is on deriving the id from the URL, not on the
-  shape of the value.
+- `--server <SERVER_ID>` is always in `args`: the AI Governance server's ID
+  from [agent-guard-common.md](agent-guard-common.md) Pre-flight — never an
+  MCP name, never a URL.
 - **NEVER put `--project` or `--mcp` in `args`.** Those flags are for catalog
   CLI calls only (`--inspect` / `--list-available` / `--login`). In the config
   entry, project + package belong exclusively in `_JF_ARGS`:

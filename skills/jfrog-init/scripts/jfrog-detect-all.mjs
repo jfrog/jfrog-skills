@@ -5,7 +5,8 @@
 // resolveMcpConfig) creates or merges the tool's own global MCP config
 // (~/.kiro/settings/mcp.json or ~/.junie/mcp/mcp.json) when the jfrog entry
 // is absent, the same write that jfrog-detect-jfrog-mcp.mjs performs;
-// (2) on green, a state-file hint is written to ~/.jfrog/setup.json.
+// (2) on green, the AI Governance server and project are saved to
+// setup.json when none is saved yet (see jfrog-ai-governance-config.mjs).
 //
 // Usage: node jfrog-detect-all.mjs [server-id] [project-input]
 //
@@ -26,10 +27,9 @@
 //
 // Step 6 does NOT read JF_PROJECT and does NOT export anything. The
 // picked project input is passed as the 2nd positional argument and
-// threaded forward. On green, this script writes a hint to
-// ~/.jfrog/setup.json so subsequent walks can offer "reuse the current
-// project" — the file only stores public identifiers (server ID, JPD
-// URL, canonical project key), never secrets, never a timestamp.
+// threaded forward. On green, this script saves the server and project
+// via setAiGovernanceConfig WITHOUT force: it never switches away from a
+// saved AI Governance server or changes its saved project.
 //
 // Step 7 going red — exit 1 (catalog not hosted at this JPD / unreachable
 // / 5xx) OR exit 4 (reachable but not entitled) — is NON-BLOCKING: Steps
@@ -63,10 +63,8 @@
 // `projectResolved`. Exit 3 (jf missing, credentials rejected, or an
 // unexpected response shape) is a genuine error, NOT covered by this
 // non-blocking treatment — same as Step 5's own exit 2, it still sets
-// `overall = 1`. The state-file write still happens (server + JPD
-// URL known is reason enough to remember them) — it's passed an empty
-// project key, and jfrog-state-file.mjs keeps whatever project was
-// already on record rather than erasing it. An ambiguous server-id
+// `overall = 1`. The save still happens (the server is known) — with
+// an empty project key, so a saved project is kept. An ambiguous server-id
 // (exit 2, "ask") still blocks, same reasoning as Step 5.
 //
 // Exit 0 -> Steps 1-4 green (see catalogEntitled / mcpConfigured /
@@ -74,7 +72,7 @@
 //           non-blocking gaps)
 // Exit 1 -> a check failed / went red / requires action
 
-import { emit, jfAvailable, jfConfigShow, urlForServer, normalizeJpdUrl } from "./lib/jf.mjs";
+import { emit, jfAvailable, jfConfigShow } from "./lib/jf.mjs";
 import { commandExists } from "./lib/command.mjs";
 import { resolveJfServer } from "./jfrog-resolve-jf-server.mjs";
 import { detectJfCli } from "./jfrog-detect-jf-cli.mjs";
@@ -86,7 +84,7 @@ import { detectOpencodeMcpAuth } from "./jfrog-detect-opencode-mcp-auth.mjs";
 import { detectJfrogMcpResponding } from "./jfrog-detect-jfrog-mcp-responding.mjs";
 import { detectProject } from "./jfrog-detect-project.mjs";
 import { detectCatalogRuntime } from "./jfrog-detect-catalog-runtime.mjs";
-import { setStateForServer } from "./jfrog-state-file.mjs";
+import { setAiGovernanceConfig, resolveAiGovernanceConfig } from "./jfrog-ai-governance-config.mjs";
 
 const SERVER_ID = process.argv[2] || "";
 const PROJECT_KEY = process.argv[3] || "";
@@ -117,9 +115,9 @@ if (overall === 0 && (await detectServerPing(SERVER_ID)) !== 0) overall = 1;
 
 // Captured here, before Steps 5-7 can flip `overall` for their own
 // blocking sub-cases (ambiguous server-id, no project input, jf missing —
-// see each step's comment below) — the state-file write further down
+// see each step's comment below) — the save further down
 // keys off THIS flag, not the final `overall`, per batch-walk.md: the
-// write happens whenever Steps 1-4 are green, regardless of the
+// save happens whenever Steps 1-4 are green, regardless of the
 // mcpConfigured/projectResolved/catalogEntitled gaps Steps 5-7 report.
 const steps1To4Passed = overall === 0;
 
@@ -173,9 +171,8 @@ if (overall === 0) {
     // Exit 2 (ask): no input passed, or the server-id itself is
     // ambiguous — nothing to report a gap about yet, the caller just
     // needs to provide one. Exit 3 (error): jf missing, credentials
-    // rejected, or an unexpected response shape — a genuine failure, NOT
-    // subject to the retry cap (see SKILL.md Step 6 / flow-diagram.md's
-    // STOPCREDS), so it must block same as any other real error, not
+    // rejected, or an unexpected response shape — a genuine failure (see
+    // flow-diagram.md's STOPCREDS), so it must block same as any other real error, not
     // silently collapse into "no project resolved yet".
     overall = 1;
   } else if (projectResult.exitCode === 0) {
@@ -220,31 +217,25 @@ if (steps1To4Passed) {
   if (jfAvailable()) {
     const configList = jfConfigShow();
     const resolvedServerId = resolveJfServer(SERVER_ID, configList);
-    const resolvedJpdUrl = normalizeJpdUrl(urlForServer(configList, resolvedServerId));
 
-    // Only pass a project key that was actually validated to the state
-    // file — PROJECT_KEY itself can be non-empty (the caller's raw,
-    // unvalidated input) even when projectResolved is false; passing ""
-    // in that case tells jfrog-state-file.mjs to leave any previously
-    // recorded project alone rather than overwrite it with an unverified
-    // value.
+    // Only pass a project key that was actually validated — PROJECT_KEY
+    // itself can be non-empty (the caller's raw, unvalidated input) even
+    // when projectResolved is false. No resolved key passes undefined
+    // below, which keeps any saved project ("" would clear it).
     let resolvedProjectKey = "";
     if (projectResolved) {
       resolvedProjectKey = projectResult?.resolvedKey || PROJECT_KEY;
     }
 
-    if (resolvedServerId && resolvedJpdUrl) {
-      // Best-effort: the state file is a "reuse last project?" hint, not a
-      // source of truth (see jfrog-state-file.mjs) — a write failure here
-      // doesn't undo the fact that Steps 1-4 above passed, so it's
-      // surfaced as a warning rather than flipping the summary to red.
-      // Written even when resolvedProjectKey is "" (project not resolved
-      // this walk) — jfrog-state-file.mjs then keeps whatever project was
-      // already on record instead of erasing it, and callers can always
-      // tell a project is missing here from `projectResolved` above.
-      const stateResult = setStateForServer(resolvedServerId, resolvedJpdUrl, resolvedProjectKey);
-      if (!stateResult.ok) {
-        console.error(`warning: failed to save setup state (${stateResult.error}) — next walk won't offer to reuse this project`);
+    // Several saved servers and none the default: the user picks one in /jfrog-init, so nothing is saved here.
+    if (resolvedServerId && resolveAiGovernanceConfig().status !== "ambiguous") {
+      // Best-effort, no force: a refusal (a server or project is already
+      // saved) or a write failure doesn't undo that Steps 1-4 passed, so it
+      // is a warning, not a red summary. Without a resolved project it keeps
+      // any saved one; callers see a missing project in `projectResolved`.
+      const saveResult = setAiGovernanceConfig(resolvedServerId, resolvedProjectKey || undefined);
+      if (!saveResult.ok) {
+        console.error(`warning: AI Governance server/project not saved (${saveResult.error})`);
       }
     }
   }

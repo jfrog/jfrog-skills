@@ -1,6 +1,6 @@
-# Step 8 — Claude agent-plugin marketplace
+# Step 7 — Claude agent-plugin marketplace
 
-**Required behavior for Step 8, not optional background.**
+**Required behavior for Step 7, not optional background.**
 
 ## What this step does
 
@@ -22,7 +22,7 @@ server. Claude Code runs the helper on each marketplace and plugin fetch;
 it asks `jf` for the token at request time, so neither file nor any command
 line holds it. Discovery also goes through `jf`, so `jf`'s proxy settings apply.
 
-Copies an earlier Step 8 left are removed. A token in another JFrog
+Copies an earlier Step 7 left are removed. A token in another JFrog
 marketplace entry's URL or `Authorization` header is dropped, and an entry
 on the same JPD gets the same `headersHelper` so it still logs in. After a
 successful register, the `~/.netrc` block for this JPD's host whose password
@@ -46,5 +46,5 @@ All three follow `SKILL.md`'s Final summary rule 5, verbatim.
 
 - **Exit 0 (green)** → the ✅ line and the success sentence.
 - **Exit 1 or 3 (red)** → the ⚠️ line, and nothing about the cause.
-- **Skipped (Step 7 not green, or not Claude Code)** → say **nothing**,
-  exactly as if Step 8 didn't exist for this walk.
+- **Skipped (Step 6 not green, or not Claude Code)** → say **nothing**,
+  exactly as if Step 7 didn't exist for this walk.

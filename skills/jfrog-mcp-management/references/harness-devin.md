@@ -71,26 +71,7 @@ the upstream MCP may fail at startup — confirm the export before restart.
 Never write a raw secret.
 
 `${env:…}` / `${file:…}` are for the upstream MCP's own secrets and inputs —
-never for JFrog Agent Guard credentials (see below).
-
-## JFrog credentials - from the `jf` config
-
-On Devin (CLI and Desktop Local), authenticate Agent Guard only through the
-on-disk `jf` CLI config. **Always include `--server <SERVER_ID>`** in every
-Agent Guard command and written MCP config entry — resolve `<SERVER_ID>` per
-the agent-guard-common Pre-flight rules, never emit an empty `--server`, and do
-**not** omit `--server` even when only one `jf` server is configured (explicit
-server ID matches plugin enforcement).
-
-Do **not** use the shared [SKILL.md](../SKILL.md) env-var auth path
-(`JFROG_URL` / `JFROG_ACCESS_TOKEN`, or legacy `JF_URL` / `JF_ACCESS_TOKEN`) on
-Devin, even though Devin would resolve or forward them into Agent Guard. If
-there is no usable `jf` server, ask the user to add one (`jf c add <ID>`, or
-`jf login`) before continuing.
-
-If credentials cannot be resolved (no `--server <SERVER_ID>` in the entry, or no
-usable `jf` server to resolve one from), the entry fails to start and the server
-connects with no tools.
+never for JFrog Agent Guard credentials.
 
 ## Enable
 

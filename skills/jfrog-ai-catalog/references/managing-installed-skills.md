@@ -8,11 +8,11 @@ present the union, not just the first:
 
 ```bash
 # Project/harness install (the default target)
-jf skills list --server-id "<SID>" --harness "<harness>" --format json
+jf skills list --server-id "<SERVER_ID>" --harness "<harness>" --format json
 # Global install (a separate location, always check it too)
-jf skills list --server-id "<SID>" --harness "<harness>" --global --format json
+jf skills list --server-id "<SERVER_ID>" --harness "<harness>" --global --format json
 # Add --check-updates to compare installed versions against the registry
-jf skills list --server-id "<SID>" --harness "<harness>" --check-updates
+jf skills list --server-id "<SERVER_ID>" --harness "<harness>" --check-updates
 ```
 
 Resolve `<harness>` to the current agent (see `installing-skills.md`).

@@ -2,13 +2,11 @@
 
 **Required behavior whenever any detector that takes `[server-id]`
 exits `ask` (`status: "ask"`) with a `candidates` list of server IDs
-— not optional background.** This is shared, unmodified, across every
-step in "Resolving `<server-id>` for Steps 4-7" in `SKILL.md`: Step 4
-(`jfrog-detect-server-ping.mjs`), Step 5's placeholder substitution
-(`jfrog-detect-jfrog-mcp.mjs`), Step 6 (`jfrog-detect-project.mjs`,
-distinguished by `"unresolved": "server"` — see
-`references/project-picker.md`), and Step 7
-(`jfrog-detect-catalog-runtime.mjs`). All of them resolve a server-id
+— not optional background.** This is shared, unmodified, across both
+steps in "Resolving `<server-id>` for Steps 4 and 5" in `SKILL.md`:
+Step 4's ping of the jf CLI default server
+(`jfrog-detect-server-ping.mjs`) and Step 5's placeholder substitution
+(`jfrog-detect-jfrog-mcp.mjs`). Both resolve a server-id
 through the same shared code (`scripts/jfrog-resolve-jf-server.mjs`),
 so `candidates` is always the same shape: a plain array of configured
 server-id strings, e.g. `["prod", "staging"]`.
@@ -44,5 +42,5 @@ with the picked/typed server-id as the positional argument that step
 expects (see that step's own usage line in `SKILL.md`). Never invent a
 server-id, never rely on `jf`'s own default-resolution fallback — the
 whole point of asking is that this skill's own resolution order
-(explicit arg → `JF_SERVER_ID` → `isDefault` → sole server) already
+(explicit arg → `isDefault` → sole server) already
 came up empty.

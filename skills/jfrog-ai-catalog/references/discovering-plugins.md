@@ -6,14 +6,14 @@ List-all and versions go through the **Agent Guard**.
 
 ```bash
 npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard \
-  --list-agent-plugins --project "<PROJECT>" [--name <PATTERN>] [--server "<SID>"] [--page-size <N>] [--cursor <C>] [--format json]
+  --list-agent-plugins --project "<PROJECT>" [--name <PATTERN>] --server "<SERVER_ID>" [--page-size <N>] [--cursor <C>] [--format json]
 ```
 
 | Flag | Required | Purpose |
 |------|----------|---------|
-| `--project <PROJECT>` | **Yes** | AI Catalog project to list. |
+| `--project <PROJECT>` | **Yes** | AI Governance project to list. |
 | `--name <PATTERN>` | No | Find plugins by name: server-side, case-insensitive substring, scoped to the project. |
-| `--server <SID>` | No | jf CLI config entry to authenticate with (defaults to the resolved single server). |
+| `--server <SERVER_ID>` | **Yes** | The AI Governance server (its jf CLI server ID). |
 | `--page-size <N>` | No | Results per page. Pass `50` to stay bounded. The Agent Guard defaults to 500 if omitted. |
 | `--cursor <C>` | No | Continuation cursor from a previous page's JSON, to fetch the next page. |
 | `--format json` | No | Raw page JSON instead of the default compact TSV (name + last-updated). |
@@ -45,7 +45,7 @@ repo-scoped (Artifactory registry contents), unlike `--list-agent-plugins`, whic
 project-scoped:
 
 ```bash
-jf agent plugins list --repo "<repo>" --server-id "<SID>" --format json
+jf agent plugins list --repo "<repo>" --server-id "<SERVER_ID>" --format json
 ```
 
 Never run a bare `jf agent plugins list` (it errors): always pass `--repo <key>` here, or
@@ -70,7 +70,7 @@ line instead:
 
 ```bash
 npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard \
-  --list-agent-plugin-versions --project "<PROJECT>" --agent-plugin "<slug>" [--server "<SID>"] [--page-size <N>] [--cursor <C>] [--format json]
+  --list-agent-plugin-versions --project "<PROJECT>" --agent-plugin "<slug>" --server "<SERVER_ID>" [--page-size <N>] [--cursor <C>] [--format json]
 # JSON: versions[].version, versions[].locations[].repoKey (page through with cursor like above)
 ```
 

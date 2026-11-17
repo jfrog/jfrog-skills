@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // project-cache.mjs — short-lived on-disk cache of a server's enumerated
 // project list (GET /access/api/v1/projects). The interactive project
-// step (SKILL.md Step 6) re-invokes jfrog-detect-project.mjs once per user
-// attempt within the same walk (typed guess, "Other" retry, picking a
-// suggestion, ...); without this cache each attempt re-hits the network
+// step (SKILL.md Step 4, and jfrog-detect-all.mjs re-runs) can call
+// jfrog-detect-project.mjs more than once per walk; without this cache each
+// call re-hits the network
 // to re-enumerate, even though matching/similarity search against the
 // list is already done offline (lib/projects.mjs). Only the enumeration
 // call itself needs caching — the per-key existence probe in
@@ -80,7 +80,7 @@ export function writeCachedProjectList(serverId, creds, body) {
     // first (also "wx", refusing to follow/overwrite anything already
     // there) and renaming into place instead replaces whatever directory
     // entry — file or symlink — sits at the final path, without ever
-    // dereferencing it. Same pattern as jfrog-state-file.mjs.
+    // dereferencing it.
     const target = cachePath(serverId);
     const tmp = `${target}.tmp.${process.pid}`;
     writeFileSync(tmp, JSON.stringify(record), { mode: 0o600, flag: "wx" });

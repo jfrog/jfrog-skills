@@ -33,12 +33,12 @@ order:
 
 2. **No repo given. Provision the project's skills repository.** Use Agent
    Guard to create (or resolve, if it already exists) the project's local skills
-   repo, then publish to the returned key. This needs `<PROJECT>` (resolve it per
-   *Prerequisites* in `../SKILL.md`, asking only if it is unknown):
+   repo, then publish to the returned key. This needs `<PROJECT>` (see
+   *Prerequisites* in `../SKILL.md`):
 
 ```bash
 npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard \
-  --provision-skills-repository --project "<PROJECT>" [--server "<SID>"] [--format json]
+  --provision-skills-repository --project "<PROJECT>" --server "<SERVER_ID>" [--format json]
 ```
 
    It prints the bare repo key (or `{"repoKey":"<repo>"}` with `--format json`).
@@ -50,26 +50,25 @@ npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard \
    retry in a loop. Publishing is mutating, so you must get an explicit repo from
    the user here. This is the one case where you do ask before publishing.
 
-   First list the existing skills repos. When `<PROJECT>` is known, scope the
-   list to that project so you offer only its repositories; fall back to the
-   server-wide list only when the project is unknown or the project-scoped list
-   comes back empty:
+   First list the existing skills repos. Scope the list to `<PROJECT>` so you
+   offer only its repositories; fall back to the server-wide list only when the
+   project-scoped list comes back empty:
 
 ```bash
-# project-scoped (preferred when <PROJECT> is known)
+# project-scoped
 jf api '/artifactory/api/repositories?packageType=skills&type=local&project=<PROJECT>' \
-  --server-id "<SID>" 2>/dev/null | jq -r '.[].key'
+  --server-id "<SERVER_ID>" 2>/dev/null | jq -r '.[].key'
 
-# server-wide fallback (project unknown, or the scoped list was empty)
+# server-wide fallback (the scoped list was empty)
 jf api '/artifactory/api/repositories?packageType=skills&type=local' \
-  --server-id "<SID>" 2>/dev/null | jq -r '.[].key'
+  --server-id "<SERVER_ID>" 2>/dev/null | jq -r '.[].key'
 ```
 
    Then **wait for the user to pick one** (by name). If the command printed one or
    more repos, reply in **this exact format**, sorted by name, one row per key, and
    nothing else:
 
-   Provisioning a skills repository for project `<project>` on `<SID>` failed, so
+   Provisioning a skills repository for project `<project>` on `<SERVER_ID>` failed, so
    pick an existing repository to publish `<slug>` to:
 
    | Repository |
@@ -79,7 +78,7 @@ jf api '/artifactory/api/repositories?packageType=skills&type=local' \
    If the command printed nothing (no skills repos on the server), reply with one
    line instead, filling `<reason>` with the provisioning error:
 
-   > No skills repositories on `<SID>` to publish to (provisioning failed: `<reason>`). Tell me a repository to use, or ask me to retry.
+   > No skills repositories on `<SERVER_ID>` to publish to (provisioning failed: `<reason>`). Tell me a repository to use, or ask me to retry.
 
    **Never auto-select a repo, even if one exists whose name matches the
    project.** A name match is not consent. Do not publish to any repo the user did
@@ -149,7 +148,7 @@ To generate a key pair and register its public key in one step:
 
 ```bash
 jf evd gen-keys --key-alias "<alias>" \
-  --key-file-path "<dir>" --server-id "<SID>"
+  --key-file-path "<dir>" --server-id "<SERVER_ID>"
 # writes <dir>/evidence.key (private) + <dir>/evidence.pub, uploads the
 # public key as a trusted key under <alias>
 ```
@@ -173,7 +172,7 @@ when `--version` is omitted). Fill `<signing-state>` with the value recorded in
   > About to publish:
   > - Skill: `<slug>`
   > - Version: `<version>`
-  > - Destination: `<repo>` on `<SID>`
+  > - Destination: `<repo>` on `<SERVER_ID>`
   > - Signing: `<signing-state>`
   >
   > Do you want to publish it?
@@ -194,7 +193,7 @@ fallback cannot sign the artifact.
 
 ```bash
 jf skills publish "<path>" \
-  --server-id "<SID>" \
+  --server-id "<SERVER_ID>" \
   --repo "<repo>" \
   --skip-scan \
   --quiet \
@@ -237,7 +236,7 @@ existing version and `<next>` with the next patch (for example `3.0.0` to `3.0.1
 
 | Option | Action |
 |--------|--------|
-| **Overwrite** | Run `jf skills delete "<slug>" --version "<v>" --repo "<repo>" --server-id "<SID>"`, then re-run the publish unchanged. |
+| **Overwrite** | Run `jf skills delete "<slug>" --version "<v>" --repo "<repo>" --server-id "<SERVER_ID>"`, then re-run the publish unchanged. |
 | **Publish as a new version** | Re-run the publish with `--version <new>` (the user's semver, or `<next>`). |
 | **Abort** | Stop and report that nothing was published. |
 
@@ -246,7 +245,7 @@ existing version and `<next>` with the next patch (for example `3.0.0` to `3.0.1
 - **Success.** Reply using **this exact template**. Do not mention Xray
   scanning, async watches, or indexing:
 
-  > Published `<slug>@<version>` to `<repo>` on `<SID>`.
+  > Published `<slug>@<version>` to `<repo>` on `<SERVER_ID>`.
 - **Blocked by the Xray scan** (only when `--skip-scan` was omitted, shown by
   `[VIOLATION] … identified as malicious` or `blocked by Xray security scan`).
   Publish uploads the archive first, then scans, so on a scan block the artifact
@@ -254,13 +253,13 @@ existing version and `<next>` with the next patch (for example `3.0.0` to `3.0.1
   claim it was removed. Verify:
 
 ```bash
-jf api '/artifactory/api/storage/<repo>/<slug>/<version>' --server-id "<SID>"
+jf api '/artifactory/api/storage/<repo>/<slug>/<version>' --server-id "<SERVER_ID>"
 # 200 = still present, 404 = already gone
 ```
 
   If it is still present, tell the user the malicious-flagged artifact remains
   and offer to delete it (`jf skills delete "<slug>" --version "<version>"
-  --repo "<repo>" --server-id "<SID>"`). Treat the malicious flag as a real security signal. Reply
+  --repo "<repo>" --server-id "<SERVER_ID>"`). Treat the malicious flag as a real security signal. Reply
   using **this exact template**:
 
   > Publish of `<slug>@<version>` was **blocked by the Xray scan** (`<violation>`).
@@ -271,7 +270,7 @@ jf api '/artifactory/api/storage/<repo>/<slug>/<version>' --server-id "<SID>"
 - **Other failure.** Reply using **this exact template**, quoting the CLI error
   verbatim in `<cli-error>`:
 
-  > Publishing `<slug>` to `<repo>` on `<SID>` failed: `<cli-error>`.
+  > Publishing `<slug>` to `<repo>` on `<SERVER_ID>` failed: `<cli-error>`.
 
   On 401/403/404, follow the stop-on-error rule from the base `jfrog` skill
   (see *Prerequisites* in `../SKILL.md`): stop and do not retry against a

@@ -6,7 +6,7 @@
 // script's — it hands back structured data, not pre-rendered text.
 //
 // Usage:
-//   node list-skill-policies.mjs --project <PROJECT> --server-id <SID>
+//   node list-skill-policies.mjs --project <PROJECT> --server-id <SERVER_ID>
 //
 // stdout (exit 0): one JSON object, always with these three keys:
 //   - message: non-null only for "no policies apply" (or indistinguishably,
@@ -267,7 +267,7 @@ function main() {
   const { project, serverId } = parseArgs(process.argv.slice(2));
   if (!project || !serverId) {
     process.stderr.write(
-      'usage: list-skill-policies.mjs --project <PROJECT> --server-id <SID>\n'
+      'usage: list-skill-policies.mjs --project <PROJECT> --server-id <SERVER_ID>\n'
     );
     process.exitCode = 2;
     throw DONE;
