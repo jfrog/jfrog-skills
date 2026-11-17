@@ -31,18 +31,14 @@ Reference for the Install and List flows of the `jfrog-mcp-management` skill.
   or `--mcp` in the config entry's `args` — that is CLI-only; config uses
   `_JF_ARGS`.
 - **Three invocation contracts — do not mix:** (1) Step 0 gate
-  `jfrog-agent-guard-check.mjs` — optional positional jf `<SERVER_ID>` only,
+  `jfrog-agent-guard-check.mjs` — no arguments,
   no flags; (2) catalog CLI — `--server` / `--project` / `--mcp` flags;
-  (3) config stdio entry — `_JF_ARGS=project=…&mcp=…`, optional `--server`
-  in `args` only when not on the env URL+token path.
-- `<SERVER_ID>` is always a `jf config` server id. NEVER an MCP package
-  name, NEVER a URL, and NEVER a hostname you derived from `JFROG_URL` /
-  `JF_URL`. Hostname-shaped ids from `jf config show` itself are fine —
-  the ban is on parsing an id out of the URL, not on the shape of the
-  value.
+  (3) config stdio entry — `_JF_ARGS=project=…&mcp=…`, always `--server`
+  in `args`.
+- `<SERVER_ID>` is always the AI Governance server id from Pre-flight.
+  NEVER an MCP package name, NEVER a URL.
 - NEVER assume `default` as a JFrog project key. If the project key is unknown
-  after the project chain (existing `mcpServers` entries → `JF_PROJECT` env
-  var), STOP and ask the user. Same for server ID if used. NEVER invent or
+  after Pre-flight, STOP and ask the user. NEVER invent or
   guess JFrog project keys or server IDs.
 - Package name MUST come from the catalog (`--inspect` / `--list-available`).
   NEVER guess. NEVER install MCPs outside the agent guard. NEVER use
@@ -60,7 +56,7 @@ Reference for the Install and List flows of the `jfrog-mcp-management` skill.
 - NEVER write a raw secret into any MCP config file (see
   [harness-common.md](harness-common.md) for each harness's file) — always use
   `${VAR_NAME}`. NEVER show tokens / API keys.
-- NEVER try multiple servers — ask the user to pick one.
+- NEVER try another JFrog server; every command uses the AI Governance server.
 
 ## Classify npx @jfrog/agent-guard failures
 
@@ -87,10 +83,12 @@ as the MCP proxy.
 2. **Catalog miss (retry via List).** `not found in curated list` — the catalog
    responded; that MCP name is not approved. Go to List → Available to install.
    Same fingerprint on `--login`. A wrong `--project` key can surface as this
-   miss on the MCP name — re-resolve the project key if List is empty.
+   miss on the MCP name. If List is empty too, the AI Governance project may be
+   wrong; ask the user to run `/jfrog-init`.
 3. **Retryable CLI/config.** `--project flag is required`, `--mcp flag is required`,
-   `Server ID '…' does not exist.`, `multiple/no JFrog server configured`. Fix
-   per Troubleshooting / Pre-flight and retry the **same** Agent Guard command.
+   `Server ID '…' does not exist.`, `multiple/no JFrog server configured`,
+   `no JFrog server is set for AI governance`. Fix per Troubleshooting and
+   retry the **same** Agent Guard command.
 4. **Any other non-zero (hard stop).** Unrecognized stderr (including
    `Unauthorized`, `failed to fetch catalog`, `_JF_ARGS environment variable is not set`,
    5xx). Show it verbatim. Do not retry List. Do not guess another bucket.
@@ -186,13 +184,22 @@ row in [harness-common.md](harness-common.md).
   [harness-common.md](harness-common.md) and remove the entry from every file
   that lists it, then restart. On UI-toggle harnesses (Cursor, VS Code) there is
   no such file — disable/stop the server in the harness's MCP view instead.
+- **`no JFrog server is set for AI governance`** — `--server` was empty. Run
+  the Pre-flight `get` again; if it does not return a server, ask the user to
+  run `/jfrog-init`.
 - **Agent Guard: `multiple/no JFrog server configured`** (the agent guard
-  cannot pick a JFrog server) — pass `--server <ID>` (after `jf c add <ID>`) OR
-  export both `JFROG_URL` and `JFROG_ACCESS_TOKEN` in the launching shell, then
-  restart the agent.
-- **`Server ID '<id>' does not exist.`** — `--server` is not a configured jf
-  CLI server. Re-resolve the id (Pre-flight) or `jf c add`, then retry. Not a
-  catalog miss and not package-unreachable.
+  cannot pick a JFrog server) — the command or entry ran without `--server`.
+  Add `--server "<SERVER_ID>"` from Pre-flight and retry; for an MCP entry,
+  fix its `args` and restart the agent.
+- **Existing MCP entry without `--server` (or with another server)** — written
+  by an older version of this skill. Agent Guard then picks the server itself,
+  which may not be the AI Governance server. Leave it alone unless it actually fails
+  or the user asks. To repair: check that the MCP is in the catalog of the AI
+  Governance server and project (List → Available to install), then set its
+  `--server` to `<SERVER_ID>` and restart the agent.
+- **`Server ID '<id>' does not exist.`** — the AI Governance server is not in
+  the jf CLI config. Ask the user to run `/jfrog-init`. Not a catalog miss and
+  not package-unreachable.
 - **`--project flag is required` / `--mcp flag is required`** — empty or
   omitted flag; fill from Pre-flight / the MCP name and retry.
 - **OAuth MCP failing** — refresh token expired; re-run the OAuth login step.

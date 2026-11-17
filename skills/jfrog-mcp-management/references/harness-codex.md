@@ -102,47 +102,25 @@ env_vars = ["<SECRET_OR_REFERENCED_ENV_NAME>"]
 - `<server-name-slug>` is the sanitized slug from **Top-level key** (matches
   `^[a-zA-Z0-9_-]+$`, needs no quoting); `mcp=` in `_JF_ARGS` keeps the exact
   `spec.packageName`.
-- **Include `--server <SERVER_ID>`** to authenticate JFrog on Codex - it is the
-  default, and required when the user has multiple `jf` servers. It also keeps the
-  entry working if the user later adds more servers. (It can be omitted only when a
-  single `jf` server is configured, which the Agent Guard auto-resolves; see JFrog
-  credentials below.) `env_vars` here is only for the upstream MCP's own
-  secrets/inputs, never for JFrog credentials.
+- **Include `--server <SERVER_ID>`** to authenticate JFrog on Codex - always
+  (see [harness-common.md](harness-common.md) and the env-var section below).
+  `env_vars` here is only for the upstream MCP's own secrets/inputs, never for
+  JFrog credentials.
 - Omit `env_vars` if there are no forwarded values; omit the extra `env` key if
-  `_JF_ARGS` is the only literal. Never emit an empty `--server`.
+  `_JF_ARGS` is the only literal.
 - **Always write the entry as one section** with the inline `env = { … }` above -
   hand-write it, do NOT run `codex mcp add`. That command splits `env` into a
   separate `[mcp_servers.<slug>.env]` sub-table and cannot express `env_vars`.
 
-## JFrog credentials - from the `jf` config
+## Codex does not pass your shell's env vars
 
-Codex does NOT forward ambient shell variables, so the Agent Guard reads its JFrog
-credentials from the on-disk `jf` CLI config (which the Codex-launched process can
-read).
-
-**Include `--server <SERVER_ID>` in `args` by default.** It reads that server's
-URL + token from the `jf` config, is unambiguous, and keeps working if the user
-later adds more servers. Resolve `<SERVER_ID>` per the agent-guard-common
-Pre-flight rules.
-
-`--server` can be **omitted only when exactly one `jf` server is configured** - in
-that case the Agent Guard auto-resolves it. With **multiple** `jf` servers,
-omitting `--server` fails: the Agent Guard cannot choose between them and does NOT
-fall back to the `jf` default, so `--server` is required. (When in doubt, include
-it.)
-
-**Codex exception to the shared rule.** [SKILL.md](../SKILL.md) treats `--server`
-as conditional and permits dropping it on the `JFROG_URL`+token env path (see its
-Step 4 Guardrails, "`--server` … drop it only on the `JFROG_URL`+token env
-path"). **That env path does NOT apply on Codex** - Codex does not forward ambient
-shell env to the server, so `JFROG_URL` / `JFROG_ACCESS_TOKEN` never reach the
-Agent Guard. On Codex, therefore, do NOT authenticate JFrog via env-var
-credentials; use `--server <SERVER_ID>` (or a single configured `jf` server) as
-described above. If there is no usable `jf` server, ask the user to add one
-(`jf c add <ID>`, or `jf login`) before continuing.
-
-If credentials cannot be resolved (no `--server` and either zero or multiple `jf`
-servers), the entry fails to start with `connection closed: initialize response`.
+Codex starts MCP servers with a minimal default environment (such as `PATH`
+and `HOME`), not the environment of the shell that launched it. Beyond that,
+a server gets only the literal values in its entry's `env` and the variables
+named in its `env_vars`. Any other variable — an upstream MCP's
+secret, for example — does not reach
+it. That is why JFrog credentials come from the `jf` config via `--server`,
+and why every input the upstream MCP needs must be in `env` or `env_vars`.
 
 ## Codex's sandbox
 

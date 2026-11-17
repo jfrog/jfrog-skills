@@ -74,12 +74,12 @@ detectors named individually — `node
 `jfrog-detect-jf-cli.mjs`, `jfrog-detect-jf-config.mjs`,
 `jfrog-detect-jfrog-mcp.mjs`, `jfrog-detect-jfrog-mcp-responding.mjs`,
 `jfrog-detect-opencode-mcp-auth.mjs`, `jfrog-detect-project.mjs`, and
-`jfrog-detect-server-ping.mjs` — and `node
-"${CLAUDE_SKILL_DIR}/scripts/jfrog-re*.mjs"` (the purely diagnostic
-`jfrog-reinstall-jfrog-plugin.mjs` and the two `jfrog-resolve-*.mjs`
-lookups), `node
-"${CLAUDE_SKILL_DIR}/scripts/jfrog-state-file.mjs" get`/`get-current-project`/`path`
-(the read-only modes only), `npx --version`, and `uname`. It does
+`jfrog-detect-server-ping.mjs` — and the purely diagnostic `node
+"${CLAUDE_SKILL_DIR}/scripts/jfrog-reinstall-jfrog-plugin.mjs"`,
+`jfrog-resolve-mcp-config.mjs --harness`, `node
+"${CLAUDE_SKILL_DIR}/scripts/jfrog-ai-governance-config.mjs" get`/`list`
+(`list` is read-only; `get` only migrates an old `setup.json` in place),
+`npx --version`, and `uname`. It does
 **not** cover:
 
 - Step 1's `nvm` install (`curl … | bash`, see `node-install-prompt.md`)
@@ -87,15 +87,15 @@ lookups), `node
   `node-install-prompt.md`)
 - Step 1's `jfrog-install-jf-cli.mjs` (downloads/executes a binary and
   edits shell rc files — see `jf-cli-install-prompt.md`)
-- Step 3's web-login scripts (`node …/jfrog-login-*.mjs`, see
+- Step 3's and Step 4's web-login scripts (`node …/jfrog-login-*.mjs`, see
   `jf-config-auth-picker.md`)
 - `jfrog-detect-all.mjs` (the "run everything at once" entry point — see
   `batch-walk.md`). This is **not** a member of the `jfrog-detect-*.mjs`
   grant despite the name: an earlier version of this grant used that exact
   wildcard and pre-approved `jfrog-detect-all.mjs` along with it, silently
   contradicting the "read-only detectors" framing above — `jfrog-detect-all.mjs`
-  itself writes `~/.jfrog/setup.json` on overall green (see the Final
-  summary in `SKILL.md`), the same mutation `jfrog-state-file.mjs set`
+  itself writes `~/.jfrog/setup.json` on overall green (see
+  `batch-walk.md`), the same mutation `jfrog-ai-governance-config.mjs set`
   is excluded below for. PR review caught this; the fix was to enumerate
   the seven read-only detectors by exact filename instead of a wildcard,
   which also closes a path-traversal-shaped concern with the wildcard
@@ -116,10 +116,10 @@ lookups), `node
   narrowly scoped to the jfrog entry's `url` field, atomic (temp file + rename),
   and idempotent — see `mcp-plugin-config.md` for why that scope was
   judged safe to run unattended, unlike the two mutations below.
-- `jfrog-state-file.mjs`'s **`set`** mode (writes `~/.jfrog/setup.json`
-  with caller-supplied server-id/URL/project-key — see the Final summary
+- `jfrog-ai-governance-config.mjs`'s **`set`** mode (writes the AI
+  Governance server and project to `~/.jfrog/setup.json` — see Step 4
   in `SKILL.md`)
-- `jfrog-add-claude-marketplace.mjs` (Step 8 — installs the headers helper
+- `jfrog-add-claude-marketplace.mjs` (Step 7 — installs the headers helper
   under `~/.jfrog/skills` and calls `claude plugin marketplace update`, mutating Claude Code's own
   marketplace config — see `marketplace-setup.md`). **Unlike the other
   entries in this list, this one has no prior `AskUserQuestion` consent
@@ -140,13 +140,13 @@ and web-login already sit behind their own `AskUserQuestion` consent
 prompt, so the user has agreed before either runs.
 
 `jfrog-install-jf-cli.mjs`, `jfrog-substitute-mcp-placeholders.mjs`,
-`jfrog-write-opencode-mcp.mjs`, `jfrog-state-file.mjs set`, and
+`jfrog-write-opencode-mcp.mjs`, `jfrog-ai-governance-config.mjs set`, and
 `jfrog-add-claude-marketplace.mjs` are excluded for a related but
 distinct reason: they're the five scripts in this directory that mutate
 something outside their own process (a downloaded binary made executable
 and run, the plugin's `mcp.json`, the user's own OpenCode config — the
 first mutation targeting a personal file rather than a plugin-owned one
-— the setup state file, and the headers helper plus Claude Code's own
+— the AI Governance settings, and the headers helper plus Claude Code's own
 marketplace config, respectively) rather than just reading state and
 emitting JSON.
 A prior version of this grant covered every `*.mjs` in `scripts/`
@@ -157,16 +157,16 @@ prompt-injected instruction it's following) ever hitting the
 grant itself enforced nothing. Naming the read-only scripts individually
 and leaving these four to fall through to the harness's own approval
 closes that gap — **for `jfrog-install-jf-cli.mjs` and
-`jfrog-state-file.mjs set`**, both of which `SKILL.md` only ever runs as
+`jfrog-ai-governance-config.mjs set`**, both of which `SKILL.md` only ever runs as
 their own standalone Bash command, behind their own `AskUserQuestion`
-(see `jf-cli-install-prompt.md` and the Final summary, respectively).
+(see `jf-cli-install-prompt.md` and Step 4, respectively).
 `jfrog-substitute-mcp-placeholders.mjs` is the exception: as noted
 above, it has no standalone Bash call site in the documented flow, so
 there is no gap for this grant to close for it — its mutation runs
 unattended by design, not because this list forgot it.
 `jfrog-add-claude-marketplace.mjs` is a different kind of gap: it *does*
-have a standalone Bash call site (Step 8 invokes it directly), but
-unlike `jfrog-install-jf-cli.mjs` / `jfrog-state-file.mjs set` there is
+have a standalone Bash call site (Step 7 invokes it directly), but
+unlike `jfrog-install-jf-cli.mjs` / `jfrog-ai-governance-config.mjs set` there is
 no `AskUserQuestion` sitting in front of it — the harness's Bash prompt
 is the only consent point. That asymmetry is called out, not resolved,
 here; see the bullet above.

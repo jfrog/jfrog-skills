@@ -16,7 +16,7 @@
 
 import { emit, isMainModule, runJf, seedJfAvailable } from "./lib/jf.mjs";
 
-// Required by Agent Plugins Repositories (Step 7's AI Catalog calls) —
+// Required by Agent Plugins Repositories (Step 6's AI Catalog calls) —
 // see docs.jfrog.com/artifactory/docs/agent-plugins-repositories
 // ("Configure the JFrog CLI").
 export const MIN_JF_VERSION = "2.106.0";

@@ -32,8 +32,9 @@ All skills live directly under `skills/<name>/` -- flat structure, never nested 
 
 Near-miss and general negative rows use `expected_output.tool_invocations`
 of exactly `[{"name":"Skill","absent":true}]`: the eval runner (a later
-ticket) scores them as failed when any Skill fires, not only the skill they
-sit under. Near-miss rows carry `metadata.near_skill` (the file's skill) and,
+ticket) scores them as failed when any `jfrog:*` Skill fires, not only the
+skill they sit under. Claude's built-in skills (for example `claude-api`) are
+ignored: the eval reports when one fires but does not score it. Near-miss rows carry `metadata.near_skill` (the file's skill) and,
 when they also sit close to another skill, `metadata.also_near` (a list of
 skill names). Any other file name in the folder, or a file whose skill is
 gone or not model-invocable, fails the test. So does a repeated `example_id`
@@ -60,6 +61,37 @@ without the `jfrog:` prefix, in the same order) and `metadata.or_group_reason`
 
 A nested list is an or-group (any one Skill in it matches). Add one only
 after a measured first-Skill confusion, and keep the primary skill first.
+
+A positive row may set `metadata.keyword_free: true` (a boolean, positives
+only). A keyword-free row states the need without the words that make
+selection easy: its `input` names no product (`JFrog`, `Artifactory`, `Xray`,
+or a standalone `jf`, any case) and reuses none of its own skill's description
+phrases. Many positives echo the description, so they pass whatever the
+description says; keyword-free rows test whether the description carries the
+meaning. Each selectable skill needs at least 3 of them, and the eval reports
+their score separately from the other positives. The test checks the product
+names; reviewers check the description phrases.
+
+The workflow (`.github/workflows/skill-selection-wep.yml`) evaluates PRs that
+change a skill's `SKILL.md` or anything under `tests/skill-selection/`, and
+posts one comment with a verdict. It compares against the baseline for the
+PR's base commit when one is stored; without one, the drop rule is skipped and
+the comment says so.
+
+- **FAIL:** the first-call rate on rows shared with the baseline drops by 10
+  points or more, or a skill that is new or was at 70% or more falls below 70%.
+- **INCONCLUSIVE:** the eval broke, it scored no trials, or more than 2% of
+  its trials errored or are missing (both counted together).
+- **PASS:** otherwise.
+
+The `Skill-selection gate` check reports on every PR. It blocks FAIL and
+INCONCLUSIVE only when the repo variable `SKILL_SELECTION_GATE_ENFORCE` is
+`true` (off for now). A push that leaves the selection digest unchanged reuses
+the last verdict; to measure again, add the `skill-selection-remeasure` label
+and re-run all jobs of the workflow run. Baselines live on the data branch
+`infra/ASP-21-skill-selection-baselines`, written only after a merge; nobody
+edits it by hand. Rules, noise band and scenarios:
+[`docs/design/skill-selection-baselines.md`](docs/design/skill-selection-baselines.md).
 
 ## SKILL.md layout (primacy / recency)
 

@@ -412,11 +412,10 @@ export function askServerResult(check, configList) {
     // `unresolved: "server"` lets a caller tell this apart from a
     // check-specific ask (e.g. jfrog-detect-project.mjs's own "no project
     // input" ask) even though both are `{check, status: "ask"}` — without
-    // it, a caller keying off `check` alone (e.g. the Step 6 project
-    // picker) would misroute this into asking about the wrong thing. See
-    // references/project-picker.md's discriminator note.
+    // it, a caller keying off `check` alone would misroute this into
+    // asking about the wrong thing.
     unresolved: "server",
-    detail: "multiple jf servers configured, none marked isDefault — pass a server-id or set JF_SERVER_ID",
+    detail: "multiple jf servers configured, none marked isDefault — pass a server-id",
     candidates: configList.map((s) => s.serverId).filter(Boolean),
   };
 }

@@ -146,7 +146,7 @@ export function dropNetrcToken(content, host, token) {
   return entries.map((words, i) => (i > 0 && holdsToken(words) ? "" : content.slice(starts[i], starts[i + 1]))).join("");
 }
 
-// The previous Step 8 wrote `machine <host> / login / password <token>` into
+// The previous Step 7 wrote `machine <host> / login / password <token>` into
 // ~/.netrc, and libcurl still sends it on plugin fetches. Only that block goes:
 // through any symlink, so a dotfiles copy loses it too, and keeping the mode.
 function removeNetrcToken(host, token) {

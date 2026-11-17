@@ -6,7 +6,8 @@ a false "disabled" result.
 
 | Operation | What it needs |
 | --- | --- |
-| Step 0 check (`node …check.mjs`) | Outbound HTTPS to the JFrog platform. When credentials come from `jf config`: also execute `jf` and read `$JFROG_CLI_HOME_DIR` when set, or `~/.jfrog/` otherwise |
+| Step 0 check (`node …check.mjs`) | Outbound HTTPS to the JFrog platform; execute `jf`; read and write `setup.json` and read the jf config under `$JFROG_CLI_HOME_DIR` when set, or `~/.jfrog/` otherwise |
+| AI Governance config (`node …config.mjs get`, `list`, `set`) | Read + write `setup.json` (same directory); `set` also executes `jf`. No network |
 | `--inspect`, `--list-available` | Outbound HTTPS to the npm registry + JFrog platform; write `~/.npm/_npx` (npx cache) |
 | OAuth `--login` | Same as above, plus browser launch and write `~/.jfrog/jfrogmcp.conf.json` |
 | Removing an MCP config entry | Read both project and user harness MCP config files; write the matched file(s) (e.g. `.cursor/mcp.json`, `.mcp.json`). No network |

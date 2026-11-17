@@ -24,12 +24,12 @@ in this order:
 
 2. **No repo given. Provision the project's plugins repository.** Use Agent
    Guard to create (or resolve, if it already exists) the project's local plugins
-   repo, then publish to the returned key. This needs `<PROJECT>` (resolve it per
-   *Prerequisites* in `../SKILL.md`, asking only if it is unknown):
+   repo, then publish to the returned key. This needs `<PROJECT>` (see
+   *Prerequisites* in `../SKILL.md`):
 
 ```bash
 npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard \
-  --provision-agent-plugins-repository --project "<PROJECT>" [--server "<SID>"] [--format json]
+  --provision-agent-plugins-repository --project "<PROJECT>" --server "<SERVER_ID>" [--format json]
 ```
 
    It prints the bare repo key (or `{"repoKey":"<repo>"}` with `--format json`).
@@ -45,14 +45,14 @@ npx --yes --registry <REGISTRY_URL> @jfrog/agent-guard \
 
 ```bash
 jf api '/artifactory/api/repositories?packageType=plugins&type=local' \
-  --server-id "<SID>" 2>/dev/null | jq -r '.[].key'
+  --server-id "<SERVER_ID>" 2>/dev/null | jq -r '.[].key'
 ```
 
    Then **wait for the user to pick one** (by name). If the command printed one or
    more repos, reply in **this exact format**, sorted by name, one row per key, and
    nothing else:
 
-   Provisioning a plugins repository for project `<project>` on `<SID>` failed, so
+   Provisioning a plugins repository for project `<project>` on `<SERVER_ID>` failed, so
    pick an existing repository to publish `<slug>` to:
 
    | Repository |
@@ -62,7 +62,7 @@ jf api '/artifactory/api/repositories?packageType=plugins&type=local' \
    If the command printed nothing (no plugins repos on the server), reply with one
    line instead, filling `<reason>` with the provisioning error:
 
-   > No plugins repositories on `<SID>` to publish to (provisioning failed: `<reason>`). Tell me a repository to use, or ask me to retry.
+   > No plugins repositories on `<SERVER_ID>` to publish to (provisioning failed: `<reason>`). Tell me a repository to use, or ask me to retry.
 
    **Never auto-select a repo, even if one exists whose name matches the
    project.** A name match is not consent. Do not publish to any repo the user did
@@ -114,7 +114,7 @@ To generate a key pair and register its public key in one step:
 
 ```bash
 jf evd gen-keys --key-alias "<alias>" \
-  --key-file-path "<dir>" --server-id "<SID>"
+  --key-file-path "<dir>" --server-id "<SERVER_ID>"
 # writes <dir>/evidence.key (private) + <dir>/evidence.pub, uploads the
 # public key as a trusted key under <alias>
 ```
@@ -129,7 +129,7 @@ Once `<repo>` is resolved and the bundle validated, **show the user what will be
 published and wait for an explicit confirmation**. Reply using this exact template
 and do not run `jf agent plugins publish` until the user agrees:
 
-  > Publishing plugin `<slug>` uploads it to repository `<repo>` on server `<SID>`. Do you want to publish it?
+  > Publishing plugin `<slug>` uploads it to repository `<repo>` on server `<SERVER_ID>`. Do you want to publish it?
 
 Never combine this final confirmation step with the previous signing step into one prompt.
 
@@ -148,7 +148,7 @@ unsigned.
 
 ```bash
 jf agent plugins publish "<path>" \
-  --server-id "<SID>" \
+  --server-id "<SERVER_ID>" \
   --repo "<repo>" \
   --quiet \
   [--version "<semver>"] \
@@ -179,7 +179,7 @@ existing version and `<next>` with the next patch (for example `3.0.0` to `3.0.1
 
 | Option | Action |
 |--------|--------|
-| **Overwrite** | Run `jf agent plugins delete "<slug>" --version "<v>" --repo "<repo>" --server-id "<SID>"`, then re-run the publish unchanged. |
+| **Overwrite** | Run `jf agent plugins delete "<slug>" --version "<v>" --repo "<repo>" --server-id "<SERVER_ID>"`, then re-run the publish unchanged. |
 | **Publish as a new version** | Re-run the publish with `--version <new>` (the user's semver, or `<next>`). |
 | **Abort** | Stop and report that nothing was published. |
 
@@ -187,12 +187,12 @@ existing version and `<next>` with the next patch (for example `3.0.0` to `3.0.1
 
 - **Success.** Reply using **this exact template**:
 
-  > Published `<slug>@<version>` to `<repo>` on `<SID>`.
+  > Published `<slug>@<version>` to `<repo>` on `<SERVER_ID>`.
 
 - **Other failure.** Reply using **this exact template**, quoting the CLI error
   verbatim in `<cli-error>`:
 
-  > Publishing `<slug>` to `<repo>` on `<SID>` failed: `<cli-error>`.
+  > Publishing `<slug>` to `<repo>` on `<SERVER_ID>` failed: `<cli-error>`.
 
   On 401/403/404, follow the stop-on-error rule from the base `jfrog` skill
   (see *Prerequisites* in `../SKILL.md`): stop and do not retry against a

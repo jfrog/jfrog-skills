@@ -48,6 +48,6 @@ guess at a second fix.
 
 JFrog CLI v2.106.0 or later, configured for your JFrog Platform, is
 required for the Agent Plugins Repositories feature this walk's own
-Step 7 (AI Catalog) depends on. For more information, see [Configure
+Step 6 (AI Catalog) depends on. For more information, see [Configure
 the JFrog CLI](https://docs.jfrog.com/artifactory/docs/agent-plugins-repositories#configure-the-jfrog-cli)
 in Agent Plugins Repositories.

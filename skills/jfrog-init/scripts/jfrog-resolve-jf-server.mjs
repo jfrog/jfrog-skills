@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 // Resolves which jf server ID to use, in this order:
 //   1. First positional arg, if non-empty
-//   2. JF_SERVER_ID env var, if non-empty
-//   3. The server marked "isDefault": true in ~/.jfrog/jfrog-cli.conf.v6
+//   2. The server marked "isDefault": true in ~/.jfrog/jfrog-cli.conf.v6
 //      (via `jf c show --format=json`)
-//   4. If exactly one server is configured, it is used silently.
+//   3. If exactly one server is configured, it is used silently.
 //
 // This is the single source of truth for server-id resolution — every
 // script that needs a server-id (server-ping, catalog-runtime, project,
@@ -39,7 +38,7 @@ import { emit, isMainModule, jfAvailable, jfConfigShow, defaultServerId, emitNoS
 // goes through a shell, there is nothing left for a charset check here to
 // protect against.
 export function resolveJfServer(override, configList) {
-  const picked = override || process.env.JF_SERVER_ID || "";
+  const picked = override || "";
   if (picked) return picked;
   // Every caller that passes `configList` has already called jfAvailable()
   // itself to get there (see jfrog-detect-*.mjs) — re-checking here would

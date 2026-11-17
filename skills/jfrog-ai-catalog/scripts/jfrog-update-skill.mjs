@@ -2,7 +2,7 @@
 // jfrog-update-skill.mjs — update an installed skill, only from a repo that is
 // still governance-allowed.
 //
-//   node jfrog-update-skill.mjs --slug <slug> --install-dir <dir> --server-id <SID> \
+//   node jfrog-update-skill.mjs --slug <slug> --install-dir <dir> --server-id <SERVER_ID> \
 //     --project <PROJECT> <target> [--dry-run] [--force]
 //   <target>: --harness <h> [--global | --project-dir <dir>] | --global | --project-dir <dir>
 //             | --path <dir>
@@ -29,7 +29,7 @@ const BOOL_FLAGS = ['--global', '--dry-run', '--force'];
 // A plain id: letters, digits, "." "_" "-". Never "." / "..", never a leading "-".
 const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 const USAGE =
-  'usage: jfrog-update-skill.mjs --slug <slug> --install-dir <dir> --server-id <SID> ' +
+  'usage: jfrog-update-skill.mjs --slug <slug> --install-dir <dir> --server-id <SERVER_ID> ' +
   '--project <PROJECT> <target> [--dry-run] [--force]\n' +
   '<target>: --harness <h> [--global | --project-dir <dir>] | --global | --project-dir <dir> | --path <dir>';
 

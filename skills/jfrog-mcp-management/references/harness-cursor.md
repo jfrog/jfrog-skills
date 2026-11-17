@@ -79,8 +79,8 @@ Window) an Agent Guard call can't reach a JFrog host — the Step 0 activation
 check can't reach the platform, and/or an `npx` / catalog call returns a `403`
 on a JFrog host. That's Cursor's sandbox network allowlist. A Step 0 network
 failure here is inconclusive — don't report the platform as disabled or abort.
-The gate uses `jf api` for a configured server and a direct request for
-environment-only credentials. After the host is allowlisted, re-run Step 0
+The gate uses `jf api` for the AI Governance server.
+After the host is allowlisted, re-run Step 0
 and follow its exit code. Do not bypass the gate.
 
 1. **Retry the same command once with `required_permissions: ["full_network"]`**

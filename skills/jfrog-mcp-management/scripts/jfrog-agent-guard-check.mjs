@@ -10,15 +10,22 @@
 //
 // Contract:
 //   - exit 0 -> Agent Guard ENABLED  (skill may proceed)
-//   - exit 2 -> Agent Guard DISABLED (registry off, or _JF_AGENT_GUARD_FORCE_DISABLE)
-//   - exit 3 -> AMBIGUOUS: no env creds, no default jf server, but two+
-//               configured servers exist. Skill lists them and asks the user
-//               to pick one; it must NOT auto-pick.
-//   - exit 1 -> status UNKNOWN: no credentials, timeout, network/DNS error.
-//               Not sure if Enabled or not.
+//   - exit 2 -> Agent Guard DISABLED (registry off, or _JF_AGENT_GUARD_FORCE_DISABLE),
+//               or NOT SET UP: no AI Governance server in setup.json
+//   - exit 3 -> AMBIGUOUS: setup.json has two+ AI Governance entries and none
+//               is the default. Skill lists them, asks the user, saves the
+//               choice and re-runs; it must NOT auto-pick.
+//   - exit 1 -> status UNKNOWN: an argument was passed, setup.json not valid, the AI
+//               Governance server not usable from jf config, timeout, HTTP
+//               error (incl. 401/403), network/DNS error. Not sure if Enabled
+//               or not.
 //   - a single human-readable reason line is written to stdout for
-//     diagnostics only; Step 0 keys off the EXIT CODE, not the text. The
-//     exit-3 line ends with the candidate server ids.
+//     diagnostics only; Step 0 keys off the EXIT CODE, not the text.
+//
+// Takes no arguments. The server comes from the AI Governance entry in
+// ${JFROG_CLI_HOME_DIR:-~/.jfrog}/setup.json (see jfrog-ai-governance-config.mjs);
+// env credentials and the jf default server are not used. Reading it may
+// migrate a v1 setup.json (see jfrog-ai-governance-config.mjs).
 //
 // Set JF_AGENT_GUARD_DEBUG=true for verbose tracing on stderr.
 
@@ -27,6 +34,8 @@ import { accessSync, constants as fsConstants } from "node:fs";
 import { homedir } from "node:os";
 import { join, delimiter } from "node:path";
 import process from "node:process";
+
+import { resolveAiGovernanceConfig } from "./jfrog-ai-governance-config.mjs";
 
 // Global `fetch` requires Node.js 18+.
 const MIN_NODE_MAJOR = 18;
@@ -81,10 +90,6 @@ const debug = (message) => {
   if (debugEnabled) console.error(`[jfrog-agent-guard] ${message}`);
 };
 
-// New JFROG_* env vars take precedence over the legacy JF_* names.
-const env = (newName, oldName) =>
-  process.env[newName] ?? (oldName ? process.env[oldName] : undefined);
-
 const GATE_DONE = Symbol("gateDone");
 
 const enabled = (reason) => {
@@ -108,173 +113,65 @@ const registryDisabled = (reason) => {
   throw GATE_DONE;
 };
 
-// Multiple configured servers, none default, no env creds: ask the user to
-// pick one instead of a misleading Unknown. Ids are appended for the skill.
-const ambiguousServer = (serverIds) => {
+// setup.json lists several AI Governance servers and none is the default: the
+// skill must ask the user, save the choice, and re-run.
+const ambiguousServer = () => {
   process.stdout.write(
-    `AmbiguousServer: multiple jf config servers exist but none is marked ` +
-      `default; ask the user which to use, then re-run with <SERVER_ID>: ` +
-      `${serverIds.join(", ")}\n`,
+    "AmbiguousServer: several AI Governance entries exist in setup.json and " +
+      "none is the default; ask the user which to use\n",
   );
   process.exitCode = 3;
   throw GATE_DONE;
 };
 
-// Exactly one positional argv[2]. Extras (argv[3..]), flags, and URLs are
-// ALWAYS caller bugs — stop the gate immediately so a multi-JPD setup does
-// not report the wrong platform's state. Everything else is treated as a
-// candidate jf config server id — including hostname-shaped values and ids
-// with spaces — because a text pattern cannot separate a real jf id from
-// an MCP package name. jf config is the source of truth (see
-// resolveCredentials).
-function readGateServerId() {
-  const extra = process.argv.slice(3);
-  if (extra.length > 0) {
-    unknown(
-      `expected zero or one positional jf config server id, got extra ` +
-        `argument(s) ${JSON.stringify(extra)} — the gate accepts only ` +
-        `\`<SERVER_ID>\` positionally, with no flags or additional values ` +
-        `after it`,
-    );
-  }
-  const raw = process.argv[2];
-  if (raw === undefined) return undefined;
-  const id = String(raw).trim();
-  if (!id) return undefined;
-  if (id.startsWith("-")) {
-    unknown(
-      `expected a jf config server id (positional), got flag ` +
-        `${JSON.stringify(id)} — pass \`<SERVER_ID>\` positionally, not as \`--server\``,
-    );
-  }
-  if (/:\/\//.test(id)) {
-    unknown(
-      `expected a jf config server id (positional), got URL ` +
-        `${JSON.stringify(id)} — do not derive an id from \`JFROG_URL\` / \`JF_URL\``,
-    );
-  }
-  return id;
-}
+// No AI Governance server is set up: same as disabled for the skill.
+const notSetUp = (reason) => {
+  process.stdout.write(`NotSetUp: ${reason}\n`);
+  process.exitCode = 2;
+  throw GATE_DONE;
+};
 
-// Resolve credentials from Path A (environment variables) or Path B
-// (the default JFrog CLI configuration). Returns
-// { baseUrl, token?, user?, password?, source, serverId? } or null when
-// neither path yields a usable URL plus a token or user+password.
-// `serverId` is set only for Path B and is passed to `jf api --server-id`.
+// The AI Governance server comes only from setup.json; env credentials and
+// the jf default server are never used to pick it. Enablement is account-level,
+// so the project is not needed.
 function resolveCredentials() {
-  const explicitServerId = readGateServerId();
-  // When the caller names a specific server, honor it or stop. Do not fall
-  // back to env credentials or the default jf server, that would check a
-  // different JPD in a multi-server setup when the named id is wrong (typo,
-  // MCP package name, unknown id).
-  if (explicitServerId) {
-    const fromCli = resolveFromCliConfig(explicitServerId);
-    if (fromCli) return fromCli;
-    unknown(
-      `server id ${JSON.stringify(explicitServerId)} is not configured in ` +
-        `\`jf config\` (or \`jf\` is unavailable) — refusing to check a different JPD`,
-    );
+  if (process.argv.length > 2) {
+    unknown("the gate takes no arguments");
   }
-
-  // Path A — environment variables. Token or user+password, same as Path B.
-  const envUrl = env("JFROG_URL", "JF_URL");
-  const envToken = env("JFROG_ACCESS_TOKEN", "JF_ACCESS_TOKEN");
-  const envUser = env("JFROG_USER", "JF_USER");
-  const envPassword = env("JFROG_PASSWORD", "JF_PASSWORD");
-  if (envUrl && (envToken || (envUser && envPassword))) {
-    debug("Using credentials from environment variables (Path A).");
-    return {
-      baseUrl: envUrl,
-      ...(envToken ? { token: envToken } : {}),
-      ...(envUser && envPassword ? { user: envUser, password: envPassword } : {}),
-      source: "environment variables",
-    };
+  const config = resolveAiGovernanceConfig({
+    log: { debug: (message) => debug(message) },
+  });
+  switch (config.status) {
+    case "ambiguous":
+      return ambiguousServer();
+    case "missing":
+      return notSetUp("the AI Governance server is not set");
+    case "corrupt":
+      return unknown(`${config.path} is not valid; run /jfrog-init`);
   }
-  debug(
-    "Environment credentials incomplete; trying JFrog CLI config (Path B).",
+  const creds = resolveFromCliConfig(config.serverId);
+  if (creds) return creds;
+  return unknown(
+    `server ${JSON.stringify(config.serverId)} is not usable from the jf CLI ` +
+      "config (or jf is unavailable); run /jfrog-init",
   );
-
-  // Path B — default server from the local JFrog CLI configuration.
-  const credsFromDefaultServer = resolveFromCliConfig(undefined);
-  if (credsFromDefaultServer) return credsFromDefaultServer;
-
-  // The default export yielded no usable bearer credentials. `jf config export`
-  // cannot list servers, so enumerate them separately to classify the failure.
-  const configuredServers = listConfiguredServers();
-  const serverIds = configuredServers.map((server) => server.serverId);
-  const hasDefaultServer = configuredServers.some((server) => server.isDefault);
-
-  // Exactly one server: unambiguous — use it even if not marked default.
-  if (serverIds.length === 1) {
-    debug(`No default server, but exactly one configured ('${serverIds[0]}'); using it.`);
-    const credsFromOnlyServer = resolveFromCliConfig(serverIds[0]);
-    if (credsFromOnlyServer) return credsFromOnlyServer;
-  }
-
-  // Two+ servers with NONE marked default: genuinely ambiguous — ask the user.
-  // If a default IS marked but its credentials did not resolve above, that is
-  // an unknown result (fall through to null), not ambiguity.
-  if (serverIds.length > 1 && !hasDefaultServer) {
-    debug(`No default server and ${serverIds.length} configured; needs user selection.`);
-    return { needsServerSelection: true, serverIds };
-  }
-  return null;
-}
-
-// Configured servers ({ serverId, isDefault }) from `jf config show
-// --format=json` (needs no default, masks tokens). Returns [] when jf is
-// unavailable or nothing is configured.
-function listConfiguredServers() {
-  let showOutput;
-  try {
-    showOutput = execFileSync("jf", ["config", "show", "--format=json"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 2000,
-    }).trim();
-  } catch (error) {
-    debug(`'jf config show --format=json' failed: ${error?.message}`);
-    return [];
-  }
-  let servers;
-  try {
-    servers = JSON.parse(showOutput);
-  } catch (error) {
-    debug(`Could not parse 'jf config show --format=json' output: ${error?.message}`);
-    return [];
-  }
-  if (!Array.isArray(servers)) return [];
-  return servers
-    .filter(
-      (server) =>
-        server && typeof server.serverId === "string" && server.serverId.trim(),
-    )
-    .map((server) => ({
-      serverId: server.serverId.trim(),
-      isDefault: server.isDefault === true,
-    }));
 }
 
 function resolveFromCliConfig(serverId) {
-  // `jf config export [server ID]` emits the server as a base64-encoded JSON
-  // blob containing url, accessToken or user+password, and serverId. An
-  // optional server ID may be passed; without it the CLI's default server is
-  // used. We use the CLI rather than reading ~/.jfrog/jfrog-cli.conf.v6
-  // directly because newer CLIs do not persist the access token in that file.
-  const exportArgs = serverId ? ["config", "export", serverId] : ["config", "export"];
+  // `jf config export <server ID>` emits the server as a base64-encoded JSON
+  // blob containing url and accessToken or user+password. We use the CLI
+  // rather than reading ~/.jfrog/jfrog-cli.conf.v6 directly because newer CLIs
+  // do not persist the access token in that file.
   let exported;
   try {
-    exported = runJf(exportArgs, {
+    exported = runJf(["config", "export", serverId], {
       timeoutMs: CONFIG_READ_TIMEOUT_MS,
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
   } catch (error) {
-    // Do not fall back to ambient env credentials when an explicit server ID
-    // is unsafe for a Windows shell. That could check a different JPD than
-    // the one the caller requested.
-    if (serverId && error?.code === "EINVAL") throw error;
+    if (error?.code === "EINVAL") throw error;
     debug(
-      `'jf config export' failed (jf not on PATH or no server configured): ${error?.message}`,
+      `'jf config export' failed (jf not on PATH or server not configured): ${error?.message}`,
     );
     return null;
   }
@@ -304,16 +201,12 @@ function resolveFromCliConfig(serverId) {
     return null;
   }
 
-  // Only pass a real server ID through to `jf api --server-id`. The display
-  // fallback "default" is not a jf server name and would make jf reject the
-  // call as "Server ID 'default' does not exist".
-  const id = serverId || cfg?.serverId;
   return {
     baseUrl,
     ...(token ? { token } : {}),
     ...(user && password ? { user, password } : {}),
-    ...(id ? { serverId: id } : {}),
-    source: `JF CLI config (server '${id || "default"}')`,
+    serverId,
+    source: `JF CLI config (server '${serverId}')`,
   };
 }
 
@@ -609,8 +502,8 @@ async function isGatewayPluginEnabled(creds) {
   return strip(rootResult);
 }
 
-// One attempt against `settingsPath` — over `jf api` when a server is
-// selected, a direct request otherwise. `notFound` marks the 404 that
+// One attempt against `settingsPath` — over `jf api`, or a direct request when
+// jf is too old for `jf api`. `notFound` marks the 404 that
 // triggers the `/bridge-client` retry; callers strip it before returning.
 async function fetchSetting(settingsPath, creds) {
   // Status mapping: HTTP 200 + value:false → exit 2; 401/403 / other
@@ -618,10 +511,6 @@ async function fetchSetting(settingsPath, creds) {
   // "Http Status: NNN" on stderr and the body on stdout.
   const root = normalizePlatformRoot(creds.baseUrl);
   const settingsUrl = root + settingsPath;
-  if (!creds.serverId) {
-    debug(`No jf server configured; requesting ${settingsUrl} directly.`);
-    return fetchGatewayPluginEnabled(settingsUrl, creds);
-  }
   debug(`Fetching gateway plugin setting via jf api (server '${creds.serverId}')`);
   const call = runJfApi(
     [
@@ -722,9 +611,9 @@ async function main() {
   // entirely. Checked first, in this order, so a conflicting config fails
   // safe (disabled) rather than silently favoring enablement.
   const forceDisabled =
-    env("_JF_AGENT_GUARD_FORCE_DISABLE") === "true";
+    process.env._JF_AGENT_GUARD_FORCE_DISABLE === "true";
   const forceEnabled =
-    env("JF_AGENT_GUARD_FORCE_ENABLE") === "true";
+    process.env.JF_AGENT_GUARD_FORCE_ENABLE === "true";
   if (forceDisabled) {
     registryDisabled("forced via _JF_AGENT_GUARD_FORCE_DISABLE");
     return;
@@ -735,17 +624,6 @@ async function main() {
   }
 
   const creds = resolveCredentials();
-  if (!creds) {
-    unknown(
-      "JFROG_URL/JF_URL + credentials not set and no default JF CLI config found",
-    );
-    return;
-  }
-  if (creds.needsServerSelection) {
-    ambiguousServer(creds.serverIds);
-    return;
-  }
-
   const result = await isGatewayPluginEnabled(creds);
   if (result.ok) {
     enabled(`via ${creds.source}`);

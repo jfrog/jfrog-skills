@@ -34,12 +34,16 @@ Skip the Node.js setup step — implementation detail, not user-facing.
    > ⚠️ JFrog MCP Plugin — not configured
    > ✅ Project & AI Catalog
 
-   For the merged **Project & AI Catalog** line, if only one of the two
-   is outstanding name just that one; if both are, separate them with a
-   semicolon: `⚠️ Project & AI Catalog — project not set up yet; catalog
-   access not entitled`.
+   For the merged **Project & AI Catalog** line, a user who answered
+   **No AI Catalog** has no project and nothing outstanding. An AI Catalog
+   that is not available (Step 6 exit 1 or exit 4) is information, not a
+   problem: `ℹ️ Project & AI Catalog — AI Catalog not available`. When the
+   user answered **No AI Catalog** but Step 6 found the AI Catalog
+   available (exit 0), say so once, also as information:
+   `ℹ️ Project & AI Catalog — no project; AI Catalog is available on
+   <ai-governance-host> (run /jfrog-init to pick a project)`.
 
-5. **Step 8 gets a fourth checklist line, but only when it ran** —
+5. **Step 7 gets a fourth checklist line, but only when it ran** —
    nothing appears when it was skipped:
    - **Success** — `✅ JFrog Marketplace`, plus this trailing sentence
      after the checklist block, in this exact wording:
@@ -50,6 +54,18 @@ Skip the Node.js setup step — implementation detail, not user-facing.
 
    - **Red** — `⚠️ JFrog Marketplace — not registered`, and no trailing
      sentence.
+
+6. **When the AI Governance server is not the jf CLI default server**,
+   add this sentence after the checklist block (after Step 7's
+   sentence, if any):
+
+   > AI Governance uses `<ai-governance-server-id>`
+   > (`<ai-governance-host>`), project `<ai-governance-project>`; other
+   > JFrog commands use `<server-id>` (`<jf-host>`).
+
+   Leave out `, project <ai-governance-project>` when it is empty.
+   `<ai-governance-host>` and `<jf-host>` are the hosts of the two
+   servers' `jpdUrl`s from Step 4's pings; they can be the same host.
 
 **If the user asks why** (troubleshooting reference — not part of the render itself):
 
@@ -83,20 +99,15 @@ has always surfaced, just worded without "pending":
       summary, never mid-walk**.
 - **Step 5b red (OpenCode OAuth incomplete):** `not authenticated`. If
   the user asks, that's when `opencode mcp auth jfrog` comes in.
-- **Step 6 hit its retry cap (no project resolved):** `project not set
-  up yet`. If the user asks, mention they can pick one whenever they're
-  ready. The server/JPD are still recorded to the state file either way
-  (see the persistence step at the top of `SKILL.md`'s Final summary
-  section); a project picked in an earlier walk, if any, is left as-is
-  rather than cleared.
-- **Step 7 returned exit 4 (not entitled):** `catalog access not
-  entitled`. If the user asks for the fix: ask your JFrog admin for the
-  "AI Catalog Read" role to browse or install MCPs from the catalog.
-- **Step 7 returned exit 1 (catalog not hosted / unreachable):**
-  `catalog not reachable on this JPD`. No fix instruction; there may be
-  nothing to fix (this JPD may simply not host the AI Catalog).
+- **Step 6 returned exit 4 (not entitled):** `AI Catalog not
+  available`, ℹ️ (rule 4). If the user asks for the fix: ask your
+  JFrog admin for the "AI Catalog Read" role to browse or install MCPs
+  from the catalog.
+- **Step 6 returned exit 1 (catalog not hosted / unreachable):** `AI
+  Catalog not available`, ℹ️ (rule 4). No fix instruction; there may
+  be nothing to fix (this JPD may simply not host the AI Catalog).
 - **Something happened this walk** (Node.js/`jf` CLI installed, `jf
-  config` connected, a project resolved in Step 6, an MCP placeholder
+  config` connected, a project chosen in Step 4, an MCP placeholder
   substituted in Step 5, etc.): still the same checklist — the action
   itself isn't called out per-line, ✅ is ✅ regardless of whether it
   needed fixing this walk.

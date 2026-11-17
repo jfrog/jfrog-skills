@@ -20,8 +20,8 @@ add a duplicate "Other" option yourself.
 returns without a selection, surface the question as plain text in
 your reply — never silently stop without presenting it.
 
-**Kiro / Kiro CLI / Junie**: check `$JFROG_INIT_HARNESS` (already exported by
-Step 5) before reaching for `AskUserQuestion` — if it's `kiro`,
+**Kiro / Kiro CLI / Junie**: check `$JFROG_INIT_HARNESS` (exported by
+Step 5; before that, whether you are Kiro or Junie) before reaching for `AskUserQuestion` — if it's `kiro`,
 `kiro-cli`, or `junie`, skip the tool call entirely and use the plain-text
 fallback directly. Calling it anyway surfaces a "tool does not exist" error
 to the user before you fall back.

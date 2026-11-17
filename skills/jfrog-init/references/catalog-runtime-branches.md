@@ -1,8 +1,8 @@
-# Step 7 — AI Catalog reachable & entitled: mechanics and branches
+# Step 6 — AI Catalog reachable & entitled: mechanics and branches
 
 Two sub-checks against
 `<JPD>/ml/core/api/v1/mcp-registry/ml-projects?pageSize=1` (where
-`<JPD>` is the URL stored in `jf config` for the resolved server —
+`<JPD>` is the URL stored in `jf config` for the AI Governance server —
 this skill never uses a separate `JFROG_PLATFORM_URL` env var), both
 must pass. This step is **purely about AI Catalog access** — no
 runtime checks (Node lives in Step 1; `uv` / `docker` are per-MCP
@@ -37,14 +37,9 @@ which is a genuine setup problem (Exit 3).
   platform may not host AI Catalog, or it's unreachable right now.
   **Non-blocking** — same reasoning as Exit 4 below: Steps 1-4 are
   this skill's core prerequisites, and none of them depend on the AI
-  Catalog being present. Proceed to the Final Summary, but append a
-  note naming the gap (`catalogReason: "unreachable"` in
+  Catalog being present. Proceed to the Final Summary; it shows
+  `ℹ️ … AI Catalog not available` (`catalogReason: "unreachable"` in
   `jfrog-detect-all.mjs`'s summary — see `batch-walk.md`).
-- **Exit 2 (ask)** → multiple servers configured, none marked
-  `isDefault`, no server-id passed. Same handling as Step 4's exit 2:
-  **stop and read `references/server-picker.md` in full**, then
-  re-invoke Step 7 with the pick as either the positional argument or
-  `JF_SERVER_ID`.
 - **Exit 3 (error)** → `jf` missing, the authed probe returned `401`
   (credentials themselves rejected — re-run `jf config add
   --interactive`), or an unexpected HTTP code (e.g. a broken `jf`
@@ -52,8 +47,8 @@ which is a genuine setup problem (Exit 3).
   stop this step has — a real error, not a "catalog isn't available"
   gap.
 - **Exit 4 (not entitled)** → catalog is reachable but the authed probe
-  returned `403`. **Non-blocking** — proceed to the Final Summary, but
-  append the entitlement note (`catalogReason:
+  returned `403`. **Non-blocking** — proceed to the Final Summary, with
+  the same line as Exit 1 (`catalogReason:
   "not_entitled"`). The detector's `detail` names the specific endpoint
   path (`/ml/core/api/v1/mcp-registry`) and the role the admin needs to
   grant (typically "AI Catalog Read" or "Application Admin"), so the
@@ -61,8 +56,8 @@ which is a genuine setup problem (Exit 3).
 
 Exit 1 and Exit 4 are deliberately handled the same way at the walk
 level (see `batch-walk.md`) — both leave `catalogEntitled: false`, and
-only differ in `catalogReason`, so the Final Summary can say "no AI
-Catalog here" vs. "you're not entitled" accurately instead of collapsing
-both into one generic gap.
+only differ in `catalogReason`. The Final Summary says "AI Catalog not
+available" for both, marked ℹ️ (see `final-summary-rendering.md`);
+`catalogReason` answers the user if they ask why.
 
 **Never** grant a role or invent a project.

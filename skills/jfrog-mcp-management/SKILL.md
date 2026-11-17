@@ -58,40 +58,9 @@ it. Do not reuse a result from an earlier turn in this session.
 node "<skill_path>/scripts/jfrog-agent-guard-check.mjs"
 ```
 
-Request network access for this command.
-
-**This script only:** optional positional `<SERVER_ID>` = a `jf` config
-server id (e.g. from `jf config show`). Nothing else.
-
-- NEVER pass `--server`, `--project`, `--mcp`, or any other flags to this
-  script.
-- NEVER pass an MCP package name (e.g. `kubernetes-mcp-server`,
-  `@scope/pkg`).
-- NEVER pass a URL (`https://…`).
-- NEVER derive `<SERVER_ID>` by parsing a hostname out of `JFROG_URL` /
-  `JF_URL` (e.g. taking `myco.jfrog.io` from
-  `JFROG_URL=https://myco.jfrog.io`). If `jf config show` legitimately
-  names a server `myco.jfrog.io`, that is fine — the ban is on deriving
-  the id from the URL, not on hostname-shaped values from `jf config`
-  itself.
-- Substitute the real jf server id for `<SERVER_ID>` — never a literal
-  `[...]` or `<SERVER_ID>`. Any unsupported or unknown argument stops
-  the gate (`Unknown: …`); it is NOT silently ignored and does NOT
-  fall back to env credentials or the default `jf` server. In a
-  multi-JPD setup that fallback would report the wrong platform.
-
-Pass `<SERVER_ID>` when it is already known from context (an existing Agent
-Guard MCP entry's `--server` value, or one the user named) so the gate checks
-the JPD you will actually target, not the CLI default — this matters only in
-multi-JPD setups. Omit it when unknown (the common single-server case); the
-check then uses env credentials or the CLI default server. Do NOT invent a
-server id from the MCP name or from `JF_URL`. Do NOT block on resolving a
-server just to run this gate.
-
-```bash
-# Only when certain of the JFrog platform server id:
-node "<skill_path>/scripts/jfrog-agent-guard-check.mjs" "<SERVER_ID>"
-```
+Request network access for this command. Run it exactly as shown, with no
+arguments — never pass a server ID, an MCP name, or a URL. It asks the AI
+Governance server (see below) whether Agent Guard is on.
 
 If the first run fails with a network error, timeout, or other spurious issue
 (sandbox, DNS, HTTP 5xx), run the same command again with network access and use
@@ -111,7 +80,8 @@ installed, and remove MCPs with this skill. No other approved path for those.
 
 This organization does not use Agent Guard. Honor that. Do not mention Agent
 Guard or this check unless asked. Do not tell the user to contact an admin or
-enable a registry.
+enable a registry. A `NotSetUp:` line (no AI Governance server is saved, e.g.
+`/jfrog-init` never ran) gets the same handling.
 
 - **Install** and **List → Available to install:** ignore those sections. Serve
   those asks as you would if this skill had never loaded.
@@ -121,32 +91,31 @@ Keep reading for Install / list-available only when the user explicitly asked
 to use Agent Guard anyway (evaluating the catalog without enabling it for the
 organization is legitimate).
 
-### Exit 3 — Multiple JFrog servers, none set as default
-
-The gate could not tell which JPD to check: no complete `JFROG_URL`/`JF_URL` +
-`JFROG_ACCESS_TOKEN`/`JF_ACCESS_TOKEN` credential pair is set in the env, 
-there is no default `jf` server, and two or more servers are configured. 
-This is NOT a disabled or unknown result — the gate just needs the user to say which server to use.
-
-Do this:
-
-1. Show the user the server ids from the gate's `AmbiguousServer:` line (they
-   match `jf config show`) and let the user manually select one.
-2. Re-run Step 0 with the selected id as the `<SERVER_ID>` argument and act on
-   that exit code. Exit 0 or Exit 2 → follow that section. Any other non-zero
-   means the id is not a configured `jf` server (a typo) or was unreachable —
-   tell the user it did not resolve and have them pick a valid one (or stop); do
-   NOT fall through to "status unknown", which would bypass Agent Guard.
-
-Wait for the user's selection before continuing; the gate stays ambiguous until
-they choose.
+### Exit 3 — several AI Governance servers, none is the default
 
 This selection is not relevant for **List → Currently installed** and **Remove**,
 which touch local config only — handle those normally, with no server selection.
 
+The `AmbiguousServer:` line means more than one AI Governance server is saved
+and none of them is the default, so the check cannot tell which one to ask.
+This is NOT a disabled or unknown result — the user picks the server. Do this:
+
+1. Run `node "<skill_path>/scripts/jfrog-ai-governance-config.mjs" list`.
+2. Show the user each entry's `serverId` with its `jpdUrl`, and ask: "Which of
+   these is your AI Governance server?"
+3. Save their choice, `<SERVER_ID>`, with
+   `node "<skill_path>/scripts/jfrog-ai-governance-config.mjs" set "<SERVER_ID>"`.
+   If that command fails, ask the user to run `/jfrog-init` to repair their
+   AI Governance setup, and stop.
+4. Run Step 0 again to check whether Agent Guard is on for that server, and
+   follow the section for its exit code.
+
+Wait for the user's selection before continuing; the gate stays ambiguous until
+they choose.
+
 ### Any other non-zero exit — status unknown
 
-The check did not reach a definitive platform answer (no credentials, timeout,
+The check did not reach a definitive platform answer (bad credentials, timeout,
 HTTP error, network/DNS). Treat it like Exit 2 for Install and List → Available
 to install (ignore those sections; keep serving the user). List → Currently
 installed and Remove still proceed. (Exit 3 is handled above, not here.)
@@ -154,6 +123,27 @@ installed and Remove still proceed. (Exit 3 is handled above, not here.)
 Mention once — as a side note while continuing — what failed and that the user
 can use the `jfrog-init` command to fix any local configuration issues. Do not
 ask them to decide, do not repeat it, and do not stop to fix it.
+
+## AI Governance server and project
+
+The AI Governance server is the JFrog Platform server (a jf CLI server ID)
+that governs the user's AI assets: its AI Catalog lists the skills, plugins
+and MCP servers they may use, and Agent Guard, where the organization has
+turned it on, enforces that. The AI Governance project is the JFrog project
+on that server that scopes the AI Catalog: which skills, plugins and MCP
+servers the user sees and may install. Both are saved in `setup.json` in
+the JFrog CLI home directory, separately from the jf CLI default server;
+the AI Governance server can be the same server as that default or a
+different one.
+The user chooses both in `/jfrog-init`; another skill saves one only when it
+is missing or unclear and the user answers that skill's question.
+Read and change the file only through `jfrog-ai-governance-config.mjs`.
+
+In this skill, Step 0 asks the AI Governance server whether Agent Guard is
+on, and that answer decides whether the Install and List → Available to
+install sections apply. When they do, every Agent Guard command and every
+MCP entry they write use the AI Governance server and project (see
+Pre-flight).
 
 ## Harness config
 
@@ -178,17 +168,16 @@ values into your actions.
 shared guards this skill reuses (does not repeat): the
 [environment check](../jfrog/SKILL.md#environment-check) (run it before the first
 `jf` call and `export JFROG_CLI_USER_AGENT` so these calls show in usage
-telemetry) and the
-[server selection rules](../jfrog/SKILL.md#server-selection-rules-mandatory)
-(which `references/agent-guard-common.md` builds on, not replaces).
+telemetry).
 
 ## Pre-flight (Install and List → Available to install only)
 
 Read [references/agent-guard-common.md](references/agent-guard-common.md) for the
 canonical invocation (`npx --yes --registry "<REGISTRY_URL>" @jfrog/agent-guard`),
-the `<REGISTRY_URL>` substitution, and the rules for resolving
-`<JFROG_PROJECT_KEY>` and `<SERVER_ID>`. Removal and List → Currently installed
-read only local config, so they skip this.
+the `<REGISTRY_URL>` substitution (the npm registry the `@jfrog/agent-guard`
+package comes from), and how to get `<SERVER_ID>` and `<JFROG_PROJECT_KEY>`
+from `setup.json`. Removal and List → Currently installed read only local
+config, so they skip this.
 
 **Route the request**, then jump to the matching section:
 
@@ -217,12 +206,13 @@ do NOT ask for JFrog project key, server, or package name unless necessary.
 
 ## Step 1: Determine JFrog project key, server, and target config file
 
-**Server ID and JFrog project key** — resolve both per the Pre-flight rules in
+**Server ID and JFrog project key** — get `<SERVER_ID>` and
+`<JFROG_PROJECT_KEY>` per Pre-flight in
 [references/agent-guard-common.md](references/agent-guard-common.md). Pass
-`--server <ID>` in every Agent Guard invocation whenever the ID came from an
-existing Agent Guard MCP entry or jf config; omit `--server` only on the
-URL+token env path (`JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy
-`JF_URL`+`JF_ACCESS_TOKEN`). NEVER guess or assume `default` for the project key.
+`--server "<SERVER_ID>"` in every Agent Guard command and every entry you
+write — also when existing MCP entries have no `--server` or another one;
+never copy theirs (why: Pre-flight). NEVER guess or assume `default` for the
+project key.
 
 **Target config file**
 - Use the current harness's row in
@@ -265,10 +255,8 @@ npx --yes \
 
 (never omit `--registry`; URL in [agent-guard-common](references/agent-guard-common.md))
 
-**`--server` is conditional** — include it per the Step 1 rule (from an
-existing Agent Guard MCP entry or jf config; omit only on the URL+token env
-path — `JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy `JF_URL`+`JF_ACCESS_TOKEN`).
-Same rule applies to `--login` and the config entry below.
+**`--server` is never omitted** — per the Step 1 rule, even when existing
+entries lack it. Same rule applies to `--login` and the config entry below.
 
 From the output JSON, extract (keep BOTH required AND optional):
 - `spec.packageName` — exact package name for the config.
@@ -381,10 +369,7 @@ Guardrails (identical everywhere):
   build that URL yourself.
   These are the same three conditions resolved in Step 2 —
   restated here, never a second, looser test.
-- `--server` in `args` is conditional (Step 1): drop it only on the URL+token
-  env path (`JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy
-  `JF_URL`+`JF_ACCESS_TOKEN`). When present, its value is a jf config server
-  id — never an MCP name or a hostname from `JF_URL`.
+- `--server "<SERVER_ID>"` is always in `args` (Step 1).
 - NEVER put `--project` or `--mcp` in config `args`.
 - If a required value reference is unset, the server fails / tool calls fail at
   runtime — confirm the user provided it (shell export, or VS Code first-start
@@ -478,7 +463,7 @@ file or shell:
 
 When Step 0 was exit 0: NEVER invent MCP integrations from outside the catalog.
 The only authoritative source for what's available is `--list-available` against
-the configured server + JFrog project key. If that returns nothing or errors,
+the AI Governance server + JFrog project key. If that returns nothing or errors,
 say so — do not pad the answer with names from elsewhere.
 
 ## Currently installed
@@ -520,13 +505,11 @@ add-on where the agent provides it.
 If Step 0 was exit 2 (or unknown treated as exit 2), ignore this subsection.
 Continue serving the user without Agent Guard. Currently installed still proceeds.
 
-1. Determine **server** and **JFrog project key** per the Pre-flight rules.
+1. Get `<SERVER_ID>` and `<JFROG_PROJECT_KEY>` per Pre-flight.
    `--list-available` does NOT require any existing MCP entry or pre-installed
    Agent Guard — `npx --yes --registry "<REGISTRY_URL>" @jfrog/agent-guard`
    fetches it on demand, so this works on a fresh machine too.
-2. Run this ONCE — do not emit literal `[ ]` brackets. Append `--server
-   "<SERVER_ID>"` per the Step 1 rule (omit only on the URL+token env path —
-   `JFROG_URL`+`JFROG_ACCESS_TOKEN`, or legacy `JF_URL`+`JF_ACCESS_TOKEN`):
+2. Run this ONCE:
 ```
 npx --yes \
   --registry "<REGISTRY_URL>" \

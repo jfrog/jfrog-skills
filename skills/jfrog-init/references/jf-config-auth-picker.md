@@ -1,7 +1,7 @@
 # jf config: web login vs. access token
 
 **Required behavior wherever this file is the referenced fix, not
-optional background.** Two distinct call sites land here, with two
+optional background.** Three call sites land here, with two
 different option sets:
 
 - **Step 3** (`jf` is installed but not connected to any server at
@@ -9,8 +9,10 @@ different option sets:
 - **Step 4**, when sub-check (1) (reachability) passed but sub-check
   (2) (`jf rt ping`) failed with an auth-shaped error — `jf` is
   already connected to a server, its token is just stale. **Token
-  only** (see "Why Step 4 is token-only" below) — skip straight to
+  only** (see "Why a stale token gets the Token branch only" below) — skip straight to
   that section.
+- **Step 4, a different AI Governance server** — full picker, with the
+  two differences listed in `ai-governance-server.md`.
 
 ## Step 3: ask web vs. token
 
@@ -169,14 +171,14 @@ the same command and the same `AskUserQuestion` again — the loop is
 harmless. On **No** → stop with exactly one sentence: *"OK — run
 `/jfrog-init` again when ready."* Nothing else.
 
-## Why Step 4 is token-only
+## Why a stale token gets the Token branch only
 
 `jfrog-login-save-credentials.mjs` derives (or overwrites) a server
 entry **from the URL itself** (`https://mycompany.jfrog.io` →
 `mycompany`), independent of whatever server-id Step 4 actually
-resolved. Running the web-login branch there could silently create a
+resolved. Running the web-login branch to refresh a stale token could silently create a
 *second*, differently-named server instead of refreshing the token on
-the one Step 4 is checking — so Step 4 only ever offers the Token
+the one Step 4 is checking — so the stale-token fix only ever offers the Token
 branch above, which explicitly reuses the existing `--server-id`.
 
 ## Step 4's full branch table
@@ -191,7 +193,7 @@ stale credential before it fails later at runtime. Sub-check (1) green
 token (the token-only fix above); a 30s timeout points at network/VPN;
 anything else shows the raw `jf rt ping` error without guessing a cause.
 
-- **Exit 0 (green)** → proceed to Step 5.
+- **Exit 0 (green)** → continue with the rest of Step 4.
 - **Exit 1 (red)** → branch on the detector's `detail`, don't just stop
   and dead-end on a generic "check with your admin":
   - **Credentials invalid/expired** (sub-check (1) passed, only the
@@ -205,7 +207,7 @@ anything else shows the raw `jf rt ping` error without guessing a cause.
 - **Exit 2 (ask)** → multiple servers configured, none marked
   `isDefault`, no server-id passed. **Stop and read
   `references/server-picker.md` in full**, then re-invoke with the
-  pick as either the positional argument or `JF_SERVER_ID`.
+  pick as the positional argument.
 
 ## What the token flow never does
 
